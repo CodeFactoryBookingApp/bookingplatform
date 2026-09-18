@@ -1,0 +1,22 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+app:
+  supabase:
+    url: http://localhost:54321
+    secret-key: test-secret-key
+  security:
+    jwt-issuer: http://localhost:54321/auth/v1
+    jwks-uri: http://localhost:54321/auth/v1/.well-known/jwks.json
+
+logging:
+  level:
+    root: WARN
+    com.codefactory.bookingplatform: INFO
+    org.hibernate.SQL: WARN
