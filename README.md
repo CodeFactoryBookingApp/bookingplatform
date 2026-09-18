@@ -22,6 +22,8 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | Modelo físico inicial (DDL) | `docs/database/schema.sql` |
 | Seguridad Supabase (RLS) | `docs/database/rls.sql` |
 | Consultas clave del negocio | `docs/database/consultas-clave.md` |
+| Runbook operativo (producción, E2E, troubleshooting) | `docs/operations/runbook.md` |
+| Colección REST de Sprint 1 | `docs/api/sprint1.http` |
 
 ## Estructura del código
 
@@ -64,10 +66,7 @@ Configura estas variables en tu entorno local:
 > `$env:DATABASE_URL="..."; $env:DATABASE_USER="..."; ...; .\mvnw.cmd spring-boot:run`
 > Las variables viven solo en esa sesión de terminal.
 
-Configuración recomendada en Supabase: Auth → expiración de JWT 15 min,
-política de contraseña ≥8 con mayúsculas/minúsculas/números/símbolos,
-confirmación de correo obligatoria. Tras el primer arranque ejecutar
-`docs/database/rls.sql` en el SQL Editor.
+Tras el primer arranque ejecutar `docs/database/rls.sql` en el SQL Editor.
 
 ## Ejecución local
 
