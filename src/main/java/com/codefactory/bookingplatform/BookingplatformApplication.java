@@ -2,12 +2,13 @@ package com.codefactory.bookingplatform;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
-public class BookingplatformApplication {
+@ConfigurationPropertiesScan
+public class BookingPlatformApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(BookingplatformApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(BookingPlatformApplication.class, args);
+    }
 }
