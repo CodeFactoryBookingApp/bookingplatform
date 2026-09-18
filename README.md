@@ -40,18 +40,22 @@ com.codefactory.bookingplatform
 
 Reglas de dependencia verificadas con ArchUnit en `src/test/.../architecture/ArchitectureTest.java`.
 
-## Requisitos
+## Cómo ejecutar el proyecto
 
-- JDK 21+, Maven wrapper (`mvnw`) incluido
-- Docker (solo para correr los tests de integración con Testcontainers)
+### Prerrequisitos
+
+- JDK 21+ (el Maven wrapper `mvnw` ya viene incluido, no hay que instalar Maven)
+- Docker Desktop (solo para los tests de integración con Testcontainers)
 - Proyecto Supabase gratuito (BD + Auth)
 
-## Variables de entorno
+Notas:
 
-La aplicación **solo** lee configuración del entorno del proceso (variables de
-entorno del SO, secret store de Render, etc.). 
+- No hay base de datos local que levantar: la app conecta directo al
+  PostgreSQL administrado de Supabase por el session pooler (puerto 5432).
+- La aplicación **solo** lee configuración del entorno del proceso
+  (variables de entorno del SO, secret store de Render, etc.).
 
-Configura estas variables en tu entorno local:
+### 1) Configurar variables de entorno
 
 | Variable | Valor de ejemplo (reemplazar) | Descripción |
 |---|---|---|
@@ -60,22 +64,99 @@ Configura estas variables en tu entorno local:
 | `DATABASE_URL` | `jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require` | JDBC por session pooler, puerto **5432** (nunca 6543) |
 | `DATABASE_USER` | `postgres.<ref>` | Usuario del pooler (con sufijo del proyecto) |
 | `DATABASE_PASSWORD` | `...` | Contraseña de la BD (Dashboard → Settings → Database) |
-| `SPRING_PROFILES_ACTIVE` | `cloud` | Solo en despliegue (`ddl-auto=validate`); en local se omite (`update`) |
 
-> En Windows (PowerShell) para una prueba local sin persistir nada:
-> `$env:DATABASE_URL="..."; $env:DATABASE_USER="..."; ...; .\mvnw.cmd spring-boot:run`
-> Las variables viven solo en esa sesión de terminal.
+La app **no lee archivos `.env` por sí sola**: las variables deben existir
+en el entorno de la terminal donde corres `mvnw`. Cada terminal tiene su
+propio entorno, así que cárgalas en la misma sesión antes de arrancar.
 
-Tras el primer arranque ejecutar `docs/database/rls.sql` en el SQL Editor.
+**Opción A — una por una (nada persiste, solo esa sesión):**
 
-## Ejecución local
+Windows:
 
-```bash
-mvnw spring-boot:run
+```powershell
+$env:SUPABASE_URL="https://<ref>.supabase.co"
+$env:SUPABASE_SECRET_KEY="sb_secret_..."
+$env:DATABASE_URL="jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+$env:DATABASE_USER="postgres.<ref>"
+$env:DATABASE_PASSWORD="..."
 ```
 
+Linux/macOS:
+
+```bash
+export SUPABASE_URL="https://<ref>.supabase.co"
+export SUPABASE_SECRET_KEY="sb_secret_..."
+export DATABASE_URL="jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+export DATABASE_USER="postgres.<ref>"
+export DATABASE_PASSWORD="..."
+```
+
+**Opción B — desde un archivo `.env` (recomendado):**
+
+Crea un archivo `.env` en la raíz del repo con el formato `CLAVE=valor`,
+una por línea (ese archivo ya está ignorado en git, nunca se commitea):
+
+```
+SUPABASE_URL=https://<ref>.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_...
+DATABASE_URL=jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_USER=postgres.<ref>
+DATABASE_PASSWORD=...
+```
+
+Y cárgalo en la misma terminal antes de arrancar:
+
+Windows:
+
+```powershell
+Get-Content .env | Where-Object { $_ -match '^\s*[^#\s=]+=' } | ForEach-Object { $k,$v = $_ -split '=', 2; [Environment]::SetEnvironmentVariable($k.Trim(), $v.Trim().Trim('"').Trim("'"), 'Process') }
+```
+
+Linux/macOS:
+
+```bash
+set -a; source .env; set +a
+```
+
+Si algo falla al arrancar, verifica que cargaron (p. ej. `$env:DATABASE_URL`
+en Windows o `echo $DATABASE_URL` en Linux/macOS).
+
+### 2) Levantar la API
+
+Windows:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+Linux/macOS:
+
+```bash
+./mvnw spring-boot:run
+```
+
+Notas:
+
+- El primer arranque crea solo las tablas (`ddl-auto=update`). Después
+  ejecuta `docs/database/rls.sql` en el SQL Editor de Supabase.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health: http://localhost:8080/actuator/health
+
+### 3) Ejecutar pruebas
+
+Windows:
+
+```powershell
+.\mvnw.cmd test      # unitarios de dominio + ArchUnit
+.\mvnw.cmd verify    # + integración con Testcontainers (requiere Docker)
+```
+
+Linux/macOS:
+
+```bash
+./mvnw test          # unitarios de dominio + ArchUnit
+./mvnw verify        # + integración con Testcontainers (requiere Docker)
+```
 
 ## Endpoints (v1)
 
@@ -91,13 +172,6 @@ mvnw spring-boot:run
 | GET | `/api/v1/auth/me` | Bearer | HU-021 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
-
-## Tests
-
-```bash
-mvnw test          # unitarios de dominio + ArchUnit
-mvnw verify        # + integración con Testcontainers (requiere Docker)
-```
 
 ## Despliegue en Render
 
