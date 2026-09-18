@@ -71,13 +71,6 @@ flowchart TB
 | `TraceIdFilter` | shared/observability | header `X-Trace-Id` + MDC `traceId` en logs | Todas las peticiones |
 | `SecurityConfig` + `SupabaseJwtAuthConverter` | shared/config | validación JWT por JWKS (ES256/RS256) y mapeo `app_metadata.role → ROLE_*` | Resource server |
 
-## Módulos previstos (no implementados en Sprint 1)
-
-`catalog` (HU-002 proveedor/sedes/reglas, HU-004 servicios/recursos) y
-`booking` (reservas, disponibilidad, cancelaciones, reportes). Nacerán con la
-misma estructura interna; las interfaces entre módulos seguirán siendo fachadas
-`application` (y eventos de dominio si se requieren en el futuro, ver ADR-0001).
-
 ## Reglas de dependencia (verificadas por ArchUnit)
 
 1. `..domain..` no depende de Spring, JPA, Jackson ni Swagger.
