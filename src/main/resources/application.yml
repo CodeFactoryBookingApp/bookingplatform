@@ -48,6 +48,8 @@ springdoc:
     operations-sorter: method
 
 server:
+  # Render and other PaaS inject the listening port via $PORT; default 8080 locally.
+  port: ${PORT:8080}
   error:
     include-message: never
   shutdown: graceful
