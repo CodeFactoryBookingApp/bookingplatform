@@ -46,14 +46,26 @@ Reglas de dependencia verificadas con ArchUnit en `src/test/.../architecture/Arc
 
 ## Variables de entorno
 
-Copiar `.env.example` y completar (nunca commitear `.env`):
+La aplicación **solo** lee configuración del entorno del proceso (variables de
+entorno del SO, secret store de Render, etc.). No existe ningún archivo `.env`
+en el repositorio a propósito: un archivo con ese formato invita a pegar
+secretos reales y commitearlos por accidente.
 
-| Variable | Descripción |
-|---|---|
-| `SUPABASE_URL` | `https://<ref>.supabase.co` |
-| `SUPABASE_SECRET_KEY` | Secret key (`sb_secret_...`), solo backend |
-| `DATABASE_URL` | JDBC URL puerto **5432** (sesión/directa, no 6543) |
-| `DATABASE_USER` / `DATABASE_PASSWORD` | Credenciales BD Supabase |
+Configura estas variables en tu entorno local (sin guardarlas en archivos
+versionados) o en el proveedor de despliegue:
+
+| Variable | Valor de ejemplo (reemplazar) | Descripción |
+|---|---|---|
+| `SUPABASE_URL` | `https://<ref>.supabase.co` | URL del proyecto (Dashboard → Settings → API Keys) |
+| `SUPABASE_SECRET_KEY` | `sb_secret_...` | Secret key, **solo backend**, jamás en frontend ni git |
+| `DATABASE_URL` | `jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require` | JDBC por session pooler, puerto **5432** (nunca 6543) |
+| `DATABASE_USER` | `postgres.<ref>` | Usuario del pooler (con sufijo del proyecto) |
+| `DATABASE_PASSWORD` | `...` | Contraseña de la BD (Dashboard → Settings → Database) |
+| `SPRING_PROFILES_ACTIVE` | `cloud` | Solo en despliegue (`ddl-auto=validate`); en local se omite (`update`) |
+
+> En Windows (PowerShell) para una prueba local sin persistir nada:
+> `$env:DATABASE_URL="..."; $env:DATABASE_USER="..."; ...; .\mvnw.cmd spring-boot:run`
+> Las variables viven solo en esa sesión de terminal.
 
 Configuración recomendada en Supabase: Auth → expiración de JWT 15 min,
 política de contraseña ≥8 con mayúsculas/minúsculas/números/símbolos,
