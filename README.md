@@ -99,11 +99,41 @@ mvnw test          # unitarios de dominio + ArchUnit
 mvnw verify        # + integración con Testcontainers (requiere Docker)
 ```
 
-## Despliegue
+## Despliegue en Render
 
-Dockerfile multi-stage → **Render** (Web Service, perfil `cloud`,
-`ddl-auto=validate`) contra el proyecto Supabase. Variables de entorno iguales
-a la tabla anterior. Smoke test: `GET /actuator/health` y Swagger UI.
+Producción: `https://bookingplatform-81wi.onrender.com`
+(Web Service Docker desde `main`, perfil `cloud`, `ddl-auto=validate`).
+
+### Crear el servicio
+
+1. En Render: **New → Web Service → Build from Git provider** y conecta el
+   repositorio (`render.yaml` ya describe el servicio).
+2. En **Settings → Health Check Path** configura
+   `/actuator/health/readiness`.
+3. En **Environment** define las mismas variables de la tabla anterior
+   (perfil `cloud`; `DATABASE_URL` en formato JDBC con `?sslmode=require`).
+   Sin Secret Files: la app solo lee variables de entorno.
+
+### Verificar
+
+```bash
+curl https://bookingplatform-81wi.onrender.com/actuator/health   # {"status":"UP"}
+```
+
+Swagger UI: `/swagger-ui/index.html` · OpenAPI: `/v3/api-docs`.
+
+> Plan Free: la instancia se duerme tras ~15 min sin tráfico; la primera
+> petición tarda ~1 min (cold start).
+
+### Restricciones aplicadas (no tocar sin revisar el runbook)
+
+- Render inyecta el puerto en `PORT` → respetar `server.port=${PORT:8080}`.
+- El session pooler gratuito de Supabase admite **15 clientes totales**:
+  pool Hikari fijo en 5/1 (`application-cloud.yml`) y ninguna otra conexión
+  permanente contra Supabase.
+
+Detalle operativo, E2E manual y troubleshooting:
+`docs/operations/runbook.md`.
 
 ## Convenciones de código
 
