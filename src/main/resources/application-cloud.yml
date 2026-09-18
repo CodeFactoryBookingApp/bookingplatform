@@ -1,0 +1,12 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+logging:
+  level:
+    com.codefactory.bookingplatform: INFO
+    root: INFO
+  structured:
+    format:
+      console: ecs

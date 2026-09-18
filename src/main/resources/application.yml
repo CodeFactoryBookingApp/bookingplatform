@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: bookingplatform
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/bookingplatform}
+    username: ${DATABASE_USER:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  mvc:
+    problemdetails:
+      enabled: true
+
+app:
+  supabase:
+    url: ${SUPABASE_URL:https://placeholder.supabase.co}
+    secret-key: ${SUPABASE_SECRET_KEY:}
+  security:
+    jwt-issuer: ${SUPABASE_URL:https://placeholder.supabase.co}/auth/v1
+    jwks-uri: ${SUPABASE_URL:https://placeholder.supabase.co}/auth/v1/.well-known/jwks.json
+  auth-policy:
+    max-failed-attempts: 5
+    lock-window-minutes: 15
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+server:
+  error:
+    include-message: never
+  shutdown: graceful
+
+logging:
+  level:
+    com.codefactory.bookingplatform: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %5p [%X{traceId:-no-trace}] %c{1} : %m%n"
