@@ -40,7 +40,7 @@ flowchart TB
             adom["domain<br/>AppRole · AuthTokens · LoginLockPolicy<br/>PasswordPolicy · IdentityProviderPort(port)<br/>LoginAttemptRepository(port)"]
             ainf["infrastructure<br/>GoTrueClient · LoginAttempt*<br/>AuthConfig"]
         end
-    ]
+    end
 
     iapi --> iapp --> idom
     iinf --> idom
@@ -49,7 +49,6 @@ flowchart TB
     ainf --> adom
     ainf -.implementa.-> adom
     iapp -->|"UserProvisioning (fachada)"| aapp
-    app -.->|"solo kernel"| shared
 ```
 
 ## Componentes e interfaces (Sprint 1)
