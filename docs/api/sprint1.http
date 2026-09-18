@@ -1,0 +1,106 @@
+### Booking Platform - Sprint 1 (REST Client / VS Code)
+### Base: local por defecto; cambiar por la URL de Render tras el despliegue.
+
+@baseUrl = http://localhost:8080
+@accessToken = PEGA_AQUI_EL_ACCESS_TOKEN_DEL_LOGIN
+
+### Health
+GET {{baseUrl}}/actuator/health
+
+### HU-001: Registro de cliente (201 + PENDING_VERIFICATION)
+POST {{baseUrl}}/api/v1/registrations
+Content-Type: application/json
+
+{
+  "fullName": "Ana Maria Gomez",
+  "document": "1020304050",
+  "birthDate": "1995-04-12",
+  "email": "ana.gomez@example.com",
+  "phone": "+573001234567",
+  "city": "Bogota",
+  "notificationChannel": "EMAIL",
+  "password": "ClaveSegura2026!"
+}
+
+### HU-001: Registro menor de edad (422 MINOR_NOT_ALLOWED)
+POST {{baseUrl}}/api/v1/registrations
+Content-Type: application/json
+
+{
+  "fullName": "Pedro Menor",
+  "document": "1099999999",
+  "birthDate": "2012-01-01",
+  "email": "menor@example.com",
+  "phone": "+573009999999",
+  "city": "Bogota",
+  "notificationChannel": "EMAIL",
+  "password": "ClaveSegura2026!"
+}
+
+### HU-001: Email duplicado (409 EMAIL_ALREADY_REGISTERED)
+POST {{baseUrl}}/api/v1/registrations
+Content-Type: application/json
+
+{
+  "fullName": "Otra Persona",
+  "document": "9999999998",
+  "birthDate": "1990-01-01",
+  "email": "ana.gomez@example.com",
+  "phone": "+573007654321",
+  "city": "Medellin",
+  "notificationChannel": "SMS",
+  "password": "OtraClave2026!"
+}
+
+### HU-001: Reenviar verificacion (siempre 202)
+POST {{baseUrl}}/api/v1/registrations/verification-resends
+Content-Type: application/json
+
+{ "email": "ana.gomez@example.com" }
+
+### HU-001: Confirmar email (token_hash del enlace recibido)
+POST {{baseUrl}}/api/v1/registrations/email-verifications
+Content-Type: application/json
+
+{ "tokenHash": "PEGA_AQUI_EL_TOKEN_HASH_DEL_CORREO" }
+
+### HU-021: Login (200 + accessToken/refreshToken)
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "ana.gomez@example.com", "password": "ClaveSegura2026!" }
+
+### HU-021: Credenciales invalidas (401 INVALID_CREDENTIALS; 5 fallos -> 429)
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{ "email": "ana.gomez@example.com", "password": "clave-incorrecta" }
+
+### HU-021: Perfil autenticado (200; sin token -> 401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/v1/auth/me
+Authorization: Bearer {{accessToken}}
+
+### HU-021: Logout (204; revoke del refresh token en GoTrue)
+POST {{baseUrl}}/api/v1/auth/logout
+Authorization: Bearer {{accessToken}}
+
+### HU-021: Solicitud de recuperacion (siempre 202)
+POST {{baseUrl}}/api/v1/auth/password-recovery-requests
+Content-Type: application/json
+
+{ "email": "ana.gomez@example.com" }
+
+### HU-021: Reset de contrasena (204)
+POST {{baseUrl}}/api/v1/auth/password-resets
+Content-Type: application/json
+
+{
+  "tokenHash": "PEGA_AQUI_EL_TOKEN_HASH_DE_RECUPERACION",
+  "newPassword": "NuevaClave2026!"
+}
+
+### Contrato OpenAPI
+GET {{baseUrl}}/v3/api-docs
+
+### Swagger UI (navegador)
+GET {{baseUrl}}/swagger-ui/index.html

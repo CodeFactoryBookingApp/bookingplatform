@@ -1,0 +1,30 @@
+# Local convenience stack: PostgreSQL + API.
+# Sin credenciales de Supabase las rutas de autenticacion devolveran
+# UPSTREAM_ERROR; util para health, swagger y verificacion de esquema.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: default
+      DATABASE_URL: jdbc:postgresql://db:5432/postgres
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      SUPABASE_URL: ${SUPABASE_URL:-http://localhost:9999}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-local-not-configured}
+    ports:
+      - "8080:8080"

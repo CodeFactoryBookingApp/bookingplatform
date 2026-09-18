@@ -36,3 +36,7 @@ build/
 .env
 .env.*
 !.env.example
+
+# Local run logs
+app-*.log
+supa-check.log
