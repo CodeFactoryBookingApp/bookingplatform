@@ -1,4 +1,11 @@
 spring:
+  datasource:
+    hikari:
+      # Supabase free session pooler caps total clients at 15 across ALL
+      # connections (app instances, dashboards, local runs). Keep the cloud
+      # pool small so a single instance never exhausts it.
+      maximum-pool-size: 5
+      minimum-idle: 1
   jpa:
     hibernate:
       ddl-auto: validate
