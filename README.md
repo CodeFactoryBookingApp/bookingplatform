@@ -70,8 +70,12 @@ Tras el primer arranque ejecutar `docs/database/rls.sql` en el SQL Editor.
 
 ## Ejecución local
 
-```bash
-mvnw spring-boot:run
+1. Copia `.env.example` a `.env` y completa tus credenciales de Supabase.
+2. Arranca (el script carga el `.env` y corre la app):
+
+```powershell
+.\run-local.ps1    # Windows
+./run-local.sh     # Linux / macOS
 ```
 
 - Swagger UI: http://localhost:8080/swagger-ui.html
