@@ -47,12 +47,9 @@ Reglas de dependencia verificadas con ArchUnit en `src/test/.../architecture/Arc
 ## Variables de entorno
 
 La aplicación **solo** lee configuración del entorno del proceso (variables de
-entorno del SO, secret store de Render, etc.). No existe ningún archivo `.env`
-en el repositorio a propósito: un archivo con ese formato invita a pegar
-secretos reales y commitearlos por accidente.
+entorno del SO, secret store de Render, etc.). 
 
-Configura estas variables en tu entorno local (sin guardarlas en archivos
-versionados) o en el proveedor de despliegue:
+Configura estas variables en tu entorno local:
 
 | Variable | Valor de ejemplo (reemplazar) | Descripción |
 |---|---|---|
