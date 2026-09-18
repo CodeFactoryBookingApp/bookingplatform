@@ -105,9 +105,20 @@ public class GoTrueClient implements IdentityProviderPort {
     @Override
     public ConfirmedUser verifyEmailToken(String tokenHash) {
         Map<String, Object> response = verify(tokenHash, "email", null);
+        // GoTrue answers OTP verification with a session carrying the user nested
+        // ({"access_token": ..., "user": {...}}), not with the bare user object.
+        Object nestedUser = response.get("user");
+        Map<String, Object> user;
+        if (nestedUser instanceof Map<?, ?> nested) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> casted = (Map<String, Object>) nested;
+            user = casted;
+        } else {
+            user = response;
+        }
         return new ConfirmedUser(
-                UUID.fromString(String.valueOf(requireField(response, "id"))),
-                String.valueOf(response.get("email")));
+                UUID.fromString(String.valueOf(requireField(user, "id"))),
+                String.valueOf(user.get("email")));
     }
 
     @Override

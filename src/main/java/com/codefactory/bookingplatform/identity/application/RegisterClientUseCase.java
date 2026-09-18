@@ -64,6 +64,9 @@ public class RegisterClientUseCase {
                 command.notificationChannel());
         try {
             Client saved = clientRepository.save(client);
+            // The GoTrue Admin API does not send any email on user creation,
+            // so the signup verification email must be triggered explicitly.
+            userProvisioning.resendSignupVerification(normalizedEmail);
             log.info("Client {} registered in status {}", saved.getId(), saved.getStatus());
             return new RegistrationOutcome(saved.getId(), saved.getEmail(), saved.getStatus());
         } catch (RuntimeException ex) {

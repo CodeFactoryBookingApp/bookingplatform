@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -79,6 +80,7 @@ class RegistrationFlowIT extends PostgresIntegrationTestBase {
         ClientEntity saved = clientJpaRepository.findById(FIXED_USER_ID).orElseThrow();
         assertEquals(ClientStatus.PENDING_VERIFICATION, saved.getStatus());
         assertEquals("ana.perez@example.com", saved.getEmail());
+        verify(identityProviderPort).resendSignupVerification("ana.perez@example.com");
     }
 
     @Test
@@ -201,7 +203,8 @@ class RegistrationFlowIT extends PostgresIntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"ana.perez@example.com\"}"))
                 .andExpect(status().isAccepted());
-        verify(identityProviderPort).resendSignupVerification("ana.perez@example.com");
+        // once at registration, once at the explicit resend
+        verify(identityProviderPort, times(2)).resendSignupVerification("ana.perez@example.com");
     }
 
     @Test
