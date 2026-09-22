@@ -8,7 +8,7 @@ en `pom.xml`.
 
 | Métrica | Antes | Después |
 |---|---|---|
-| Pruebas | 48 | **1067** |
+| Pruebas | 48 | **1080** (982 unitarias + 98 de integración) |
 | Instrucciones | 71,5 % | **100 %** (2976/2976) |
 | Ramas | 45,5 % | **100 %** (156/156) |
 | Líneas | 65,0 % | **100 %** (678/678) |
@@ -24,6 +24,16 @@ El `pom.xml` incorpora un umbral del 90 % en instrucciones **y** en ramas que ha
 por debajo de esa cifra. Se fija en 90 y no en el 100 actual para dejar margen al mantenimiento.
 El umbral está comprobado en los dos sentidos: pasa con la suite completa y rompe el build cuando
 la cobertura cae.
+
+### Una nota sobre el número de pruebas
+
+La suite llegó a tener 1046 casos unitarios y **se recortaron 156**, que probaban enums, `record` y
+comportamiento del propio lenguaje: que `valueOf` hace *round-trip*, que el `equals` generado por el
+compilador funciona. `ErrorCodeTest` tenía 85 casos para un enum de dieciséis valores.
+
+Al borrarlos **la cobertura no se movió del 100 %**, lo que demuestra que no cubrían nada que no
+estuviera ya cubierto: solo añadían tiempo de ejecución y mantenimiento. El criterio de este
+trabajo es que una prueba valga por la regla que verifica, no por el porcentaje que empuja.
 
 ### Cómo reproducirlo
 
@@ -74,8 +84,25 @@ mensaje interno de la excepción, comprobado pasándole una cadena de conexión 
 
 ## Defectos encontrados
 
-No se corrigió ninguno: corregirlos es de otro rol. Las pruebas fijan el comportamiento **actual**
-para que el arreglo sea visible cuando se haga.
+Nueve defectos, más un grupo de hallazgos menores. Cinco se corrigieron con cambios quirúrgicos,
+verificando la suite completa después de cada uno; el resto se deja documentado porque arreglarlos
+exige decisiones que no corresponden a QA, o porque el riesgo de tocarlos ahora es mayor que el
+beneficio.
+
+| | Defecto | Estado |
+|---|---|---|
+| D1 | Fallo del proveedor en recuperación de contraseña sale como 500 | **Corregido** |
+| D2 | Un enlace de verificación caducado dice «usuario no encontrado» | **Corregido** |
+| D3 | Una respuesta inesperada del proveedor se convierte en 500 | **Corregido** |
+| D4 | Un correo ausente se convierte en la cadena literal `"null"` | **Cerrado a propósito sin exigirlo** |
+| D5 | El rol del JWT se normaliza sin `Locale` | **Corregido** |
+| D6 | El dominio depende de Spring y ArchUnit no lo ve | Abierto — cambio de arquitectura |
+| D7 | Registro concurrente: 500 en vez de 409, y sin compensación | Abierto — reestructura la transacción |
+| D8 | El cierre de sesión no invalida el token de acceso | Abierto — decisión de producto (ADR-0003) |
+| D9 | Spring MVC no puede traducir sus propios códigos de estado | Abierto — decisión de diseño |
+
+Las pruebas de los defectos abiertos fijan el comportamiento **actual** y fallarán en cuanto alguien
+los corrija, que es exactamente la señal que se busca.
 
 ### D1 — Un fallo del proveedor en recuperación de contraseña sale como 500
 
@@ -112,10 +139,16 @@ escapa sin mapear.
 
 ### D4 — Un correo ausente se convierte en la cadena literal `"null"`
 
-`GoTrueClient.java:121` hace `String.valueOf(user.get("email"))` sin pasar por `requireField`, al
-contrario que el `id` de la línea 120. Si la respuesta no trae correo, `ConfirmedUser.email()` vale
-`"null"`, cuatro caracteres, y eso viaja como si fuera una dirección. No es una excepción: es
-corrupción silenciosa.
+`GoTrueClient.java:121` hacía `String.valueOf(user.get("email"))`, de modo que una respuesta sin
+correo producía `ConfirmedUser.email()` valiendo `"null"`, cuatro caracteres, viajando como si
+fuera una dirección. No es una excepción: es corrupción silenciosa.
+
+Se cerró **a propósito sin exigir el campo**. El primer intento fue reclamarlo con `requireField`,
+como se hace con el `id`, pero al revisarlo se vio que **ese correo no lo lee nadie**:
+`ConfirmEmailUseCase` resuelve el cliente por su identificador. Exigirlo convertiía una respuesta
+sin ese campo en un 502 por un valor que se descarta, o sea que en el único caso en que los dos
+comportamientos difieren, el nuevo era peor. Ahora se devuelve `null` —nunca la cadena `"null"`—
+y el campo sigue siendo opcional.
 
 ### D5 — El rol del JWT se normaliza sin `Locale`
 
@@ -150,6 +183,40 @@ huérfano en el proveedor de identidad.
 Este último punto es el único de la lista que **no está verificado con una prueba**: requiere una de
 integración contra la restricción real. Queda como la primera tarea pendiente.
 
+### D8 — El cierre de sesión no invalida el token de acceso
+
+`LogoutUseCase` revoca la sesión en el proveedor y eso funciona: la llamada llega. Pero el token de
+acceso es un JWT autocontenido que se valida sin preguntar a nadie, así que **sigue sirviendo hasta
+que expira**. Comprobado de punta a punta: tras cerrar sesión, `GET /api/v1/auth/me` con el mismo
+token devuelve 200.
+
+El ADR-0003 acepta explícitamente ese compromiso —«un access token robado sigue siendo válido hasta
+su expiración corta»—, así que no es una sorpresa. Pero el criterio de HU-021 está redactado en
+absoluto, de modo que a efectos de trazabilidad queda **parcialmente cumplido**, no cumplido.
+
+### D9 — Spring MVC no puede traducir sus propios códigos de estado
+
+`GlobalExceptionHandler` está anotado `@Order(Ordered.HIGHEST_PRECEDENCE)` y declara
+`@ExceptionHandler(Exception.class)`. Eso lo coloca por delante de la traducción propia de Spring
+MVC, que deja de aplicarse:
+
+| Petición | Esperado | Real |
+|---|---|---|
+| `GET /api/v1/registrations` (el endpoint es POST) | 405 con cabecera `Allow` | **500 `INTERNAL_ERROR`**, sin `Allow` |
+| `POST /api/v1/registrations` con `Content-Type: text/plain` | 415 | **500** |
+| `GET` a una ruta pública inexistente | 404 | **500** |
+
+Reproducido en las pruebas de integración y de nuevo contra la aplicación levantada en Docker.
+
+Hay un efecto colateral que ensucia la operación: cada uno de estos errores corrientes de cliente se
+registra a nivel `ERROR` con traza completa, así que un cliente mal configurado parece una avería
+del servidor y dispara alertas falsas.
+
+Arreglo sugerido: que `GlobalExceptionHandler` extienda `ResponseEntityExceptionHandler`, o quitarle
+`@Order(HIGHEST_PRECEDENCE)` y dejar el `Exception.class` en un advice de menor precedencia. No se
+aplicó porque cambia el orden de todo el manejo de errores y eso no se toca la víspera de una
+entrega.
+
 ### Hallazgos menores
 
 | Dónde | Qué |
@@ -180,6 +247,77 @@ Tres cosas que se sospechaban y **no** son defectos, verificadas expresamente:
 - **El manejador de errores no filtra información interna.** Se le pasó una excepción cuyo mensaje
   contenía una cadena de conexión con contraseña y la respuesta no lleva ni el mensaje, ni la clase
   de la excepción, ni la traza.
+
+## Validación de arranque y despliegue
+
+Además de la suite, se ejecutó de verdad el camino de despliegue completo. Nada de esto se
+comprobaba antes: no existía una sola prueba que verificase que el contexto de Spring carga.
+
+| Paso | Resultado |
+|---|---|
+| `mvnw clean package` | OK, jar de 66 MB |
+| `docker build` | OK, 54 s, imagen de 274 MB, **sin avisos** |
+| `docker compose up` | OK, la aplicación responde 11,5 s después de arrancar |
+| Perfil `cloud` con `ddl-auto=validate` contra `schema.sql` | **OK** — el DDL del repo y el mapeo JPA concuerdan, el arranque en Render no muere por desajuste de esquema |
+| Arranque real sobre Tomcat + PostgreSQL | OK, responde por HTTP |
+
+### Escenarios de negocio probados contra el contenedor
+
+No «que responda algo»: reglas de negocio con su código de estado y su `errorCode`.
+**22 de 24 correctos**; las dos desviaciones son el mismo defecto D9.
+
+| Escenario | Esperado | Obtenido |
+|---|---|---|
+| Un menor de 18 no puede registrarse | 400 `MINOR_NOT_ALLOWED` | ✔ |
+| Contraseña que no cumple la política | 400 `PASSWORD_TOO_WEAK` | ✔ |
+| Correo, teléfono, documento y fecha inválidos | 400 `VALIDATION_ERROR` | ✔ (4 casos) |
+| Canal de notificación inexistente, JSON malformado | 400 `VALIDATION_ERROR` | ✔ |
+| Alta válida con el proveedor caído | 502 `UPSTREAM_AUTH_ERROR` | ✔ |
+| Login y recuperación con el proveedor caído | 502 `UPSTREAM_AUTH_ERROR` | ✔ |
+| Reseteo: clave corta la para `@Size`, clave larga sin mayúscula la para la política | 400 en cada caso, con su código distinto | ✔ |
+| Perfil y cierre de sesión sin token, o con token basura | 401 `AUTH_REQUIRED` | ✔ |
+| Ruta protegida inexistente | 401, no revela qué rutas existen | ✔ |
+| `X-Trace-Id`: se genera si falta y se respeta si viene | presente en ambas | ✔ |
+| **Método no permitido** | 405 con cabecera `Allow` | **500** (D9) |
+| **Ruta pública inexistente** | 404 | **500** (D9) |
+
+### Riesgos de despliegue
+
+Ninguno impide compilar, empaquetar ni arrancar. Son de configuración, y los tres primeros
+importan para una demostración en vivo.
+
+**R1 — Si falta `SUPABASE_SECRET_KEY`, el login miente sobre la causa.** El valor por defecto
+es cadena vacía, así que la aplicación **arranca igual** y falla en la primera petición. Supabase
+responde 401 y `GoTrueClient.mapError`, en contexto `token`, lo clasifica como
+`INVALID_CREDENTIALS`: quien mira la pantalla lee «correo o contraseña inválidos» y busca el
+problema donde no está. El mismo fallo en `/registrations` sale como 502, o sea la misma causa
+con dos caras distintas.
+
+**R2 — CORS no funciona.** `render.yaml` declara `ALLOWED_ORIGINS`, pero **ningún código la lee**:
+`SecurityConfig` llama a `.cors(Customizer.withDefaults())` y no existe ningún
+`CorsConfigurationSource` propio. Comprobado en vivo: un *preflight* no devuelve
+`Access-Control-Allow-Origin`. Un frontend en navegador queda bloqueado; por Postman o Swagger
+no se nota.
+
+**R3 — El health check de Render no mira la base de datos.** `render.yaml` apunta a
+`/actuator/health/readiness`, y ese grupo no incluye el indicador `db`. Render mantiene en
+servicio una instancia con la base caída. `/actuator/health` sí baja a 503, pero Render no lo
+consulta.
+
+**R4 — Tres variables declaradas que nadie lee.** `APP_BASE_URL` y `ALLOWED_ORIGINS` en
+`render.yaml`; `JWT_ISSUER` y `JWKS_URI` en el README. Los nombres que sí funcionan son
+`APP_SECURITY_JWT_ISSUER` y `APP_SECURITY_JWKS_URI`.
+
+**R5 — `DATABASE_USER` y `DATABASE_PASSWORD` caen a `postgres/postgres` en silencio** si faltan,
+lo que en Render aparece como un fallo de autenticación en vez de un mensaje claro.
+
+**R6 — Una `SUPABASE_URL` con barra final** produce un emisor `…//auth/v1` y hace fallar la
+validación de tokens perfectamente válidos.
+
+Los arreglos de R1, R2 y R3 están escritos pero **no aplicados**, y a propósito: el *fail-fast* de
+la credencial cambia un fallo visible en el login por un servicio que no levanta, y meter la base
+en `readiness` haría que un hipo del pooler saque la instancia de servicio. Las dos son mejoras
+correctas y las dos suben el riesgo el día de una demostración. La decisión es del equipo.
 
 ## Criterios de aceptación que siguen sin verificar
 
