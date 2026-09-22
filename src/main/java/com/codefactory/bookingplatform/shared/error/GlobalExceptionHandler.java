@@ -19,6 +19,7 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import java.net.URI;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @RestControllerAdvice
@@ -83,7 +84,10 @@ public class GlobalExceptionHandler {
     private ProblemDetail build(ErrorCode code, String message, HttpServletRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(code.status(), message);
         problem.setTitle(code.status().is5xxServerError() ? HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase() : code.status().getReasonPhrase());
-        problem.setType(URI.create("https://bookingplatform.codefactory.com/errors/" + code.name().toLowerCase()));
+        // Locale.ROOT: the type URI is a stable identifier, not display text.
+        // Under a Turkish default locale VALIDATION_ERROR would lower case to
+        // "valıdatıon_error" and the published error type would stop matching.
+        problem.setType(URI.create("https://bookingplatform.codefactory.com/errors/" + code.name().toLowerCase(Locale.ROOT)));
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errorCode", code.name());
         problem.setProperty(TRACE_ID_PROPERTY, MDC.get("traceId"));

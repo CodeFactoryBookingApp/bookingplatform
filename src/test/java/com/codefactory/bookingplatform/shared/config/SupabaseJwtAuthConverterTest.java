@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -64,6 +65,24 @@ class SupabaseJwtAuthConverterTest {
         Collection<GrantedAuthority> authorities = converter.convert(jwtWithAppMetadata(Map.of("role", role)));
 
         assertEquals(List.of(expectedAuthority), authorityNames(authorities));
+    }
+
+    @ParameterizedTest(name = "under the Turkish locale [{0}] still grants [{1}]")
+    @CsvSource({
+            "admin,  ROLE_ADMIN",
+            "client, ROLE_CLIENT",
+            "i,      ROLE_I"})
+    @DisplayName("The authority name does not depend on the JVM default locale (Turkish dotted-I trap)")
+    void roleUpperCasingIsLocaleIndependent(String role, String expectedAuthority) {
+        Locale previous = Locale.getDefault();
+        Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+        try {
+            Collection<GrantedAuthority> authorities = converter.convert(jwtWithAppMetadata(Map.of("role", role)));
+
+            assertEquals(List.of(expectedAuthority), authorityNames(authorities));
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 
     @Test

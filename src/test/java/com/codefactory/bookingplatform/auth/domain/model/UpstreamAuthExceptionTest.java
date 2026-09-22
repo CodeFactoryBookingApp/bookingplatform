@@ -76,6 +76,34 @@ class UpstreamAuthExceptionTest {
     }
 
     @Test
+    @DisplayName("The exception declares an explicit serialVersionUID so a redeploy cannot change it")
+    void declaresAnExplicitSerialVersionUid() throws Exception {
+        java.lang.reflect.Field field = UpstreamAuthException.class.getDeclaredField("serialVersionUID");
+        field.setAccessible(true);
+        assertEquals(1L, field.getLong(null));
+    }
+
+    @Test
+    @DisplayName("A serialised upstream failure keeps its classified error and message")
+    void survivesJavaSerialisation() throws Exception {
+        UpstreamAuthException original =
+                new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many calls");
+
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream out = new java.io.ObjectOutputStream(bytes)) {
+            out.writeObject(original);
+        }
+        UpstreamAuthException restored;
+        try (java.io.ObjectInputStream in =
+                     new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
+            restored = (UpstreamAuthException) in.readObject();
+        }
+
+        assertEquals(UpstreamAuthError.RATE_LIMITED, restored.error());
+        assertEquals("too many calls", restored.getMessage());
+    }
+
+    @Test
     @DisplayName("A null message is accepted and reported back as null rather than as an empty string")
     void nullMessageIsPreserved() {
         assertNull(new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, null).getMessage());

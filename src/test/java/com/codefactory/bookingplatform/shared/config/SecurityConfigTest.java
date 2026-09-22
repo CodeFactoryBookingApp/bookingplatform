@@ -156,6 +156,25 @@ class SecurityConfigTest {
     }
 
     @Test
+    @DisplayName("The 401/403 type URIs do not depend on the JVM default locale (Turkish dotless-i trap)")
+    void errorTypeUrisAreLocaleIndependent() throws Exception {
+        java.util.Locale previous = java.util.Locale.getDefault();
+        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+        try {
+            entryPoint().commence(request, response, new StubAuthenticationException());
+            assertTrue(response.getContentAsString().contains("/errors/auth_required"),
+                    "expected the ASCII type URI but got: " + response.getContentAsString());
+
+            MockHttpServletResponse forbidden = new MockHttpServletResponse();
+            accessDeniedHandler().handle(request, forbidden, new AccessDeniedException("nope"));
+            assertTrue(forbidden.getContentAsString().contains("/errors/access_denied"),
+                    "expected the ASCII type URI but got: " + forbidden.getContentAsString());
+        } finally {
+            java.util.Locale.setDefault(previous);
+        }
+    }
+
+    @Test
     @DisplayName("The entry point is reused for both the resource server and the generic handling")
     void entryPointIsAvailable() {
         assertNotNull(entryPoint());

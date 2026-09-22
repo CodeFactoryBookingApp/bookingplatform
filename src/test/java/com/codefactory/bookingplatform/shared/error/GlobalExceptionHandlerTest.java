@@ -125,6 +125,22 @@ class GlobalExceptionHandlerTest {
             assertEquals(URI.create(TYPE_PREFIX + "duplicate_email"), problem.getType());
         }
 
+        @ParameterizedTest(name = "{0} keeps its type URI under the Turkish locale")
+        @EnumSource(ErrorCode.class)
+        @DisplayName("The type URI does not depend on the JVM default locale (Turkish dotless-i trap)")
+        void typeUriIsLocaleIndependent(ErrorCode code) {
+            java.util.Locale previous = java.util.Locale.getDefault();
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+            try {
+                ProblemDetail problem = handler.handleBusiness(new BusinessException(code), request);
+
+                assertEquals(URI.create(TYPE_PREFIX + code.name().toLowerCase(java.util.Locale.ROOT)),
+                        problem.getType());
+            } finally {
+                java.util.Locale.setDefault(previous);
+            }
+        }
+
         @Test
         @DisplayName("A business rejection points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {

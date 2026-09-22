@@ -26,6 +26,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Instant;
+import java.util.Locale;
 
 @Configuration
 @EnableWebSecurity
@@ -103,7 +104,8 @@ public class SecurityConfig {
                               ErrorCode code, String message) throws IOException {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(code.status(), message);
         problem.setTitle(code.status().getReasonPhrase());
-        problem.setType(URI.create("https://bookingplatform.codefactory.com/errors/" + code.name().toLowerCase()));
+        // Locale.ROOT: same stable-identifier reason as in GlobalExceptionHandler.
+        problem.setType(URI.create("https://bookingplatform.codefactory.com/errors/" + code.name().toLowerCase(Locale.ROOT)));
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("errorCode", code.name());
         problem.setProperty("traceId", MDC.get("traceId"));
