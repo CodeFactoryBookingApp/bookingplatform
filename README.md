@@ -1,3 +1,5 @@
+[![Build and analyze](https://github.com/CodeFactoryBookingApp/bookingplatform/actions/workflows/build.yml/badge.svg)](https://github.com/CodeFactoryBookingApp/bookingplatform/actions/workflows/build.yml)
+
 # Booking Platform — Sprint 1
 
 Backend de la **Plataforma de Reservas de Servicios** (caso CodeF@ctory).
