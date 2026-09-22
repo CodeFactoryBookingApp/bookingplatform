@@ -212,9 +212,10 @@ Si el diagrama no carga, las mismas relaciones están exportadas como imagen:
 
 El diagrama editable está en `diagrama-er.drawio`. Su primera página, **Modelo
 completo**, tiene el modelo entero en una sola hoja con las notas de diseño y
-las historias de usuario; las tres siguientes son vistas por dominio, útiles
-para leerlo por partes. Están exportadas como `der-0-modelo-completo.png`,
-`der-1-identidad.png`, `der-2-catalogo.png` y `der-3-reservas.png`.
+las historias de usuario; las cuatro siguientes son las tres vistas por dominio,
+útiles para leerlo por partes, y la hoja de historias de usuario. Están exportadas
+como `der-0-modelo-completo.png`, `der-1-identidad.png`, `der-2-catalogo.png`,
+`der-3-reservas.png` y `der-4-historias-de-usuario.png`.
 
 ## Decisiones de modelado
 
