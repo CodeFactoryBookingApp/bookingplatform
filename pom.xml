@@ -21,8 +21,10 @@
 		<springdoc.version>3.1.1</springdoc.version>
 		<archunit.version>1.4.1</archunit.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
-		<jacoco.version>0.8.12</jacoco.version>
 
+		<jacoco.version>0.8.13</jacoco.version>
+		<pitest.version>1.19.1</pitest.version>
+		<pitest.junit5.version>1.2.2</pitest.junit5.version>
 		<sonar.organization>codefactorybookingapp</sonar.organization>
 		<sonar.projectKey>CodeFactoryBookingApp_bookingplatform</sonar.projectKey>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -174,6 +176,93 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!--
+			  Coverage measurement (QA). The agent instruments the unit test run;
+			  the report lands in target/site/jacoco. Classes with no branches or
+			  statements of their own (records, enums, the Spring entry point and
+			  declarative @Configuration) are excluded: counting them inflates the
+			  number without telling us anything about the behaviour under test.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<configuration>
+					<excludes>
+						<!--
+						  Único excluido: el arranque de Spring Boot. Su main()
+						  solo delega en SpringApplication.run y cubrirlo exige
+						  levantar el contexto entero sin probar nada propio.
+
+						  Todo lo demás se mide, incluidos los DTO y los records
+						  de propiedades: excluirlos sube el porcentaje sin decir
+						  nada sobre lo que está probado, que es justo lo que una
+						  cifra de cobertura no debe hacer.
+						-->
+						<exclude>**/BookingPlatformApplication.class</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<!--
+					  `prepare-agent` fija la propiedad argLine, y failsafe la
+					  hereda igual que surefire: los ITs de Testcontainers quedan
+					  instrumentados sin configuración extra y su cobertura se
+					  acumula en el mismo target/jacoco.exec. El informe se emite
+					  al final, ya con las dos fases dentro.
+
+					  El número oficial sale de `mvn clean verify`. Sin `clean`,
+					  el fichero de ejecución acumula corridas anteriores.
+					-->
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<!--
+					  Umbral: por debajo de 90% el build falla. Se exige tanto en
+					  instrucciones como en ramas, y la de ramas es la que de
+					  verdad protege: se puede recorrer una línea sin probar
+					  ninguna de las decisiones que toma.
+
+					  Está en 90 y no en el 100 que hay hoy para dejar margen al
+					  mantenimiento sin romper la rama a nadie.
+					-->
+					<execution>
+						<id>check-coverage</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>INSTRUCTION</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
@@ -200,25 +289,92 @@
 					</compilerArgs>
 				</configuration>
 			</plugin>
+			<!--
+			  Prueba de mutacion (QA). La cobertura demuestra que el codigo se
+			  ejecuta; PIT demuestra que las pruebas lo vigilan: siembra defectos
+			  en el bytecode y comprueba que alguna prueba falle por cada uno.
+			  No se ata a ninguna fase: se lanza a mano con
+			  `mvnw test-compile org.pitest:pitest-maven:mutationCoverage`.
+			-->
 			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>${jacoco.version}</version>
-				<executions>
-					<execution>
-						<id>prepare-agent</id>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>report</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
-				</executions>
+				<groupId>org.pitest</groupId>
+				<artifactId>pitest-maven</artifactId>
+				<version>${pitest.version}</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.pitest</groupId>
+						<artifactId>pitest-junit5-plugin</artifactId>
+						<version>${pitest.junit5.version}</version>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<targetClasses>
+						<param>com.codefactory.bookingplatform.*</param>
+					</targetClasses>
+					<targetTests>
+						<param>com.codefactory.bookingplatform.*</param>
+					</targetTests>
+					<!--
+					  Fuera del ambito mutado, y el motivo de cada exclusion:
+
+					  - BookingPlatformApplication: solo delega en SpringApplication.run.
+					  - Enums y records puros (DTO, propiedades, comandos, resultados):
+					    lo que PIT muta ahi es el equals/hashCode/toString y los
+					    accessors que genera el compilador. Matar esos mutantes solo se
+					    consigue escribiendo pruebas de codigo generado, que es relleno:
+					    sube el porcentaje sin proteger ninguna regla de negocio.
+					  - OpenApiConfig, ClockConfig, JpaAuditingConfig: configuracion
+					    declarativa sin decisiones. Lo mismo.
+
+					  Todo lo demas se muta, incluidas las entidades JPA, SecurityConfig
+					  y las politicas de dominio, que es donde un superviviente importa.
+					-->
+					<excludedClasses>
+						<param>com.codefactory.bookingplatform.BookingPlatformApplication</param>
+						<param>com.codefactory.bookingplatform.*.api.dto.*</param>
+						<param>com.codefactory.bookingplatform.auth.domain.model.AppRole</param>
+						<param>com.codefactory.bookingplatform.auth.domain.model.AuthTokens</param>
+						<param>com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser</param>
+						<param>com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError</param>
+						<param>com.codefactory.bookingplatform.identity.domain.model.ClientStatus</param>
+						<param>com.codefactory.bookingplatform.identity.domain.model.NotificationChannel</param>
+						<param>com.codefactory.bookingplatform.identity.application.RegisterClientCommand</param>
+						<param>com.codefactory.bookingplatform.identity.application.RegistrationOutcome</param>
+						<param>com.codefactory.bookingplatform.shared.error.ErrorCode</param>
+						<param>com.codefactory.bookingplatform.shared.config.AuthPolicyProperties</param>
+						<param>com.codefactory.bookingplatform.shared.config.SecurityProperties</param>
+						<param>com.codefactory.bookingplatform.shared.config.SupabaseProperties</param>
+						<param>com.codefactory.bookingplatform.shared.config.OpenApiConfig</param>
+						<param>com.codefactory.bookingplatform.shared.config.ClockConfig</param>
+						<param>com.codefactory.bookingplatform.shared.persistence.JpaAuditingConfig</param>
+					</excludedClasses>
+					<!--
+					  Los tests de integracion quedan fuera de la EJECUCION: levantan
+					  Postgres con Testcontainers y arrancar un contenedor por mutante
+					  no es viable. Consecuencia a tener presente al leer el informe:
+					  un mutante que solo matarian los ITs aparece como superviviente.
+					-->
+					<excludedTestClasses>
+						<param>com.codefactory.bookingplatform.*IT</param>
+					</excludedTestClasses>
+					<mutators>
+						<mutator>ALL</mutator>
+					</mutators>
+					<outputFormats>
+						<param>HTML</param>
+						<param>XML</param>
+					</outputFormats>
+					<timestampedReports>false</timestampedReports>
+					<threads>4</threads>
+					<timeoutConstant>8000</timeoutConstant>
+					<!--
+					  Hoy la puntuacion real sobre ese ambito es 98%, y los 17 mutantes
+					  que sobreviven estan analizados uno a uno y son equivalentes. El
+					  umbral se deja en 95 para dejar margen de mantenimiento sin que
+					  un refactor honesto rompa la rama.
+					-->
+					<mutationThreshold>95</mutationThreshold>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

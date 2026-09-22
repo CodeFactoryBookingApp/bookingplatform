@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -29,7 +30,10 @@ public class SupabaseJwtAuthConverter implements Converter<Jwt, Collection<Grant
         if (appMetadata instanceof Map<?, ?> metadata) {
             Object role = metadata.get(ROLE_KEY);
             if (role instanceof String roleValue && !roleValue.isBlank()) {
-                return List.of(new SimpleGrantedAuthority(ROLE_PREFIX + roleValue.toUpperCase()));
+                // Locale.ROOT: the authority name is a protocol value, not display text.
+                // Under a Turkish default locale "admin" would upper case to "ADMİN"
+                // and every hasRole("ADMIN") check would silently fail.
+                return List.of(new SimpleGrantedAuthority(ROLE_PREFIX + roleValue.toUpperCase(Locale.ROOT)));
             }
         }
         return List.of();

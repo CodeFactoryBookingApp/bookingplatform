@@ -30,6 +30,9 @@ public class GoTrueClient implements IdentityProviderPort {
 
     private static final Logger log = LoggerFactory.getLogger(GoTrueClient.class);
 
+    /** Error-mapping context of the /verify endpoint, shared by email confirmation and password reset. */
+    private static final String VERIFY_CONTEXT = "verify";
+
     private final RestClient restClient;
     private final SupabaseProperties properties;
 
@@ -56,7 +59,7 @@ public class GoTrueClient implements IdentityProviderPort {
                     .body(body)
                     .retrieve()
                     .body(Map.class);
-            return UUID.fromString(String.valueOf(requireField(response, "id")));
+            return requireUuid(response, "id");
         } catch (RestClientResponseException ex) {
             throw mapError(ex, "createUser");
         } catch (ResourceAccessException ex) {
@@ -94,7 +97,7 @@ public class GoTrueClient implements IdentityProviderPort {
                     String.valueOf(requireField(response, "access_token")),
                     String.valueOf(requireField(response, "refresh_token")),
                     String.valueOf(response.getOrDefault("token_type", "bearer")),
-                    Long.parseLong(String.valueOf(response.getOrDefault("expires_in", "3600"))));
+                    requireExpiresIn(response));
         } catch (RestClientResponseException ex) {
             throw mapError(ex, "token");
         } catch (ResourceAccessException ex) {
@@ -116,9 +119,12 @@ public class GoTrueClient implements IdentityProviderPort {
         } else {
             user = response;
         }
+        // El correo no lo consume nadie: ConfirmEmailUseCase resuelve el cliente por
+        // userId. Exigirlo con requireField convertiria una respuesta sin ese campo en
+        // un 502 para un valor que se descarta, asi que se deja tolerante a proposito.
         return new ConfirmedUser(
-                UUID.fromString(String.valueOf(requireField(user, "id"))),
-                String.valueOf(user.get("email")));
+                requireUuid(user, "id"),
+                user.get("email") == null ? null : String.valueOf(user.get("email")));
     }
 
     @Override
@@ -199,7 +205,7 @@ public class GoTrueClient implements IdentityProviderPort {
                     .body(Map.class);
             return response != null ? response : Map.of();
         } catch (RestClientResponseException ex) {
-            throw mapError(ex, "verify");
+            throw mapError(ex, VERIFY_CONTEXT);
         } catch (ResourceAccessException ex) {
             throw unavailable(ex);
         }
@@ -222,6 +228,35 @@ public class GoTrueClient implements IdentityProviderPort {
         return response.get(field);
     }
 
+    /**
+     * A malformed id is an unusable provider answer, exactly like a missing one:
+     * the raw {@link IllegalArgumentException} from {@code UUID.fromString} would
+     * escape the adapter and surface as a 500 instead of an upstream error.
+     */
+    private UUID requireUuid(Map<String, Object> response, String field) {
+        String raw = String.valueOf(requireField(response, field));
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ex) {
+            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
+                    "Unexpected identity provider response, field is not a valid UUID: " + field, ex);
+        }
+    }
+
+    /**
+     * {@code expires_in} is optional (defaults to one hour), but a present value that
+     * is not a whole number — {@code "never"}, or the perfectly valid JSON number
+     * {@code 3600.0} — must not escape as a raw {@link NumberFormatException}.
+     */
+    private long requireExpiresIn(Map<String, Object> response) {
+        try {
+            return Long.parseLong(String.valueOf(response.getOrDefault("expires_in", "3600")));
+        } catch (NumberFormatException ex) {
+            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
+                    "Unexpected identity provider response, field is not a number: expires_in", ex);
+        }
+    }
+
     private UpstreamAuthException unavailable(Exception cause) {
         log.error("Identity provider unreachable: {}", cause.getMessage());
         return new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
@@ -242,11 +277,16 @@ public class GoTrueClient implements IdentityProviderPort {
         if (body.contains("already exists") || body.contains("user_exists") || body.contains("email_exists")) {
             return new UpstreamAuthException(UpstreamAuthError.USER_ALREADY_EXISTS, "User already exists");
         }
-        if (body.contains("not found") || status == 404) {
-            return new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, "User not found");
-        }
+        // GoTrue answers 404 to an expired or already consumed OTP, so "expired" has to
+        // be checked before the 404 rule: otherwise a stale verification link is reported
+        // as USER_NOT_FOUND and the user reads "usuario no encontrado".
         if (body.contains("expired")) {
             return new UpstreamAuthException(UpstreamAuthError.TOKEN_EXPIRED, "Token has expired");
+        }
+        // A bare 404 from /verify is about the one-time token, never about a user; it is
+        // classified below by the verify branch. Every other endpoint keeps the old rule.
+        if (body.contains("not found") || (status == 404 && !VERIFY_CONTEXT.equals(context))) {
+            return new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, "User not found");
         }
         switch (context) {
             case "token":
@@ -254,8 +294,8 @@ public class GoTrueClient implements IdentityProviderPort {
                     return new UpstreamAuthException(UpstreamAuthError.INVALID_CREDENTIALS, "Invalid login credentials");
                 }
                 break;
-            case "verify":
-                if (status == 400 || status == 403) {
+            case VERIFY_CONTEXT:
+                if (status == 400 || status == 403 || status == 404) {
                     return new UpstreamAuthException(UpstreamAuthError.TOKEN_INVALID, "Invalid or already used token");
                 }
                 break;
