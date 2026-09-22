@@ -273,12 +273,25 @@ class PasswordPolicyTest {
                 "Str0ng!Pass");
     }
 
-    @ParameterizedTest(name = "isValid and violations agree for [{0}]")
-    @MethodSource("passwordCorpus")
-    @DisplayName("isValid is true exactly when the violation list is empty")
-    void isValidAgreesWithViolations(String password) {
-        assertEquals(PasswordPolicy.violations(password).isEmpty(), PasswordPolicy.isValid(password),
-                () -> "isValid disagreed with violations() for [" + password + "]");
+    @ParameterizedTest(name = "isValid({0}) is {1}")
+    @CsvSource({
+            // La contraseña, y si la política debe aceptarla. El veredicto se escribe aquí,
+            // no se calcula: comparar isValid contra violations().isEmpty() asevera X == X,
+            // porque isValid está implementado exactamente así, y pasaría aunque la política
+            // estuviese desactivada por completo.
+            "'Segura#2026',     true",
+            "'Abcdefg1!',       true",
+            "'Sin1nguno',       false",   // sin carácter especial
+            "'sinmayuscula1!',  false",   // sin mayúscula
+            "'SINMINUSCULA1!',  false",   // sin minúscula
+            "'SinDigitos!!',    false",   // sin dígito
+            "'Ab1!',            false",   // por debajo del mínimo
+            "'abcdefgh',        false"    // solo minúsculas
+    })
+    @DisplayName("The policy accepts a password only when it satisfies every rule at once")
+    void isValidReflectsTheWholePolicy(String password, boolean esperado) {
+        assertEquals(esperado, PasswordPolicy.isValid(password),
+                () -> "the policy disagreed on [" + password + "]");
     }
 
     @Test

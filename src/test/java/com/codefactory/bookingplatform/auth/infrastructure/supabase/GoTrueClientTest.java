@@ -103,12 +103,58 @@ class GoTrueClientTest {
         }
     }
 
-    /** Answers whatever request arrives with the given status and body, then runs the endpoint. */
+    /** The path each endpoint must call. Anchoring it here makes every row of the tables below
+     *  verify the operation as well as the classification: without it the matcher accepts any
+     *  request and an endpoint calling the wrong path would go unnoticed. */
+    private static String pathOf(Endpoint endpoint) {
+        return switch (endpoint) {
+            case CREATE_USER, DELETE_USER -> "/admin/users";
+            case TOKEN -> "/token";
+            case VERIFY, RESET -> "/verify";
+            case RESEND -> "/resend";
+            case RECOVER -> "/recover";
+            case LOGOUT -> "/logout";
+        };
+    }
+
+    /** Answers the request with the given status and body, then runs the endpoint. */
     private UpstreamAuthException callExpectingFailure(Endpoint endpoint, int status, String body) {
-        server.expect(request -> { }).andRespond(withStatus(HttpStatusCode.valueOf(status)).body(body));
+        String esperado = pathOf(endpoint);
+        server.expect(request -> assertTrue(request.getURI().getPath().startsWith(esperado),
+                        () -> endpoint + " called " + request.getURI().getPath() + " instead of " + esperado))
+                .andRespond(withStatus(HttpStatusCode.valueOf(status)).body(body));
         UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, () -> invoke(endpoint));
         server.verify();
         return ex;
+    }
+
+    static Stream<Arguments> endpointContexts() {
+        return Stream.of(
+                Arguments.of(Endpoint.CREATE_USER, "createUser"),
+                Arguments.of(Endpoint.DELETE_USER, "deleteUser"),
+                Arguments.of(Endpoint.TOKEN, "token"),
+                Arguments.of(Endpoint.VERIFY, "verify"),
+                // El reseteo comparte el endpoint /verify, y por tanto su contexto.
+                Arguments.of(Endpoint.RESET, "verify"),
+                Arguments.of(Endpoint.RESEND, "resend"),
+                Arguments.of(Endpoint.RECOVER, "recover"),
+                Arguments.of(Endpoint.LOGOUT, "logout"));
+    }
+
+    @ParameterizedTest(name = "{0} classifies its failures under the \"{1}\" context")
+    @MethodSource("endpointContexts")
+    @DisplayName("Each endpoint hands the mapper its own context, which is what decides the classification")
+    void everyEndpointCarriesItsOwnErrorContext(Endpoint endpoint, String context) {
+        // El contexto es un literal que decide cómo se traduce el fallo: con "token" un 400 es
+        // INVALID_CREDENTIALS y con "verify" es TOKEN_INVALID. Las tablas de abajo aseveran el
+        // error resultante, pero hay combinaciones donde dos contextos coinciden, así que un
+        // literal intercambiado puede pasar inadvertido. Un 502 no lo mapea ninguna regla y cae
+        // en la rama por defecto, que es la única que nombra el contexto: eso lo ancla.
+        UpstreamAuthException ex = callExpectingFailure(endpoint, 502, "");
+
+        assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
+        assertTrue(ex.getMessage().contains("in " + context + ":"),
+                () -> "expected the " + context + " context in: " + ex.getMessage());
     }
 
     // ---------------------------------------------------------------------

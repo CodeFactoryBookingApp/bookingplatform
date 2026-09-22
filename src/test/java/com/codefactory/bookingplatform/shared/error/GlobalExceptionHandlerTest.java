@@ -580,8 +580,17 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("Every response carries a timestamp so the client can tell two identical failures apart")
         void publishesATimestamp() {
+            java.time.Instant antes = java.time.Instant.now().minusSeconds(1);
+
             ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.ACCESS_DENIED), request);
-            assertNotNull(propertiesOf(problem).get("timestamp"));
+
+            // assertNotNull pasaría con cualquier cadena, incluida una constante: hay que
+            // comprobar que es un instante y que corresponde a esta respuesta.
+            Object publicado = propertiesOf(problem).get("timestamp");
+            assertNotNull(publicado);
+            java.time.Instant sello = java.time.Instant.parse(publicado.toString());
+            assertTrue(sello.isAfter(antes) && sello.isBefore(java.time.Instant.now().plusSeconds(1)),
+                    () -> "the timestamp does not belong to this response: " + sello);
         }
 
         @Test

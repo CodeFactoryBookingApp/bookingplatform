@@ -17,7 +17,6 @@ import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,29 +34,15 @@ class ConfigurationBeansTest {
         private final ClockConfig config = new ClockConfig();
 
         @Test
-        @DisplayName("The clock bean is built and is not null")
-        void clockIsProvided() {
-            assertNotNull(config.clock());
-        }
-
-        @Test
-        @DisplayName("The clock runs on UTC, so stored timestamps do not drift with the host zone")
-        void clockIsUtc() {
-            assertEquals(ZoneOffset.UTC, config.clock().getZone());
-        }
-
-        @Test
-        @DisplayName("The clock is the system UTC clock, not a fixed or offset one")
+        @DisplayName("The clock is the system UTC clock: neither frozen, nor offset, nor on the host zone")
         void clockIsSystemUtc() {
+            // Una sola aserción cubre las tres cosas, y de forma determinista: Clock.fixed,
+            // Clock.offset y systemDefaultZone son todos distintos de systemUTC. Comparar el
+            // instante contra "hace un minuto" no sirve, porque un reloj congelado en el
+            // instante actual también lo cumple; y leerlo dos veces esperando que avance
+            // depende de la resolución del reloj del sistema y sale intermitente en Windows.
             assertEquals(Clock.systemUTC(), config.clock());
-        }
-
-        @Test
-        @DisplayName("The clock ticks with real time instead of returning a frozen instant")
-        void clockIsNotFixed() {
-            Clock clock = config.clock();
-
-            assertTrue(clock.instant().isAfter(java.time.Instant.now().minusSeconds(60)));
+            assertEquals(ZoneOffset.UTC, config.clock().getZone());
         }
     }
 
@@ -119,10 +104,5 @@ class ConfigurationBeansTest {
             assertNotNull(JpaAuditingConfig.class.getAnnotation(Configuration.class));
         }
 
-        @Test
-        @DisplayName("The configuration class can be instantiated by the container")
-        void isInstantiable() {
-            assertNotNull(new JpaAuditingConfig());
-        }
     }
 }
