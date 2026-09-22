@@ -19,6 +19,7 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | ADR-0003 Autenticación JWT/JWKS + bloqueo propio | `docs/adr/ADR-0003-*.md` |
 | ADR-0004 API versionada, ProblemDetail, traceId | `docs/adr/ADR-0004-*.md` |
 | ADR-0005 Modelo físico escrito a mano + CI de BD | `docs/adr/ADR-0005-*.md` |
+| Guía de la carpeta de base de datos | `docs/database/README.md` |
 | Modelo lógico completo (ER) | `docs/database/modelo-logico.md` |
 | Modelo físico (DDL, 19 tablas) | `docs/database/schema.sql` |
 | Datos de prueba | `docs/database/seed.sql` |
