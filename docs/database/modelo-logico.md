@@ -13,9 +13,9 @@ clave foránea declarada: su destino está en otro esquema.
 erDiagram
     CITY ||--o{ LOCATION : "ubica"
     ORGANIZATION_CATEGORY ||--o{ ORGANIZATION : "clasifica"
-    ORGANIZATION ||--|{ LOCATION : "tiene sedes"
-    ORGANIZATION ||--|{ ORGANIZATION_POLICY : "versiona reglas"
-    ORGANIZATION ||--o{ ORGANIZATION_MEMBER : "emplea"
+    ORGANIZATION ||--|{ LOCATION : "tiene sede"
+    ORGANIZATION ||--|{ ORGANIZATION_POLICY : "versiona"
+    ORGANIZATION ||--o{ ORGANIZATION_MEMBER : "emplea a"
     ORGANIZATION ||--o{ SERVICE : "oferta"
     ORGANIZATION ||--o{ RESOURCE_TYPE : "define"
     ORGANIZATION ||--o{ ACCOUNT_STATUS_CHANGE : "audita"
@@ -31,12 +31,12 @@ erDiagram
     RESOURCE ||--o{ SCHEDULE : "disponible en"
     CLIENT ||--o{ BOOKING : "reserva"
     ORGANIZATION ||--o{ BOOKING : "atiende"
-    SERVICE ||--o{ BOOKING : "es reservado"
+    SERVICE ||--o{ BOOKING : "es reservado en"
     LOCATION ||--o{ BOOKING : "acoge"
-    ORGANIZATION_POLICY ||--o{ BOOKING : "rige congelada"
+    ORGANIZATION_POLICY ||--o{ BOOKING : "rige, congelada"
     BOOKING ||--|{ BOOKING_RESOURCE : "ocupa"
     RESOURCE ||--o{ BOOKING_RESOURCE : "es ocupado por"
-    BOOKING ||--o{ BOOKING_STATUS_CHANGE : "historia de estados"
+    BOOKING ||--o{ BOOKING_STATUS_CHANGE : "registra cambio de"
 
     CITY {
         uuid id PK
@@ -209,6 +209,12 @@ Si el diagrama no carga, las mismas relaciones están exportadas como imagen:
 ![Servicios y recursos](er-catalogo.png)
 
 ![Reservas](er-reservas.png)
+
+El diagrama editable está en `diagrama-er.drawio`, separado en cuatro páginas
+(identidad y organización, catálogo y recursos, reservas, historias de usuario)
+porque las diecinueve entidades en un solo lienzo obligan a que las relaciones
+se crucen. Sus tres páginas de modelo están exportadas como `der-1-identidad.png`,
+`der-2-catalogo.png` y `der-3-reservas.png`.
 
 ## Decisiones de modelado
 

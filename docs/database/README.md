@@ -13,8 +13,9 @@ Qué hay aquí, en qué orden se ejecuta y cómo levantarlo para trabajar.
 | `rls.sql` | Habilita Row Level Security en las diecinueve tablas | Sí, al final |
 | `modelo-logico.md` | Diagrama entidad-relación, decisiones de modelado y normalización | No, se lee |
 | `consultas-clave.md` | Las mismas catorce preguntas con su explicación | No, se lee |
-| `diagrama-er.drawio` | Diagrama editable. Se abre en diagrams.net o con la extensión de VS Code | No |
-| `er-identidad.png`, `er-catalogo.png`, `er-reservas.png` | El diagrama exportado, por si Mermaid no carga | No |
+| `diagrama-er.drawio` | Diagrama editable, en cuatro páginas: identidad y organización, catálogo y recursos, reservas, e historias de usuario. Se abre en diagrams.net o con la extensión de VS Code | No |
+| `der-1-identidad.png`, `der-2-catalogo.png`, `der-3-reservas.png` | Las tres páginas del modelo exportadas desde el `.drawio` | No |
+| `er-identidad.png`, `er-catalogo.png`, `er-reservas.png` | Los diagramas de `modelo-logico.md` exportados, por si Mermaid no carga | No |
 
 Los dos `.sql` de consultas usan metacomandos de `psql` (`\echo`), así que se
 ejecutan con `psql -f` y no pegándolos en el editor SQL de Supabase.
