@@ -202,6 +202,14 @@ erDiagram
     }
 ```
 
+Si el diagrama no carga, las mismas relaciones están exportadas como imagen:
+
+![Identidad y organización](er-identidad.png)
+
+![Servicios y recursos](er-catalogo.png)
+
+![Reservas](er-reservas.png)
+
 ## Decisiones de modelado
 
 | Decisión | Justificación |
@@ -221,9 +229,12 @@ erDiagram
 
 ## Normalización
 
-Las diecinueve relaciones están en 3FN y quince alcanzan BCNF. La única
-excepción es `BOOKING_RESOURCE`, cuya violación de 2FN está justificada arriba y
-garantizada por el motor.
+Las diecinueve relaciones están en 3FN. Quince alcanzan BCNF; tres se quedan en
+3FN porque conservan clave primaria sustituta junto a una clave natural
+declarada como `unique` (`ORGANIZATION_MEMBER`, `SERVICE_RESOURCE_REQUIREMENT`,
+`SCHEDULE`), lo que preserva la dependencia sin que el determinante sea la clave
+primaria. La excepción real es `BOOKING_RESOURCE`, cuya violación de 2FN está
+justificada arriba y garantizada por el motor.
 
 Tres puntos que sostienen esa afirmación:
 

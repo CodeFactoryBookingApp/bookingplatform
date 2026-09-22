@@ -1,6 +1,6 @@
 # ADR-0005: El modelo físico se escribe a mano y se verifica en integración continua
 
-- **Estado:** Aceptado
+- **Estado:** Aceptado; modifica la estrategia de esquema del ADR-0002
 - **Fecha:** 2026-09-21
 - **Prioridad:** Alta
 - **Decisores:** Equipo de desarrollo — rol Arquitecto de Software y BD
@@ -34,10 +34,12 @@ volcado de lo que Hibernate genera.
    restricción `exclude using gist` que impide que un recurso quede asignado a
    dos sesiones solapadas, que es el problema de sobreocupación del enunciado.
 3. **Verificación automática:** el workflow `.github/workflows/database.yml`
-   levanta un PostgreSQL vacío en cada pull request que toque `docs/database/`
-   y comprueba que el DDL ejecute, que sea idempotente, que los datos de prueba
-   carguen, que las catorce consultas clave devuelvan filas y que las dieciocho
-   violaciones de `pruebas-integridad.sql` sean rechazadas.
+   levanta un PostgreSQL vacío y comprueba que el DDL ejecute, que sea
+   idempotente, que los datos de prueba carguen, que las catorce consultas
+   clave devuelvan filas y que las dieciocho violaciones de
+   `pruebas-integridad.sql` sean rechazadas. Se dispara tanto con cambios en
+   `docs/database/` como en el mapeo JPA, que es donde puede nacer la
+   divergencia entre el esquema y las entidades.
 
 El script es idempotente (`if not exists` en todas las sentencias `create`), de
 modo que se puede aplicar sobre la base actual de Supabase sin alterar las dos

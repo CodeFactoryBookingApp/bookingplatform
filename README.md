@@ -142,8 +142,10 @@ Linux/macOS:
 
 Notas:
 
-- El primer arranque crea solo las tablas (`ddl-auto=update`). Después
-  ejecuta `docs/database/rls.sql` en el SQL Editor de Supabase.
+- El esquema completo vive en `docs/database/schema.sql` y se aplica con
+  `psql -f` o desde el SQL Editor de Supabase (ADR-0005). `ddl-auto=update`
+  sigue creando en local las tablas que tienen entidad JPA. Después
+  ejecuta `docs/database/rls.sql`.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health: http://localhost:8080/actuator/health
 

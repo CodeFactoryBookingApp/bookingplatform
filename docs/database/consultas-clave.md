@@ -6,6 +6,8 @@ tablas que crea `schema.sql` y todas devuelven filas con los datos de
 `consultas-clave.sql`; el workflow `database.yml` la corre en cada pull request
 y falla si alguna deja de devolver resultado.
 
+## Las preguntas
+
 ### 1. ¿Qué servicios puede reservar un cliente en Medellín, en qué sede y a qué precio? (catálogo público)
 
 Aplica la regla de HU-002: un proveedor pendiente de aprobación no es visible.

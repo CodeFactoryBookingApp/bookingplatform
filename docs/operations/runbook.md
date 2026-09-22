@@ -41,10 +41,13 @@ devolver 401 es el comportamiento esperado, no una falla.
 3. **Auth → Providers → Email:** confirmación de correo activada,
    longitud mínima 8.
 4. **Auth → Settings → JWT expiry:** `900` segundos (15 min, HU-021).
-5. **Tablas:** las crea Hibernate (`ddl-auto=update` en local). Verificar:
+5. **Tablas:** ejecutar `docs/database/schema.sql` en el SQL Editor. Es
+   idempotente, así que se puede aplicar sobre una base que ya tenga las tablas
+   de Hibernate: se las salta y crea las restantes (ADR-0005). Verificar:
    ```sql
-   select table_name from information_schema.tables
-   where table_schema = 'public' and table_name in ('clients','login_attempts');
+   select count(*) from pg_class
+   where relnamespace = 'public'::regnamespace and relkind = 'r';
+   -- deben ser 19
    ```
 6. **RLS (después de las tablas):** ejecutar `docs/database/rls.sql` en el
    SQL Editor y verificar con:
