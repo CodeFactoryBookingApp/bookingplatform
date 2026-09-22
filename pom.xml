@@ -21,6 +21,7 @@
 		<springdoc.version>3.1.1</springdoc.version>
 		<archunit.version>1.4.1</archunit.version>
 		<testcontainers.version>1.21.4</testcontainers.version>
+		<jacoco.version>0.8.13</jacoco.version>
 	</properties>
 
 	<dependencyManagement>
@@ -164,6 +165,41 @@
 						<goals>
 							<goal>integration-test</goal>
 							<goal>verify</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<!--
+			  Coverage measurement (QA). The agent instruments the unit test run;
+			  the report lands in target/site/jacoco. Classes with no branches or
+			  statements of their own (records, enums, the Spring entry point and
+			  declarative @Configuration) are excluded: counting them inflates the
+			  number without telling us anything about the behaviour under test.
+			-->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${jacoco.version}</version>
+				<configuration>
+					<excludes>
+						<exclude>**/BookingPlatformApplication.class</exclude>
+						<exclude>**/*Properties.class</exclude>
+						<exclude>**/config/OpenApiConfig.class</exclude>
+						<exclude>**/dto/**</exclude>
+					</excludes>
+				</configuration>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
 						</goals>
 					</execution>
 				</executions>
