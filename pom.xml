@@ -182,10 +182,17 @@
 				<version>${jacoco.version}</version>
 				<configuration>
 					<excludes>
+						<!--
+						  Único excluido: el arranque de Spring Boot. Su main()
+						  solo delega en SpringApplication.run y cubrirlo exige
+						  levantar el contexto entero sin probar nada propio.
+
+						  Todo lo demás se mide, incluidos los DTO y los records
+						  de propiedades: excluirlos sube el porcentaje sin decir
+						  nada sobre lo que está probado, que es justo lo que una
+						  cifra de cobertura no debe hacer.
+						-->
 						<exclude>**/BookingPlatformApplication.class</exclude>
-						<exclude>**/*Properties.class</exclude>
-						<exclude>**/config/OpenApiConfig.class</exclude>
-						<exclude>**/dto/**</exclude>
 					</excludes>
 				</configuration>
 				<executions>
@@ -211,6 +218,41 @@
 						<goals>
 							<goal>report</goal>
 						</goals>
+					</execution>
+					<!--
+					  Umbral: por debajo de 90% el build falla. Se exige tanto en
+					  instrucciones como en ramas, y la de ramas es la que de
+					  verdad protege: se puede recorrer una línea sin probar
+					  ninguna de las decisiones que toma.
+
+					  Está en 90 y no en el 100 que hay hoy para dejar margen al
+					  mantenimiento sin romper la rama a nadie.
+					-->
+					<execution>
+						<id>check-coverage</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>INSTRUCTION</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.90</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>
