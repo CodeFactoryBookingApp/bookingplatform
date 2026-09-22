@@ -32,10 +32,14 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -724,6 +728,99 @@ class GoTrueClientTest {
             UpstreamAuthException ex = callExpectingFailure(Endpoint.LOGOUT, status, "");
 
             assertEquals(expected, ex.error());
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Request envelope: base url, content type and the exact shape of the
+    // body. These are the parts a "did it call the endpoint" assertion never
+    // looks at, and the parts a wrong value breaks silently in production.
+    // ---------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Request envelope")
+    class RequestEnvelope {
+
+        @Test
+        @DisplayName("Every call is rooted at the GoTrue path of the configured Supabase project")
+        void clientIsRootedAtTheProjectAuthPath() {
+            RestClient.Builder builder = mock(RestClient.Builder.class);
+            when(builder.baseUrl(anyString())).thenReturn(builder);
+            when(builder.build()).thenReturn(RestClient.builder().build());
+
+            new GoTrueClient(new SupabaseProperties("https://other.supabase.co", SECRET), builder);
+
+            verify(builder).baseUrl("https://other.supabase.co/auth/v1");
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} declares application/json")
+        @CsvSource({
+                "TOKEN,   /token?grant_type=password",
+                "VERIFY,  /verify",
+                "RESEND,  /resend",
+                "RECOVER, /recover"
+        })
+        @DisplayName("The JSON body is announced with an explicit Content-Type, not left to the converter")
+        void jsonBodiesDeclareTheContentType(Endpoint endpoint, String path) {
+            server.expect(requestTo(BASE + path))
+                    .andExpect(header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                    .andRespond(withSuccess("""
+                            {"access_token":"jwt","refresh_token":"r","user":{"id":"%s","email":"ana.perez@example.com"}}
+                            """.formatted(UUID.randomUUID()), MediaType.APPLICATION_JSON));
+
+            invoke(endpoint);
+
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("Creating a user announces application/json too")
+        void createUserDeclaresTheContentType() {
+            server.expect(requestTo(BASE + "/admin/users"))
+                    .andExpect(header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
+                    .andRespond(withSuccess("{\"id\":\"%s\"}".formatted(UUID.randomUUID()),
+                            MediaType.APPLICATION_JSON));
+
+            client.createUser("ana.perez@example.com", "Secret123!", AppRole.CLIENT);
+
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("A new user is created unconfirmed: the confirmation must come from the emailed link")
+        void createUserDoesNotAutoConfirmTheEmail() {
+            server.expect(requestTo(BASE + "/admin/users"))
+                    .andExpect(jsonPath("$.email_confirm").value(false))
+                    .andRespond(withSuccess("{\"id\":\"%s\"}".formatted(UUID.randomUUID()),
+                            MediaType.APPLICATION_JSON));
+
+            client.createUser("ana.perez@example.com", "Secret123!", AppRole.CLIENT);
+
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("Email verification omits the password key entirely instead of sending it as null")
+        void emailVerificationOmitsThePasswordKeyEntirely() {
+            server.expect(requestTo(BASE + "/verify"))
+                    .andExpect(content().string(not(containsString("password"))))
+                    .andRespond(withSuccess("{\"id\":\"%s\",\"email\":\"ana.perez@example.com\"}"
+                            .formatted(UUID.randomUUID()), MediaType.APPLICATION_JSON));
+
+            client.verifyEmailToken("token-hash");
+
+            server.verify();
+        }
+
+        @Test
+        @DisplayName("A dead session reports what the provider answered, so the cause is not lost")
+        void deadSessionKeepsTheUpstreamDetail() {
+            server.expect(requestTo(BASE + "/logout"))
+                    .andRespond(withStatus(HttpStatusCode.valueOf(401)).body("{\"msg\":\"token already revoked\"}"));
+
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, () -> client.signOut("stale-token"));
+
+            assertTrue(ex.getMessage().contains("token already revoked"), ex.getMessage());
         }
     }
 }

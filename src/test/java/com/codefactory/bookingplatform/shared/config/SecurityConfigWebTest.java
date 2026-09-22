@@ -21,15 +21,22 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -39,7 +46,9 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,7 +60,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * unauthenticated call gets back, and how the JWT is turned into authorities.
  */
 @WebMvcTest(controllers = {AuthController.class, RegistrationController.class})
-@Import({SecurityConfig.class, SupabaseJwtAuthConverter.class})
+@Import({SecurityConfig.class, SupabaseJwtAuthConverter.class, SecurityConfigWebTest.CorsForTest.class})
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
 @EnableConfigurationProperties(SecurityProperties.class)
 @TestPropertySource(properties = {
         "app.security.jwt-issuer=http://localhost:54321/auth/v1",
@@ -224,5 +234,63 @@ class SecurityConfigWebTest {
     void unmappedPathsAreNotPublic() throws Exception {
         mockMvc.perform(get("/api/v1/internal/whatever"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    /**
+     * The application declares {@code http.cors(...)} but publishes no
+     * {@link CorsConfigurationSource} bean of its own, so in production the CORS
+     * step is inert. This bean is supplied here to prove that the filter chain
+     * does wire the CORS step up when a configuration exists.
+     */
+    @TestConfiguration(proxyBeanMethods = false)
+    static class CorsForTest {
+
+        @Bean
+        CorsConfigurationSource corsConfigurationSource() {
+            CorsConfiguration cors = new CorsConfiguration();
+            cors.addAllowedOrigin("https://app.example.com");
+            cors.addAllowedMethod("*");
+            cors.addAllowedHeader("*");
+            UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+            source.registerCorsConfiguration("/**", cors);
+            return source;
+        }
+    }
+
+    @Test
+    @DisplayName("The chain honours the application CORS configuration, so the browser front end is answered a preflight")
+    void corsPreflightIsAnswered() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header(HttpHeaders.ORIGIN, "https://app.example.com")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://app.example.com"));
+    }
+
+    @Test
+    @DisplayName("The API is stateless: not even an unauthenticated call leaves an HTTP session behind")
+    void noHttpSessionIsCreated() throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/v1/auth/me")).andReturn();
+
+        assertNull(result.getRequest().getSession(false), "the request created an HTTP session");
+    }
+
+    @Test
+    @DisplayName("The 401 body explains that authentication is required and is stamped with the moment it happened")
+    void unauthorizedAnswerCarriesDetailAndTimestamp() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(jsonPath("$.detail").value("Authentication is required"))
+                .andExpect(jsonPath("$.timestamp").isString());
+    }
+
+    @Test
+    @DisplayName("A token rejected by the decoder is answered with the platform ProblemDetail, not with the Spring default")
+    void invalidTokenAnswerIsOurProblemDetail() throws Exception {
+        when(jwtDecoder.decode("garbage")).thenThrow(new BadJwtException("malformed"));
+
+        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer garbage"))
+                .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"))
+                .andExpect(jsonPath("$.detail").value("Authentication is required"))
+                .andExpect(jsonPath("$.instance").value("/api/v1/auth/me"));
     }
 }

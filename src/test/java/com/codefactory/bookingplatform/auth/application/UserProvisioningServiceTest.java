@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -87,6 +88,15 @@ class UserProvisioningServiceTest {
                     () -> service.provisionClientUser("ana@example.com", password));
 
             assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
+        }
+
+        @Test
+        @DisplayName("The weak password rejection carries the policy message, not an empty detail")
+        void weakPasswordCarriesTheDefaultMessage() {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.provisionClientUser("ana@example.com", "abcdef1!"));
+
+            assertEquals(ErrorCode.PASSWORD_TOO_WEAK.defaultMessage(), ex.getMessage());
         }
 
         @ParameterizedTest(name = "[{0}] never reaches the identity provider")
@@ -395,6 +405,19 @@ class UserProvisioningServiceTest {
             when(identityProvider.verifyEmailToken(anyString())).thenThrow(upstream(error));
 
             assertThrows(BusinessException.class, () -> service.confirmEmail("token-hash"));
+        }
+
+        @ParameterizedTest(name = "{0} during confirmation keeps its own error code")
+        @EnumSource(value = UpstreamAuthError.class,
+                names = {"RATE_LIMITED", "USER_ALREADY_EXISTS", "EMAIL_NOT_CONFIRMED"})
+        @DisplayName("A confirmation failure that is not about the token keeps its own meaning")
+        void nonTokenFailuresKeepTheirOwnCode(UpstreamAuthError error) {
+            when(identityProvider.verifyEmailToken(anyString())).thenThrow(upstream(error));
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.confirmEmail("token-hash"));
+
+            assertNotEquals(ErrorCode.VERIFICATION_TOKEN_INVALID, ex.errorCode());
         }
 
         @Test
