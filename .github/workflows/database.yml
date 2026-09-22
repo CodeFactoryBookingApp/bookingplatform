@@ -1,0 +1,109 @@
+name: database
+
+# Comprobación automática del modelo de datos.
+# El caso exige "integrar mediante pull request, revisión por pares y
+# comprobaciones automáticas obligatorias". Este workflow cubre la parte
+# de base de datos: levanta un PostgreSQL vacío y verifica que el DDL
+# ejecute, que los datos de prueba carguen, que las consultas clave
+# devuelvan filas y que las restricciones rechacen lo que deben rechazar.
+#
+# También se dispara cuando cambia el mapeo JPA, porque es justo ahí donde
+# el esquema escrito a mano y las entidades pueden divergir (ADR-0005).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/database/**'
+      - 'src/main/java/**/persistence/**'
+      - '.github/workflows/database.yml'
+  pull_request:
+    paths:
+      - 'docs/database/**'
+      - 'src/main/java/**/persistence/**'
+      - '.github/workflows/database.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  esquema:
+    name: Esquema, datos y restricciones
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reservas
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGPASSWORD: postgres
+      PSQL: psql -h localhost -U postgres -d reservas
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar el cliente de PostgreSQL
+        run: |
+          command -v psql || sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql --version
+
+      - name: El DDL ejecuta contra una base vacía
+        run: $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/schema.sql
+
+      - name: Se crearon las 19 tablas
+        run: |
+          n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'")
+          echo "tablas creadas: $n"
+          test "$n" -eq 19
+
+      - name: El DDL es idempotente
+        run: $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/schema.sql
+
+      - name: Los datos de prueba cargan
+        run: $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/seed.sql
+
+      - name: Las catorce consultas clave devuelven filas
+        run: |
+          salida=$($PSQL -v ON_ERROR_STOP=1 -f docs/database/consultas-clave.sql)
+          echo "$salida"
+          # Sólo cuentan los bloques con al menos una fila: "(0 rows)" no vale.
+          con_filas=$(echo "$salida" | grep -cE '^\([1-9][0-9]* row' || true)
+          vacias=$(echo "$salida"    | grep -cE '^\(0 rows\)'        || true)
+          echo "consultas con filas: $con_filas · vacías: $vacias"
+          test "$con_filas" -eq 14
+          test "$vacias" -eq 0
+
+      - name: Las restricciones rechazan lo que deben rechazar
+        run: |
+          salida=$($PSQL -f docs/database/pruebas-integridad.sql 2>&1)
+          echo "$salida"
+          # psql -f antepone "archivo:linea:" a cada error, así que el
+          # patrón no puede anclarse sólo al principio de la línea.
+          rechazos=$(echo "$salida" | grep -cE '(^|: )ERROR:'          || true)
+          coladas=$(echo "$salida"  | grep -cE '^(INSERT|UPDATE|DELETE) ' || true)
+          echo "rechazos: $rechazos · instrucciones que pasaron: $coladas"
+          test "$rechazos" -eq 18
+          test "$coladas" -eq 0
+
+      - name: La seguridad de fila queda habilitada
+        run: |
+          $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/rls.sql
+          n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relrowsecurity")
+          echo "tablas con RLS: $n"
+          test "$n" -eq 19

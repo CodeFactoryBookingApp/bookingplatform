@@ -20,10 +20,16 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | ADR-0002 Supabase (BD + identidad) | `docs/adr/ADR-0002-*.md` |
 | ADR-0003 Autenticación JWT/JWKS + bloqueo propio | `docs/adr/ADR-0003-*.md` |
 | ADR-0004 API versionada, ProblemDetail, traceId | `docs/adr/ADR-0004-*.md` |
+| ADR-0005 Modelo físico escrito a mano + CI de BD | `docs/adr/ADR-0005-*.md` |
+| Guía de la carpeta de base de datos | `docs/database/README.md` |
 | Modelo lógico completo (ER) | `docs/database/modelo-logico.md` |
-| Modelo físico inicial (DDL) | `docs/database/schema.sql` |
+| Modelo físico (DDL, 19 tablas) | `docs/database/schema.sql` |
+| Datos de prueba | `docs/database/seed.sql` |
+| Restricciones de integridad en acción | `docs/database/pruebas-integridad.sql` |
 | Seguridad Supabase (RLS) | `docs/database/rls.sql` |
 | Consultas clave del negocio | `docs/database/consultas-clave.md` |
+| Consultas clave, versión ejecutable | `docs/database/consultas-clave.sql` |
+| Diagrama ER editable | `docs/database/diagrama-er.drawio` |
 | Runbook operativo (producción, E2E, troubleshooting) | `docs/operations/runbook.md` |
 | Colección REST de Sprint 1 | `docs/api/sprint1.http` |
 
@@ -139,8 +145,10 @@ Linux/macOS:
 
 Notas:
 
-- El primer arranque crea solo las tablas (`ddl-auto=update`). Después
-  ejecuta `docs/database/rls.sql` en el SQL Editor de Supabase.
+- El esquema completo vive en `docs/database/schema.sql` y se aplica con
+  `psql -f` o desde el SQL Editor de Supabase (ADR-0005). `ddl-auto=update`
+  sigue creando en local las tablas que tienen entidad JPA. Después
+  ejecuta `docs/database/rls.sql`.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health: http://localhost:8080/actuator/health
 
