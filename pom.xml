@@ -195,9 +195,19 @@
 							<goal>prepare-agent</goal>
 						</goals>
 					</execution>
+					<!--
+					  `prepare-agent` fija la propiedad argLine, y failsafe la
+					  hereda igual que surefire: los ITs de Testcontainers quedan
+					  instrumentados sin configuración extra y su cobertura se
+					  acumula en el mismo target/jacoco.exec. El informe se emite
+					  al final, ya con las dos fases dentro.
+
+					  El número oficial sale de `mvn clean verify`. Sin `clean`,
+					  el fichero de ejecución acumula corridas anteriores.
+					-->
 					<execution>
 						<id>report</id>
-						<phase>test</phase>
+						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
