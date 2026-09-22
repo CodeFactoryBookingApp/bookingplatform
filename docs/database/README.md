@@ -13,8 +13,8 @@ Qué hay aquí, en qué orden se ejecuta y cómo levantarlo para trabajar.
 | `rls.sql` | Habilita Row Level Security en las diecinueve tablas | Sí, al final |
 | `modelo-logico.md` | Diagrama entidad-relación, decisiones de modelado y normalización | No, se lee |
 | `consultas-clave.md` | Las mismas catorce preguntas con su explicación | No, se lee |
-| `diagrama-er.drawio` | Diagrama editable, en cuatro páginas: identidad y organización, catálogo y recursos, reservas, e historias de usuario. Se abre en diagrams.net o con la extensión de VS Code | No |
-| `der-1-identidad.png`, `der-2-catalogo.png`, `der-3-reservas.png` | Las tres páginas del modelo exportadas desde el `.drawio` | No |
+| `diagrama-er.drawio` | Diagrama editable. La primera página, **Modelo completo**, tiene las diecinueve entidades, las notas y las historias de usuario en una sola hoja; las tres siguientes son vistas por dominio para leerlo por partes | No |
+| `der-0-modelo-completo.png` y `der-1..3-*.png` | Las páginas del `.drawio` exportadas | No |
 | `er-identidad.png`, `er-catalogo.png`, `er-reservas.png` | Los diagramas de `modelo-logico.md` exportados, por si Mermaid no carga | No |
 
 Los dos `.sql` de consultas usan metacomandos de `psql` (`\echo`), así que se

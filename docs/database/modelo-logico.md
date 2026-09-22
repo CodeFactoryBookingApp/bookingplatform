@@ -210,11 +210,11 @@ Si el diagrama no carga, las mismas relaciones están exportadas como imagen:
 
 ![Reservas](er-reservas.png)
 
-El diagrama editable está en `diagrama-er.drawio`, separado en cuatro páginas
-(identidad y organización, catálogo y recursos, reservas, historias de usuario)
-porque las diecinueve entidades en un solo lienzo obligan a que las relaciones
-se crucen. Sus tres páginas de modelo están exportadas como `der-1-identidad.png`,
-`der-2-catalogo.png` y `der-3-reservas.png`.
+El diagrama editable está en `diagrama-er.drawio`. Su primera página, **Modelo
+completo**, tiene el modelo entero en una sola hoja con las notas de diseño y
+las historias de usuario; las tres siguientes son vistas por dominio, útiles
+para leerlo por partes. Están exportadas como `der-0-modelo-completo.png`,
+`der-1-identidad.png`, `der-2-catalogo.png` y `der-3-reservas.png`.
 
 ## Decisiones de modelado
 
