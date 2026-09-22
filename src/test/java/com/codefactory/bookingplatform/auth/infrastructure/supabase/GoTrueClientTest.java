@@ -27,6 +27,8 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -189,16 +191,23 @@ class GoTrueClientTest {
                 // "email not confirmed" beats "user not found" when both appear.
                 Arguments.of(Endpoint.TOKEN, 400, "{\"msg\":\"email not confirmed\",\"hint\":\"user not found\"}",
                         UpstreamAuthError.EMAIL_NOT_CONFIRMED),
-                // DEFECT (reported, not fixed): status 404 is evaluated BEFORE the "expired"
-                // rule, so an expired OTP answered with 404 is reported as USER_NOT_FOUND.
-                // Business-wise the caller should see TOKEN_EXPIRED.
-                Arguments.of(Endpoint.VERIFY, 404, "{\"msg\":\"Token has expired\"}", UpstreamAuthError.USER_NOT_FOUND),
-                // Same root cause: a 404 on /verify never reaches the "verify" branch,
-                // so an unknown/consumed token surfaces as USER_NOT_FOUND, not TOKEN_INVALID.
-                Arguments.of(Endpoint.VERIFY, 404, "", UpstreamAuthError.USER_NOT_FOUND),
+                // P4: GoTrue answers 404 to an expired OTP. The "expired" rule is checked
+                // before the 404 one, so a stale verification link is TOKEN_EXPIRED and the
+                // user is told the link expired, not that the account does not exist.
+                Arguments.of(Endpoint.VERIFY, 404, "{\"msg\":\"Token has expired\"}", UpstreamAuthError.TOKEN_EXPIRED),
+                // P5: a bare 404 on /verify is about the one-time token, not about a user,
+                // so it reaches the "verify" branch and is reported as TOKEN_INVALID.
+                Arguments.of(Endpoint.VERIFY, 404, "", UpstreamAuthError.TOKEN_INVALID),
                 // "not found" in the body beats the token context: a 400 on /token whose body
                 // mentions a missing user is USER_NOT_FOUND, not INVALID_CREDENTIALS.
-                Arguments.of(Endpoint.TOKEN, 400, "{\"msg\":\"User not found\"}", UpstreamAuthError.USER_NOT_FOUND)
+                Arguments.of(Endpoint.TOKEN, 400, "{\"msg\":\"User not found\"}", UpstreamAuthError.USER_NOT_FOUND),
+                // The password reset shares the /verify context, so its 404 is classified the same way.
+                Arguments.of(Endpoint.RESET, 404, "", UpstreamAuthError.TOKEN_INVALID),
+                // The 404 exemption is about the status alone: an explicit "not found" body on
+                // /verify is still USER_NOT_FOUND.
+                Arguments.of(Endpoint.VERIFY, 404, "{\"msg\":\"User not found\"}", UpstreamAuthError.USER_NOT_FOUND),
+                // The exemption is scoped to /verify: an admin 404 keeps reporting a missing user.
+                Arguments.of(Endpoint.DELETE_USER, 404, "", UpstreamAuthError.USER_NOT_FOUND)
         );
     }
 
@@ -355,6 +364,20 @@ class GoTrueClientTest {
         }
 
         @Test
+        @DisplayName("A malformed id is reported as UNAVAILABLE, not as a raw IllegalArgumentException")
+        void malformedIdIsReportedAsUnavailable() {
+            server.expect(requestTo(BASE + "/admin/users"))
+                    .andRespond(withSuccess("{\"id\":\"not-a-uuid\"}", MediaType.APPLICATION_JSON));
+
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+                    () -> client.createUser("ana.perez@example.com", "Secret123!", AppRole.CLIENT));
+
+            assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
+            assertTrue(ex.getMessage().contains("not a valid UUID"), ex.getMessage());
+            assertInstanceOf(IllegalArgumentException.class, ex.getCause());
+        }
+
+        @Test
         @DisplayName("An empty body (no payload at all) is reported as UNAVAILABLE, not as a crash")
         void emptyBodyIsReportedAsUnavailable() {
             server.expect(requestTo(BASE + "/admin/users")).andRespond(withSuccess());
@@ -426,30 +449,47 @@ class GoTrueClientTest {
         }
 
         @Test
-        @DisplayName("DEFECT: a non numeric expires_in escapes as a raw NumberFormatException")
-        void nonNumericExpiresInLeaksARawNumberFormatException() {
+        @DisplayName("A non numeric expires_in is an unusable provider answer: UNAVAILABLE")
+        void nonNumericExpiresInIsReportedAsUnavailable() {
             server.expect(requestTo(BASE + "/token?grant_type=password"))
                     .andRespond(withSuccess("""
                             {"access_token":"jwt","refresh_token":"refresh","expires_in":"never"}
                             """, MediaType.APPLICATION_JSON));
 
-            // Expected by the contract: UpstreamAuthException(UNAVAILABLE).
-            // Real behaviour (GoTrueClient.java:97): Long.parseLong is outside the guarded
-            // conversion, so an unchecked NumberFormatException reaches the use case.
-            assertThrows(NumberFormatException.class,
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
                     () -> client.requestPasswordToken("ana.perez@example.com", "Secret123!"));
+
+            assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
+            assertTrue(ex.getMessage().contains("expires_in"), ex.getMessage());
         }
 
         @Test
-        @DisplayName("DEFECT: a decimal expires_in (valid JSON number) also escapes as NumberFormatException")
-        void decimalExpiresInLeaksARawNumberFormatException() {
+        @DisplayName("A decimal expires_in (valid JSON number) is reported as UNAVAILABLE too")
+        void decimalExpiresInIsReportedAsUnavailable() {
             server.expect(requestTo(BASE + "/token?grant_type=password"))
                     .andRespond(withSuccess("""
                             {"access_token":"jwt","refresh_token":"refresh","expires_in":3600.0}
                             """, MediaType.APPLICATION_JSON));
 
-            assertThrows(NumberFormatException.class,
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
                     () -> client.requestPasswordToken("ana.perez@example.com", "Secret123!"));
+
+            assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
+            assertTrue(ex.getMessage().contains("expires_in"), ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("The failed expires_in conversion is kept as the cause for troubleshooting")
+        void badExpiresInKeepsTheConversionFailureAsCause() {
+            server.expect(requestTo(BASE + "/token?grant_type=password"))
+                    .andRespond(withSuccess("""
+                            {"access_token":"jwt","refresh_token":"refresh","expires_in":"never"}
+                            """, MediaType.APPLICATION_JSON));
+
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+                    () -> client.requestPasswordToken("ana.perez@example.com", "Secret123!"));
+
+            assertInstanceOf(NumberFormatException.class, ex.getCause());
         }
     }
 
@@ -553,18 +593,47 @@ class GoTrueClientTest {
         }
 
         @Test
-        @DisplayName("DEFECT: a confirmed user without email yields the literal string \"null\"")
-        void missingEmailBecomesTheLiteralStringNull() {
+        @DisplayName("A confirmed user without email still resolves: the id is what the caller consumes")
+        void missingEmailStillResolvesTheUser() {
+            // El correo no lo lee nadie: ConfirmEmailUseCase busca al cliente por userId.
+            // Exigirlo convertiria una respuesta sin ese campo en un 502 por un valor que
+            // se descarta, asi que se tolera su ausencia y se devuelve null, nunca "null".
             UUID id = UUID.randomUUID();
             server.expect(requestTo(BASE + "/verify"))
                     .andRespond(withSuccess("{\"id\":\"%s\"}".formatted(id), MediaType.APPLICATION_JSON));
 
             ConfirmedUser confirmed = client.verifyEmailToken("token-hash");
 
-            // Expected by the contract: UNAVAILABLE (email is required to confirm a client)
-            // or at least a null email. Real behaviour (GoTrueClient.java:121):
-            // String.valueOf(null) produces the four character string "null".
-            assertEquals("null", confirmed.email());
+            assertEquals(id, confirmed.userId());
+            assertNull(confirmed.email(), "a missing email must never become the string \"null\"");
+        }
+
+        @Test
+        @DisplayName("An explicit null email is treated exactly like a missing one, never as the string \"null\"")
+        void nullEmailNeverBecomesTheStringNull() {
+            UUID id = UUID.randomUUID();
+            server.expect(requestTo(BASE + "/verify"))
+                    .andRespond(withSuccess("{\"id\":\"%s\",\"email\":null}".formatted(id),
+                            MediaType.APPLICATION_JSON));
+
+            ConfirmedUser confirmed = client.verifyEmailToken("token-hash");
+
+            assertEquals(id, confirmed.userId());
+            assertNull(confirmed.email(), "String.valueOf(null) would have produced the 4-char string \"null\"");
+        }
+
+        @Test
+        @DisplayName("A malformed user id is reported as UNAVAILABLE, not as a raw IllegalArgumentException")
+        void malformedUserIdIsReportedAsUnavailable() {
+            server.expect(requestTo(BASE + "/verify"))
+                    .andRespond(withSuccess("{\"id\":\"not-a-uuid\",\"email\":\"ana.perez@example.com\"}",
+                            MediaType.APPLICATION_JSON));
+
+            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+                    () -> client.verifyEmailToken("token-hash"));
+
+            assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
+            assertTrue(ex.getMessage().contains("not a valid UUID"), ex.getMessage());
         }
     }
 

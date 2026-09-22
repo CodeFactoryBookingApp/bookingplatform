@@ -3,6 +3,8 @@ package com.codefactory.bookingplatform.auth.application;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
+import com.codefactory.bookingplatform.shared.error.BusinessException;
+import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -10,10 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.HttpStatus;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -106,30 +109,56 @@ class PasswordRecoveryUseCaseTest {
     @DisplayName("Upstream failures")
     class UpstreamFailures {
 
-        @ParameterizedTest(name = "{0} is propagated to the caller")
-        @EnumSource(value = UpstreamAuthError.class, names = "USER_NOT_FOUND", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("Any upstream failure other than an unknown user is propagated")
-        void otherUpstreamErrorsPropagate(UpstreamAuthError error) {
+        @ParameterizedTest(name = "{0} is translated into a business rejection")
+        @EnumSource(value = UpstreamAuthError.class,
+                names = {"USER_NOT_FOUND", "RATE_LIMITED"}, mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("Any upstream failure other than an unknown user is reported as an upstream auth error")
+        void otherUpstreamErrorsBecomeUpstreamAuthError(UpstreamAuthError error) {
             doThrow(new UpstreamAuthException(error, "gotrue said " + error))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+            BusinessException ex = assertThrows(BusinessException.class,
                     () -> useCase.requestRecovery("ana@example.com"));
 
-            assertEquals(error, ex.error());
+            assertEquals(ErrorCode.UPSTREAM_AUTH_ERROR, ex.errorCode());
         }
 
         @Test
-        @DisplayName("The propagated failure is the very exception raised by the provider")
-        void propagatesTheOriginalException() {
-            UpstreamAuthException raised =
-                    new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many emails");
-            doThrow(raised).when(identityProvider).sendPasswordRecovery(anyString());
+        @DisplayName("ANTI-ENUMERATION: a provider rate limit is answered 429, never as a generic 500")
+        void rateLimitIsTranslatedInsteadOfEscaping() {
+            doThrow(new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many emails"))
+                    .when(identityProvider).sendPasswordRecovery(anyString());
 
-            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+            BusinessException ex = assertThrows(BusinessException.class,
                     () -> useCase.requestRecovery("ana@example.com"));
 
-            assertSame(raised, ex);
+            assertEquals(ErrorCode.RATE_LIMITED, ex.errorCode());
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.errorCode().status());
+        }
+
+        @ParameterizedTest(name = "{0} never escapes as a raw UpstreamAuthException")
+        @EnumSource(value = UpstreamAuthError.class, names = "USER_NOT_FOUND", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("No upstream failure escapes unmapped, so none of them can surface as a 500")
+        void noUpstreamErrorEscapesUnmapped(UpstreamAuthError error) {
+            doThrow(new UpstreamAuthException(error, "gotrue said " + error))
+                    .when(identityProvider).sendPasswordRecovery(anyString());
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.requestRecovery("ana@example.com"));
+
+            assertNotEquals(ErrorCode.INTERNAL_ERROR, ex.errorCode());
+        }
+
+        @Test
+        @DisplayName("The upstream message is kept in the rejection so the trace stays useful")
+        void keepsTheUpstreamMessage() {
+            doThrow(new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out"))
+                    .when(identityProvider).sendPasswordRecovery(anyString());
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.requestRecovery("ana@example.com"));
+
+            assertEquals("gotrue timed out", ex.getMessage());
         }
     }
 }

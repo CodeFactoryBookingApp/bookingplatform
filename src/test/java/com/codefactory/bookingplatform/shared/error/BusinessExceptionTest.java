@@ -114,6 +114,63 @@ class BusinessExceptionTest {
     }
 
     @Nested
+    @DisplayName("Java serialisation")
+    class Serialisation {
+
+        private static BusinessException roundTrip(BusinessException original) throws Exception {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            try (java.io.ObjectOutputStream out = new java.io.ObjectOutputStream(bytes)) {
+                out.writeObject(original);
+            }
+            try (java.io.ObjectInputStream in =
+                         new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
+                return (BusinessException) in.readObject();
+            }
+        }
+
+        @Test
+        @DisplayName("The exception declares an explicit serialVersionUID so a redeploy cannot change it")
+        void declaresAnExplicitSerialVersionUid() throws Exception {
+            java.lang.reflect.Field field = BusinessException.class.getDeclaredField("serialVersionUID");
+            field.setAccessible(true);
+            assertEquals(1L, field.getLong(null));
+        }
+
+        @Test
+        @DisplayName("A serialised rejection keeps its error code and message")
+        void roundTripKeepsCodeAndMessage() throws Exception {
+            BusinessException restored = roundTrip(
+                    new BusinessException(ErrorCode.DUPLICATE_DOCUMENT, "document already used"));
+
+            assertEquals(ErrorCode.DUPLICATE_DOCUMENT, restored.errorCode());
+            assertEquals("document already used", restored.getMessage());
+        }
+
+        @Test
+        @DisplayName("A serialised rejection keeps its details: the detail map is not transient")
+        void roundTripKeepsTheDetails() throws Exception {
+            Map<String, String> ordered = new LinkedHashMap<>();
+            ordered.put("first", "1");
+            ordered.put("second", "2");
+
+            BusinessException restored = roundTrip(
+                    new BusinessException(ErrorCode.VALIDATION_ERROR, "invalid", ordered));
+
+            assertEquals(ordered, restored.details());
+            assertIterableEquals(List.of("first", "second"), restored.details().keySet());
+        }
+
+        @Test
+        @DisplayName("The details published by a deserialised rejection are still unmodifiable")
+        void roundTripKeepsTheDetailsUnmodifiable() throws Exception {
+            BusinessException restored = roundTrip(
+                    new BusinessException(ErrorCode.VALIDATION_ERROR, "invalid", Map.of("email", "blank")));
+
+            assertThrows(UnsupportedOperationException.class, () -> restored.details().put("k", "v"));
+        }
+    }
+
+    @Nested
     @DisplayName("of factory")
     class OfFactory {
 

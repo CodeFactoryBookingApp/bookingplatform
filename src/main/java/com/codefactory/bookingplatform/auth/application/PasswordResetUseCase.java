@@ -36,7 +36,18 @@ public class PasswordResetUseCase {
             if (ex.error() == UpstreamAuthError.TOKEN_INVALID || ex.error() == UpstreamAuthError.TOKEN_EXPIRED) {
                 throw new BusinessException(ErrorCode.VERIFICATION_TOKEN_INVALID);
             }
-            throw ex;
+            throw mapUpstream(ex);
         }
+    }
+
+    /**
+     * Same translation as {@code LoginUseCase} and {@code LogoutUseCase}: a raw
+     * {@link UpstreamAuthException} has no handler and would reach the caller as a 500.
+     */
+    private BusinessException mapUpstream(UpstreamAuthException ex) {
+        if (ex.error() == UpstreamAuthError.RATE_LIMITED) {
+            return new BusinessException(ErrorCode.RATE_LIMITED);
+        }
+        return new BusinessException(ErrorCode.UPSTREAM_AUTH_ERROR, ex.getMessage());
     }
 }

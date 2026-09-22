@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -197,31 +197,55 @@ class PasswordResetUseCaseTest {
             assertEquals(ErrorCode.VERIFICATION_TOKEN_INVALID, ex.errorCode());
         }
 
-        @ParameterizedTest(name = "{0} is propagated to the caller")
+        @ParameterizedTest(name = "{0} is translated into a business rejection")
         @EnumSource(value = UpstreamAuthError.class,
-                names = {"TOKEN_INVALID", "TOKEN_EXPIRED"}, mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("Any other upstream failure during the reset is propagated")
-        void otherUpstreamErrorsPropagate(UpstreamAuthError error) {
+                names = {"TOKEN_INVALID", "TOKEN_EXPIRED", "RATE_LIMITED"}, mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("Any other upstream failure during the reset is reported as an upstream auth error")
+        void otherUpstreamErrorsBecomeUpstreamAuthError(UpstreamAuthError error) {
             doThrow(new UpstreamAuthException(error, "gotrue said " + error))
                     .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
 
-            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+            BusinessException ex = assertThrows(BusinessException.class,
                     () -> useCase.resetPassword("token-hash", VALID_PASSWORD));
 
-            assertEquals(error, ex.error());
+            assertEquals(ErrorCode.UPSTREAM_AUTH_ERROR, ex.errorCode());
         }
 
         @Test
-        @DisplayName("The propagated failure is the very exception raised by the provider")
-        void propagatesTheOriginalException() {
-            UpstreamAuthException raised =
-                    new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out");
-            doThrow(raised).when(identityProvider).resetPasswordWithToken(anyString(), anyString());
+        @DisplayName("A provider rate limit during the reset is answered 429, never as a generic 500")
+        void rateLimitIsTranslatedInsteadOfEscaping() {
+            doThrow(new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many resets"))
+                    .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
 
-            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class,
+            BusinessException ex = assertThrows(BusinessException.class,
                     () -> useCase.resetPassword("token-hash", VALID_PASSWORD));
 
-            assertSame(raised, ex);
+            assertEquals(ErrorCode.RATE_LIMITED, ex.errorCode());
+        }
+
+        @ParameterizedTest(name = "{0} never escapes as a raw UpstreamAuthException")
+        @EnumSource(UpstreamAuthError.class)
+        @DisplayName("No upstream failure escapes unmapped, so none of them can surface as a 500")
+        void noUpstreamErrorEscapesUnmapped(UpstreamAuthError error) {
+            doThrow(new UpstreamAuthException(error, "gotrue said " + error))
+                    .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.resetPassword("token-hash", VALID_PASSWORD));
+
+            assertNotEquals(ErrorCode.INTERNAL_ERROR, ex.errorCode());
+        }
+
+        @Test
+        @DisplayName("The upstream message is kept in the rejection so the trace stays useful")
+        void keepsTheUpstreamMessage() {
+            doThrow(new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out"))
+                    .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
+
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.resetPassword("token-hash", VALID_PASSWORD));
+
+            assertEquals("gotrue timed out", ex.getMessage());
         }
     }
 }

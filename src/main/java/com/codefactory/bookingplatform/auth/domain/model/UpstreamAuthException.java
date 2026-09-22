@@ -2,6 +2,8 @@ package com.codefactory.bookingplatform.auth.domain.model;
 
 public class UpstreamAuthException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final UpstreamAuthError error;
 
     public UpstreamAuthException(UpstreamAuthError error, String message) {
