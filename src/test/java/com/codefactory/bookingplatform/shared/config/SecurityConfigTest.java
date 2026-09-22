@@ -1,10 +1,12 @@
 package com.codefactory.bookingplatform.shared.config;
 
+import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -15,9 +17,12 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.test.util.ReflectionTestUtils;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -159,6 +164,73 @@ class SecurityConfigTest {
     @DisplayName("The entry point is reused for both the resource server and the generic handling")
     void entryPointIsAvailable() {
         assertNotNull(entryPoint());
+    }
+
+    // -----------------------------------------------------------------
+    // The body of the error answer, field by field. Asserting only that
+    // the payload "contains AUTH_REQUIRED" leaves detail, title and
+    // timestamp free to disappear without a single test noticing.
+    // -----------------------------------------------------------------
+
+    private JsonNode body() throws Exception {
+        String payload = response.getContentAsString();
+        return new ObjectMapper().readTree(payload);
+    }
+
+    @Test
+    @DisplayName("The 401 answer explains in its detail that authentication is required")
+    void unauthenticatedRequestCarriesTheDefaultDetail() throws Exception {
+        entryPoint().commence(request, response, new StubAuthenticationException());
+
+        assertEquals(ErrorCode.AUTH_REQUIRED.defaultMessage(), body().path("detail").asString(null));
+    }
+
+    @Test
+    @DisplayName("The 403 answer explains in its detail that the permissions are insufficient")
+    void forbiddenRequestCarriesTheDefaultDetail() throws Exception {
+        accessDeniedHandler().handle(request, response, new AccessDeniedException("nope"));
+
+        assertEquals(ErrorCode.ACCESS_DENIED.defaultMessage(), body().path("detail").asString(null));
+    }
+
+    @Test
+    @DisplayName("The 401 answer is titled with the reason phrase of its status")
+    void unauthenticatedRequestCarriesTheTitle() throws Exception {
+        entryPoint().commence(request, response, new StubAuthenticationException());
+
+        assertEquals(HttpStatus.UNAUTHORIZED.getReasonPhrase(), body().path("title").asString(null));
+    }
+
+    @Test
+    @DisplayName("The 403 answer is titled with the reason phrase of its status")
+    void forbiddenRequestCarriesTheTitle() throws Exception {
+        accessDeniedHandler().handle(request, response, new AccessDeniedException("nope"));
+
+        assertEquals(HttpStatus.FORBIDDEN.getReasonPhrase(), body().path("title").asString(null));
+    }
+
+    @Test
+    @DisplayName("The 401 answer is stamped with the moment it was produced, so it can be correlated with the logs")
+    void unauthenticatedRequestCarriesATimestamp() throws Exception {
+        entryPoint().commence(request, response, new StubAuthenticationException());
+
+        JsonNode timestamp = body().path("properties").path("timestamp");
+
+        assertFalse(timestamp.isMissingNode() || timestamp.isNull(),
+                "no timestamp in the body: " + response.getContentAsString());
+        assertDoesNotThrow(() -> java.time.Instant.parse(timestamp.asString()));
+    }
+
+    @Test
+    @DisplayName("The 403 answer is stamped with the moment it was produced")
+    void forbiddenRequestCarriesATimestamp() throws Exception {
+        accessDeniedHandler().handle(request, response, new AccessDeniedException("nope"));
+
+        JsonNode timestamp = body().path("properties").path("timestamp");
+
+        assertFalse(timestamp.isMissingNode() || timestamp.isNull(),
+                "no timestamp in the body: " + response.getContentAsString());
+        assertDoesNotThrow(() -> java.time.Instant.parse(timestamp.asString()));
     }
 
     private static final class StubAuthenticationException extends AuthenticationException {
