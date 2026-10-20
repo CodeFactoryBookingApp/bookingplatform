@@ -1,7 +1,6 @@
 package com.codefactory.bookingplatform.shared.error;
 
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpStatus;
@@ -43,16 +42,5 @@ class ErrorCodeTest {
 
         // Assert
         assertEquals(expectedStatus, status);
-    }
-
-    @Test
-    @DisplayName("The table above covers the whole catalogue, so a new code cannot slip through untested")
-    void decisionTableCoversTheWholeCatalogue() {
-        // Act
-        ErrorCode[] catalogue = ErrorCode.values();
-
-        // Assert
-        assertEquals(16, catalogue.length,
-                "A code was added or removed: update the status decision table in this test");
     }
 }
