@@ -88,10 +88,19 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           API=https://sonarcloud.io/api
-          if [ -n "$PR_NUMBER" ]; then SCOPE="pullRequest=$PR_NUMBER"; else SCOPE="branch=$BRANCH"; fi
+          if [ -n "$PR_NUMBER" ]; then SCOPE="pullRequest=$PR_NUMBER"; ORIGIN="pull request #$PR_NUMBER"
+          else SCOPE="branch=$BRANCH"; ORIGIN="rama $BRANCH"; fi
           sq() { curl -s ${SONAR_TOKEN:+-u "$SONAR_TOKEN:"} "$API/$1&$SCOPE"; }
 
-          RESP=$(sq "measures/component?component=$PROJECT_KEY&metricKeys=coverage,sqale_index,complexity,cognitive_complexity,tests")
+          METRICS="measures/component?component=$PROJECT_KEY&metricKeys=coverage,sqale_index,complexity,cognitive_complexity,tests"
+          RESP=$(sq "$METRICS")
+          # El plan gratuito solo expone por API la rama principal y los pull requests.
+          # En cualquier otra rama se reportan las métricas del último análisis de main.
+          if echo "$RESP" | grep -q "non main branches"; then
+            SCOPE="branch=${{ github.event.repository.default_branch }}"
+            ORIGIN="main (el plan gratuito de SonarCloud no publica métricas de la rama $BRANCH)"
+            RESP=$(sq "$METRICS")
+          fi
           if ! echo "$RESP" | jq -e '.component' >/dev/null 2>&1; then
             echo "::warning::Error de Sonar: $RESP"
             exit 0
@@ -124,6 +133,8 @@ jobs:
 
           {
             echo "### Resultado de calidad"
+            echo "Fuente: SonarCloud, $ORIGIN."
+            echo ""
             echo "| Criterio | Valor | Meta | Estado |"
             echo "|---|---|---|---|"
             echo "| Cobertura | ${COV:-N/A}% | ≥ ${MIN_COVERAGE}% | $COV_S |"
