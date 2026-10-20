@@ -6,6 +6,7 @@ import com.codefactory.bookingplatform.shared.persistence.JpaAuditingConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.context.annotation.Configuration;
@@ -41,8 +42,13 @@ class ConfigurationBeansTest {
             // instante contra "hace un minuto" no sirve, porque un reloj congelado en el
             // instante actual también lo cumple; y leerlo dos veces esperando que avance
             // depende de la resolución del reloj del sistema y sale intermitente en Windows.
-            assertEquals(Clock.systemUTC(), config.clock());
-            assertEquals(ZoneOffset.UTC, config.clock().getZone());
+
+            // Act
+            Clock clock = config.clock();
+
+            // Assert
+            assertEquals(Clock.systemUTC(), clock);
+            assertEquals(ZoneOffset.UTC, clock.getZone());
         }
     }
 
@@ -56,8 +62,13 @@ class ConfigurationBeansTest {
         @CsvSource({"5, 15", "1, 1", "10, 60", "3, 120"})
         @DisplayName("The lock policy bean is built from the configured properties")
         void policyIsBuiltFromProperties(int attempts, int minutes) {
-            LoginLockPolicy policy = config.loginLockPolicy(new AuthPolicyProperties(attempts, minutes));
+            // Arrange
+            AuthPolicyProperties properties = new AuthPolicyProperties(attempts, minutes);
 
+            // Act
+            LoginLockPolicy policy = config.loginLockPolicy(properties);
+
+            // Assert
             assertEquals(attempts, policy.maxFailedAttempts());
             assertEquals(Duration.ofMinutes(minutes), policy.lockWindow());
         }
@@ -65,8 +76,13 @@ class ConfigurationBeansTest {
         @Test
         @DisplayName("The production defaults are 5 attempts within a 15 minute window")
         void productionDefaults() {
-            LoginLockPolicy policy = config.loginLockPolicy(new AuthPolicyProperties(5, 15));
+            // Arrange
+            AuthPolicyProperties properties = new AuthPolicyProperties(5, 15);
 
+            // Act
+            LoginLockPolicy policy = config.loginLockPolicy(properties);
+
+            // Assert
             assertEquals(5, policy.maxFailedAttempts());
             assertEquals(15, policy.lockWindow().toMinutes());
         }
@@ -74,16 +90,26 @@ class ConfigurationBeansTest {
         @ParameterizedTest(name = "a non positive maxFailedAttempts of {0} is refused at startup")
         @CsvSource({"0", "-1"})
         void nonPositiveAttemptsAreRefused(int attempts) {
+            // Arrange
             AuthPolicyProperties properties = new AuthPolicyProperties(attempts, 15);
 
-            assertThrows(IllegalArgumentException.class, () -> config.loginLockPolicy(properties));
+            // Act
+            Executable act = () -> config.loginLockPolicy(properties);
+
+            // Assert
+            assertThrows(IllegalArgumentException.class, act);
         }
 
         @Test
         @DisplayName("A zero minute window produces a zero duration, disabling the sliding window")
         void zeroMinuteWindow() {
-            LoginLockPolicy policy = config.loginLockPolicy(new AuthPolicyProperties(5, 0));
+            // Arrange
+            AuthPolicyProperties properties = new AuthPolicyProperties(5, 0);
 
+            // Act
+            LoginLockPolicy policy = config.loginLockPolicy(properties);
+
+            // Assert
             assertEquals(Duration.ZERO, policy.lockWindow());
         }
     }
@@ -95,13 +121,21 @@ class ConfigurationBeansTest {
         @Test
         @DisplayName("Auditing is enabled declaratively, which is what fills createdAt and updatedAt")
         void auditingIsEnabled() {
-            assertNotNull(JpaAuditingConfig.class.getAnnotation(EnableJpaAuditing.class));
+            // Act
+            EnableJpaAuditing annotation = JpaAuditingConfig.class.getAnnotation(EnableJpaAuditing.class);
+
+            // Assert
+            assertNotNull(annotation);
         }
 
         @Test
         @DisplayName("The class is a Spring configuration, so the annotation is actually processed")
         void isAConfigurationClass() {
-            assertNotNull(JpaAuditingConfig.class.getAnnotation(Configuration.class));
+            // Act
+            Configuration annotation = JpaAuditingConfig.class.getAnnotation(Configuration.class);
+
+            // Assert
+            assertNotNull(annotation);
         }
 
     }

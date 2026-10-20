@@ -34,6 +34,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -118,6 +119,7 @@ class SecurityConfigWebTest {
             "/api/v1/registrations/email-verifications, POST"})
     @DisplayName("The declared public endpoints are reachable without a token")
     void publicEndpointsDoNotRequireAToken(String path, String method) throws Exception {
+        // Arrange
         when(loginUseCase.login(anyString(), anyString()))
                 .thenReturn(new AuthTokens("a", "r", "bearer", 3600L));
         when(registerClientUseCase.register(any()))
@@ -127,44 +129,60 @@ class SecurityConfigWebTest {
                 .thenReturn(new RegistrationOutcome(UUID.fromString(SUBJECT), "ana.perez@example.com",
                         ClientStatus.ACTIVE));
 
-        mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"))
-                .andExpect(status().is(org.hamcrest.Matchers.not(401)));
+        // Act
+        ResultActions result = mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"));
+
+        // Assert
+        result.andExpect(status().is(org.hamcrest.Matchers.not(401)));
     }
 
     @Test
     @DisplayName("CSRF is disabled, so a POST without a CSRF token is not answered 403")
     void csrfIsDisabledForStatelessApiCalls() throws Exception {
+        // Arrange
         when(loginUseCase.login(anyString(), anyString()))
                 .thenReturn(new AuthTokens("a", "r", "bearer", 3600L));
 
-        mockMvc.perform(post("/api/v1/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\": \"ana.perez@example.com\", \"password\": \"Str0ng!Pass\"}"))
-                .andExpect(status().isOk());
+        // Act
+        ResultActions result = mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"ana.perez@example.com\", \"password\": \"Str0ng!Pass\"}"));
+
+        // Assert
+        result.andExpect(status().isOk());
     }
 
     @ParameterizedTest(name = "{0} requires authentication and is answered 401")
     @ValueSource(strings = {"/api/v1/auth/me"})
     @DisplayName("A protected endpoint without a token is answered 401 AUTH_REQUIRED")
     void protectedEndpointWithoutTokenIs401(String path) throws Exception {
-        mockMvc.perform(get(path))
-                .andExpect(status().isUnauthorized())
+        // Act
+        ResultActions result = mockMvc.perform(get(path));
+
+        // Assert
+        result.andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"));
     }
 
     @Test
     @DisplayName("POST /logout without a token is answered 401, not 204")
     void logoutWithoutTokenIs401() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout"))
-                .andExpect(status().isUnauthorized())
+        // Act
+        ResultActions result = mockMvc.perform(post("/api/v1/auth/logout"));
+
+        // Assert
+        result.andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"));
     }
 
     @Test
     @DisplayName("The 401 answer is a ProblemDetail pointing at the requested path")
     void unauthorizedAnswerIsAProblemDetail() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/me"))
-                .andExpect(jsonPath("$.instance").value("/api/v1/auth/me"))
+        // Act
+        ResultActions result = mockMvc.perform(get("/api/v1/auth/me"));
+
+        // Assert
+        result.andExpect(jsonPath("$.instance").value("/api/v1/auth/me"))
                 .andExpect(jsonPath("$.title").value("Unauthorized"))
                 .andExpect(jsonPath("$.type")
                         .value("https://bookingplatform.codefactory.com/errors/auth_required"));
@@ -173,67 +191,98 @@ class SecurityConfigWebTest {
     @Test
     @DisplayName("An unauthenticated call still gets a trace id header it can quote in a ticket")
     void unauthorizedAnswerCarriesTheTraceIdHeader() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/me"))
-                .andExpect(header().exists(TraceIdFilter.TRACE_ID_HEADER));
+        // Act
+        ResultActions result = mockMvc.perform(get("/api/v1/auth/me"));
+
+        // Assert
+        result.andExpect(header().exists(TraceIdFilter.TRACE_ID_HEADER));
     }
 
     @Test
     @DisplayName("An unparsable bearer token is answered 401, never 500")
     void invalidTokenIs401() throws Exception {
+        // Arrange
         when(jwtDecoder.decode("garbage")).thenThrow(new BadJwtException("malformed"));
 
-        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer garbage"))
-                .andExpect(status().isUnauthorized());
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer garbage"));
+
+        // Assert
+        result.andExpect(status().isUnauthorized());
     }
 
     @Test
     @DisplayName("A valid token reaches the endpoint and the role comes from app_metadata")
     void validTokenIsAcceptedAndRoleComesFromAppMetadata() throws Exception {
+        // Arrange
         stubToken("valid-token", Map.of("app_metadata", Map.of("role", "client")));
 
-        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer valid-token"))
-                .andExpect(status().isOk())
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer valid-token"));
+
+        // Assert
+        result.andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("CLIENT"));
     }
 
     @Test
     @DisplayName("PRIVILEGE ESCALATION GUARD: a role planted in user_metadata grants no role at all")
     void roleInUserMetadataIsIgnoredEndToEnd() throws Exception {
+        // Arrange
         Map<String, Object> claims = new HashMap<>();
         claims.put("user_metadata", Map.of("role", "admin"));
         stubToken("tampered-token", claims);
 
-        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer tampered-token"))
-                .andExpect(status().isOk())
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer tampered-token"));
+
+        // Assert
+        result.andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").doesNotExist());
     }
 
     @Test
     @DisplayName("PRIVILEGE ESCALATION GUARD: app_metadata wins over a tampered user_metadata")
     void appMetadataWinsEndToEnd() throws Exception {
+        // Arrange
         Map<String, Object> claims = new HashMap<>();
         claims.put("app_metadata", Map.of("role", "client"));
         claims.put("user_metadata", Map.of("role", "admin"));
         stubToken("mixed-token", claims);
 
-        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer mixed-token"))
-                .andExpect(jsonPath("$.role").value("CLIENT"));
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer mixed-token"));
+
+        // Assert
+        result.andExpect(jsonPath("$.role").value("CLIENT"));
     }
 
     @Test
     @DisplayName("An authenticated logout goes through and answers 204")
     void authenticatedLogoutAnswers204() throws Exception {
+        // Arrange
         stubToken("valid-token", Map.of("app_metadata", Map.of("role", "client")));
 
-        mockMvc.perform(post("/api/v1/auth/logout").header(HttpHeaders.AUTHORIZATION, "Bearer valid-token"))
-                .andExpect(status().isNoContent());
+        // Act
+        ResultActions result = mockMvc.perform(
+                post("/api/v1/auth/logout").header(HttpHeaders.AUTHORIZATION, "Bearer valid-token"));
+
+        // Assert
+        result.andExpect(status().isNoContent());
     }
 
     @Test
     @DisplayName("An unmapped path still requires authentication, so nothing is public by accident")
     void unmappedPathsAreNotPublic() throws Exception {
-        mockMvc.perform(get("/api/v1/internal/whatever"))
-                .andExpect(status().isUnauthorized());
+        // Act
+        ResultActions result = mockMvc.perform(get("/api/v1/internal/whatever"));
+
+        // Assert
+        result.andExpect(status().isUnauthorized());
     }
 
     /**
@@ -260,36 +309,49 @@ class SecurityConfigWebTest {
     @Test
     @DisplayName("The chain honours the application CORS configuration, so the browser front end is answered a preflight")
     void corsPreflightIsAnswered() throws Exception {
-        mockMvc.perform(options("/api/v1/auth/login")
-                        .header(HttpHeaders.ORIGIN, "https://app.example.com")
-                        .header("Access-Control-Request-Method", "POST"))
-                .andExpect(status().isOk())
+        // Act
+        ResultActions result = mockMvc.perform(options("/api/v1/auth/login")
+                .header(HttpHeaders.ORIGIN, "https://app.example.com")
+                .header("Access-Control-Request-Method", "POST"));
+
+        // Assert
+        result.andExpect(status().isOk())
                 .andExpect(header().string("Access-Control-Allow-Origin", "https://app.example.com"));
     }
 
     @Test
     @DisplayName("The API is stateless: not even an unauthenticated call leaves an HTTP session behind")
     void noHttpSessionIsCreated() throws Exception {
+        // Act
         MvcResult result = mockMvc.perform(get("/api/v1/auth/me")).andReturn();
 
+        // Assert
         assertNull(result.getRequest().getSession(false), "the request created an HTTP session");
     }
 
     @Test
     @DisplayName("The 401 body explains that authentication is required and is stamped with the moment it happened")
     void unauthorizedAnswerCarriesDetailAndTimestamp() throws Exception {
-        mockMvc.perform(get("/api/v1/auth/me"))
-                .andExpect(jsonPath("$.detail").value("Authentication is required"))
+        // Act
+        ResultActions result = mockMvc.perform(get("/api/v1/auth/me"));
+
+        // Assert
+        result.andExpect(jsonPath("$.detail").value("Authentication is required"))
                 .andExpect(jsonPath("$.timestamp").isString());
     }
 
     @Test
     @DisplayName("A token rejected by the decoder is answered with the platform ProblemDetail, not with the Spring default")
     void invalidTokenAnswerIsOurProblemDetail() throws Exception {
+        // Arrange
         when(jwtDecoder.decode("garbage")).thenThrow(new BadJwtException("malformed"));
 
-        mockMvc.perform(get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer garbage"))
-                .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"))
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer garbage"));
+
+        // Assert
+        result.andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"))
                 .andExpect(jsonPath("$.detail").value("Authentication is required"))
                 .andExpect(jsonPath("$.instance").value("/api/v1/auth/me"));
     }

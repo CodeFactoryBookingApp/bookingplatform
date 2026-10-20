@@ -19,6 +19,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -111,8 +112,13 @@ class SecurityConfigJwtDecoderTest {
     @Test
     @DisplayName("An ES256 token signed by the project keys is accepted: that is what Supabase issues today")
     void es256TokenIsAccepted() throws Exception {
-        Jwt jwt = decoder.decode(signedWithEc(claims(ISSUER, Instant.now().plusSeconds(3600))));
+        // Arrange
+        String token = signedWithEc(claims(ISSUER, Instant.now().plusSeconds(3600)));
 
+        // Act
+        Jwt jwt = decoder.decode(token);
+
+        // Assert
         assertEquals(SUBJECT, jwt.getSubject());
         assertEquals("ana.perez@example.com", jwt.getClaimAsString("email"));
     }
@@ -120,52 +126,82 @@ class SecurityConfigJwtDecoderTest {
     @Test
     @DisplayName("An RS256 token signed by the project keys is accepted: legacy Supabase projects still sign that way")
     void rs256TokenIsAccepted() throws Exception {
-        Jwt jwt = decoder.decode(signedWithRsa(claims(ISSUER, Instant.now().plusSeconds(3600))));
+        // Arrange
+        String token = signedWithRsa(claims(ISSUER, Instant.now().plusSeconds(3600)));
 
+        // Act
+        Jwt jwt = decoder.decode(token);
+
+        // Assert
         assertEquals(SUBJECT, jwt.getSubject());
     }
 
     @Test
     @DisplayName("An expired token is refused, so a leaked token stops working when it lapses")
     void expiredTokenIsRefused() throws Exception {
+        // Arrange
         String expired = signedWithEc(claims(ISSUER, Instant.now().minusSeconds(600)));
 
-        assertThrows(JwtException.class, () -> decoder.decode(expired));
+        // Act
+        Executable act = () -> decoder.decode(expired);
+
+        // Assert
+        assertThrows(JwtException.class, act);
     }
 
     @Test
     @DisplayName("An expired RS256 token is refused as well, so the second algorithm is validated too")
     void expiredRsaTokenIsRefused() throws Exception {
+        // Arrange
         String expired = signedWithRsa(claims(ISSUER, Instant.now().minusSeconds(600)));
 
-        assertThrows(JwtException.class, () -> decoder.decode(expired));
+        // Act
+        Executable act = () -> decoder.decode(expired);
+
+        // Assert
+        assertThrows(JwtException.class, act);
     }
 
     @Test
     @DisplayName("SECURITY: a token minted by another issuer is refused even if the signature checks out")
     void foreignIssuerIsRefused() throws Exception {
+        // Arrange
         String foreign = signedWithEc(claims("https://attacker.example.com/auth/v1", Instant.now().plusSeconds(3600)));
 
-        assertThrows(JwtException.class, () -> decoder.decode(foreign));
+        // Act
+        Executable act = () -> decoder.decode(foreign);
+
+        // Assert
+        assertThrows(JwtException.class, act);
     }
 
     @Test
     @DisplayName("SECURITY: a token with no issuer claim at all is refused")
     void missingIssuerIsRefused() throws Exception {
+        // Arrange
         String noIssuer = signedWithEc(claims(null, Instant.now().plusSeconds(3600)));
 
-        assertThrows(JwtException.class, () -> decoder.decode(noIssuer));
+        // Act
+        Executable act = () -> decoder.decode(noIssuer);
+
+        // Assert
+        assertThrows(JwtException.class, act);
     }
 
     @Test
     @DisplayName("SECURITY: an HS256 token is refused, so a caller cannot sign with a guessed shared secret")
     void symmetricallySignedTokenIsRefused() throws Exception {
+        // Arrange
         SignedJWT jwt = new SignedJWT(
                 new JWSHeader.Builder(JWSAlgorithm.HS256).build(),
                 claims(ISSUER, Instant.now().plusSeconds(3600)));
         jwt.sign(new MACSigner("0123456789012345678901234567890123456789".getBytes(StandardCharsets.UTF_8)));
         String symmetric = jwt.serialize();
 
-        assertThrows(JwtException.class, () -> decoder.decode(symmetric));
+        // Act
+        Executable act = () -> decoder.decode(symmetric);
+
+        // Assert
+        assertThrows(JwtException.class, act);
     }
 }

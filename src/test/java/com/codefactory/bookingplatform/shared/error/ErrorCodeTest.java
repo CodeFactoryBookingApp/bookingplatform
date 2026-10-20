@@ -38,13 +38,21 @@ class ErrorCodeTest {
     })
     @DisplayName("Each error code maps to the HTTP status its semantics demand")
     void statusMatchesTheSemanticsOfTheCode(ErrorCode code, HttpStatus expectedStatus) {
-        assertEquals(expectedStatus, code.status());
+        // Act
+        HttpStatus status = code.status();
+
+        // Assert
+        assertEquals(expectedStatus, status);
     }
 
     @Test
     @DisplayName("The table above covers the whole catalogue, so a new code cannot slip through untested")
     void decisionTableCoversTheWholeCatalogue() {
-        assertEquals(16, ErrorCode.values().length,
+        // Act
+        ErrorCode[] catalogue = ErrorCode.values();
+
+        // Assert
+        assertEquals(16, catalogue.length,
                 "A code was added or removed: update the status decision table in this test");
     }
 }

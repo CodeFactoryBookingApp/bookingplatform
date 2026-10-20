@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -104,24 +105,39 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A business rejection answers with the HTTP status declared by its error code")
         void statusComesFromTheErrorCode() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(HttpStatus.CONFLICT.value(), problem.getStatus());
         }
 
         @Test
         @DisplayName("A business rejection publishes the machine-readable error code so the client can branch on it")
         void publishesTheErrorCode() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals("DUPLICATE_EMAIL", propertiesOf(problem).get("errorCode"));
         }
 
         @Test
         @DisplayName("A business rejection points to the documentation page of its error code")
         void publishesTheTypeUri() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(URI.create(TYPE_PREFIX + "duplicate_email"), problem.getType());
         }
 
@@ -129,11 +145,15 @@ class GlobalExceptionHandlerTest {
         @EnumSource(ErrorCode.class)
         @DisplayName("The type URI does not depend on the JVM default locale (Turkish dotless-i trap)")
         void typeUriIsLocaleIndependent(ErrorCode code) {
+            // Arrange
             java.util.Locale previous = java.util.Locale.getDefault();
             java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
+            BusinessException ex = new BusinessException(code);
             try {
-                ProblemDetail problem = handler.handleBusiness(new BusinessException(code), request);
+                // Act
+                ProblemDetail problem = handler.handleBusiness(ex, request);
 
+                // Assert
                 assertEquals(URI.create(TYPE_PREFIX + code.name().toLowerCase(java.util.Locale.ROOT)),
                         problem.getType());
             } finally {
@@ -144,48 +164,79 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A business rejection points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(URI.create(REQUEST_URI), problem.getInstance());
         }
 
         @Test
         @DisplayName("A business rejection carries the message of the exception as the human-readable detail")
         void detailIsTheExceptionMessage() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL, "ana@example.com is already registered"), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL, "ana@example.com is already registered");
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals("ana@example.com is already registered", problem.getDetail());
         }
 
         @Test
         @DisplayName("A 4xx business rejection uses the reason phrase of its own status as the title")
         void titleIsTheReasonPhraseForClientErrors() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.DUPLICATE_EMAIL), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(HttpStatus.CONFLICT.getReasonPhrase(), problem.getTitle());
         }
 
         @Test
         @DisplayName("A 5xx business rejection is titled as an internal error so the upstream failure is not disclosed")
         void titleIsMaskedForServerErrors() {
-            ProblemDetail problem = handler.handleBusiness(
-                    new BusinessException(ErrorCode.UPSTREAM_AUTH_ERROR), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.UPSTREAM_AUTH_ERROR);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(), problem.getTitle());
         }
 
         @Test
         @DisplayName("The details property is published when the business rejection carries details")
         void detailsArePublishedWhenPresent() {
+            // Arrange
             BusinessException ex = BusinessException.of(
                     ErrorCode.DUPLICATE_DOCUMENT, "already used", "documentNumber", "1017245896");
+
+            // Act
             ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(Map.of("documentNumber", "1017245896"), propertiesOf(problem).get("details"));
         }
 
         @Test
         @DisplayName("The details property is omitted when the business rejection carries no details, so the body stays clean")
         void detailsAreOmittedWhenEmpty() {
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.ACCESS_DENIED), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.ACCESS_DENIED);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertFalse(propertiesOf(problem).containsKey("details"),
                     () -> "Expected no details property, got " + propertiesOf(problem));
         }
@@ -194,7 +245,13 @@ class GlobalExceptionHandlerTest {
         @EnumSource(ErrorCode.class)
         @DisplayName("Every error code in the catalogue is translated into its own status and name")
         void everyErrorCodeIsTranslated(ErrorCode code) {
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(code), request);
+            // Arrange
+            BusinessException ex = new BusinessException(code);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(code.status().value(), problem.getStatus());
             assertEquals(code.name(), propertiesOf(problem).get("errorCode"));
         }
@@ -211,8 +268,14 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A body validation failure answers 400 with the validation error code")
         void bodyValidationAnswersBadRequest() throws Exception {
-            ProblemDetail problem = handler.handleValidation(
-                    methodArgumentNotValid(List.of(new FieldError("payload", "email", "must not be blank"))), request);
+            // Arrange
+            MethodArgumentNotValidException ex =
+                    methodArgumentNotValid(List.of(new FieldError("payload", "email", "must not be blank")));
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(HttpStatus.BAD_REQUEST.value(), problem.getStatus());
             assertEquals("VALIDATION_ERROR", propertiesOf(problem).get("errorCode"));
         }
@@ -220,10 +283,15 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A body validation failure lists each rejected field with its message")
         void fieldErrorsAreListedByFieldName() throws Exception {
+            // Arrange
             MethodArgumentNotValidException ex = methodArgumentNotValid(List.of(
                     new FieldError("payload", "email", "must not be blank"),
                     new FieldError("payload", "password", "size must be between 8 and 72")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("email", "must not be blank", "password", "size must be between 8 and 72"),
                     propertiesOf(problem).get("details"));
         }
@@ -231,9 +299,14 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A body validation failure also lists cross-field errors under the name of the validated object")
         void globalErrorsAreListedByObjectName() throws Exception {
+            // Arrange
             MethodArgumentNotValidException ex = methodArgumentNotValid(List.of(
                     new ObjectError("payload", "password and confirmation do not match")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("payload", "password and confirmation do not match"),
                     propertiesOf(problem).get("details"));
         }
@@ -241,10 +314,15 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("Field errors and cross-field errors are reported together in the same details map")
         void fieldAndGlobalErrorsAreReportedTogether() throws Exception {
+            // Arrange
             MethodArgumentNotValidException ex = methodArgumentNotValid(List.of(
                     new FieldError("payload", "email", "must not be blank"),
                     new ObjectError("payload", "password and confirmation do not match")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("email", "must not be blank",
                             "payload", "password and confirmation do not match"),
                     propertiesOf(problem).get("details"));
@@ -253,9 +331,14 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A parameter validation failure keys each error by its first resolvable code")
         void parameterErrorsAreKeyedByTheirFirstCode() {
+            // Arrange
             HandlerMethodValidationException ex = handlerMethodValidation(List.of(
                     new DefaultMessageSourceResolvable(new String[]{"Size.name"}, null, "size must be between 1 and 60")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("Size.name", "size must be between 1 and 60"),
                     propertiesOf(problem).get("details"));
         }
@@ -263,28 +346,43 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A parameter validation failure without codes falls back to the positional argument name")
         void parameterErrorsWithoutCodesFallBackToThePosition() {
+            // Arrange
             HandlerMethodValidationException ex = handlerMethodValidation(List.of(
                     new DefaultMessageSourceResolvable((String[]) null, null, "must not be null")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("arg0", "must not be null"), propertiesOf(problem).get("details"));
         }
 
         @Test
         @DisplayName("A parameter validation failure with an empty code array also falls back to the positional name")
         void parameterErrorsWithEmptyCodesFallBackToThePosition() {
+            // Arrange
             HandlerMethodValidationException ex = handlerMethodValidation(List.of(
                     new DefaultMessageSourceResolvable(new String[0], null, "must not be null")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("arg0", "must not be null"), propertiesOf(problem).get("details"));
         }
 
         @Test
         @DisplayName("The positional fallback advances with each error, so two unnamed errors do not overwrite each other")
         void positionalFallbackAdvancesPerError() {
+            // Arrange
             HandlerMethodValidationException ex = handlerMethodValidation(List.of(
                     new DefaultMessageSourceResolvable((String[]) null, null, "must not be null"),
                     new DefaultMessageSourceResolvable((String[]) null, null, "must be positive")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("arg0", "must not be null", "arg1", "must be positive"),
                     propertiesOf(problem).get("details"));
         }
@@ -292,10 +390,15 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A parameter validation failure mixing named and unnamed errors keeps the index aligned with the argument position")
         void namedAndUnnamedParameterErrorsCoexist() {
+            // Arrange
             HandlerMethodValidationException ex = handlerMethodValidation(List.of(
                     new DefaultMessageSourceResolvable(new String[]{"Min.page"}, null, "must be at least 0"),
                     new DefaultMessageSourceResolvable((String[]) null, null, "must not be null")));
+
+            // Act
             ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of("Min.page", "must be at least 0", "arg1", "must not be null"),
                     propertiesOf(problem).get("details"));
         }
@@ -303,14 +406,26 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A validation failure with no collected errors still answers 400 with an empty details map")
         void emptyValidationStillAnswersBadRequest() {
-            ProblemDetail problem = handler.handleValidation(handlerMethodValidation(List.of()), request);
+            // Arrange
+            HandlerMethodValidationException ex = handlerMethodValidation(List.of());
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(Map.of(), propertiesOf(problem).get("details"));
         }
 
         @Test
         @DisplayName("An exception of neither validation type is still reported as a validation error with no details")
         void unknownValidationTypeYieldsEmptyDetails() {
-            ProblemDetail problem = handler.handleValidation(new IllegalStateException("not a validation error"), request);
+            // Arrange
+            IllegalStateException ex = new IllegalStateException("not a validation error");
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(HttpStatus.BAD_REQUEST.value(), problem.getStatus());
             assertEquals(Map.of(), propertiesOf(problem).get("details"));
         }
@@ -318,15 +433,27 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A validation failure never echoes the raw exception message, only the generic validation detail")
         void detailIsTheGenericValidationMessage() throws Exception {
-            ProblemDetail problem = handler.handleValidation(
-                    methodArgumentNotValid(List.of(new FieldError("payload", "email", "must not be blank"))), request);
+            // Arrange
+            MethodArgumentNotValidException ex =
+                    methodArgumentNotValid(List.of(new FieldError("payload", "email", "must not be blank")));
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(ErrorCode.VALIDATION_ERROR.defaultMessage(), problem.getDetail());
         }
 
         @Test
         @DisplayName("A validation failure points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {
-            ProblemDetail problem = handler.handleValidation(handlerMethodValidation(List.of()), request);
+            // Arrange
+            HandlerMethodValidationException ex = handlerMethodValidation(List.of());
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
             assertEquals(URI.create(REQUEST_URI), problem.getInstance());
         }
     }
@@ -344,32 +471,51 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("An unparsable body answers 400, because the client sent something the API cannot read")
         void answersBadRequest() {
-            assertEquals(HttpStatus.BAD_REQUEST.value(), handler.handleUnreadable(unreadable, request).getStatus());
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(unreadable, request);
+
+            // Assert
+            assertEquals(HttpStatus.BAD_REQUEST.value(), problem.getStatus());
         }
 
         @Test
         @DisplayName("An unparsable body is reported under the validation error code")
         void reportsTheValidationErrorCode() {
-            assertEquals("VALIDATION_ERROR",
-                    propertiesOf(handler.handleUnreadable(unreadable, request)).get("errorCode"));
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(unreadable, request);
+
+            // Assert
+            assertEquals("VALIDATION_ERROR", propertiesOf(problem).get("errorCode"));
         }
 
         @Test
         @DisplayName("An unparsable body gets a fixed detail that does not disclose the parser internals")
         void detailIsAFixedMessage() {
-            assertEquals("Malformed request body", handler.handleUnreadable(unreadable, request).getDetail());
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(unreadable, request);
+
+            // Assert
+            assertEquals("Malformed request body", problem.getDetail());
         }
 
         @Test
         @DisplayName("An unparsable body points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {
-            assertEquals(URI.create(REQUEST_URI), handler.handleUnreadable(unreadable, request).getInstance());
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(unreadable, request);
+
+            // Assert
+            assertEquals(URI.create(REQUEST_URI), problem.getInstance());
         }
 
         @Test
         @DisplayName("An unparsable body publishes no details property")
         void publishesNoDetails() {
-            assertFalse(propertiesOf(handler.handleUnreadable(unreadable, request)).containsKey("details"));
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(unreadable, request);
+
+            // Assert
+            assertFalse(propertiesOf(problem).containsKey("details"));
         }
     }
 
@@ -386,20 +532,30 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A denied authorization answers 403")
         void answersForbidden() {
-            assertEquals(HttpStatus.FORBIDDEN.value(), handler.handleAccessDenied(denied, request).getStatus());
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
+            assertEquals(HttpStatus.FORBIDDEN.value(), problem.getStatus());
         }
 
         @Test
         @DisplayName("A denied authorization is reported under the access denied error code")
         void reportsTheAccessDeniedErrorCode() {
-            assertEquals("ACCESS_DENIED",
-                    propertiesOf(handler.handleAccessDenied(denied, request)).get("errorCode"));
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
+            assertEquals("ACCESS_DENIED", propertiesOf(problem).get("errorCode"));
         }
 
         @Test
         @DisplayName("A denied authorization answers with the generic message, never with the resource the caller was probing")
         void detailDoesNotDiscloseTheProbedResource() {
+            // Act
             ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
             assertEquals(ErrorCode.ACCESS_DENIED.defaultMessage(), problem.getDetail());
             assertFalse(String.valueOf(problem.getDetail()).contains("/admin/users"));
         }
@@ -407,14 +563,21 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A denied authorization points to the access denied documentation page")
         void publishesTheTypeUri() {
-            assertEquals(URI.create(TYPE_PREFIX + "access_denied"),
-                    handler.handleAccessDenied(denied, request).getType());
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
+            assertEquals(URI.create(TYPE_PREFIX + "access_denied"), problem.getType());
         }
 
         @Test
         @DisplayName("A denied authorization points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {
-            assertEquals(URI.create(REQUEST_URI), handler.handleAccessDenied(denied, request).getInstance());
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
+            assertEquals(URI.create(REQUEST_URI), problem.getInstance());
         }
     }
 
@@ -433,35 +596,50 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("An unexpected failure answers 500")
         void answersInternalServerError() {
-            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                    handler.handleUnexpected(leaky, request).getStatus());
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), problem.getStatus());
         }
 
         @Test
         @DisplayName("An unexpected failure is reported under the internal error code")
         void reportsTheInternalErrorCode() {
-            assertEquals("INTERNAL_ERROR",
-                    propertiesOf(handler.handleUnexpected(leaky, request)).get("errorCode"));
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals("INTERNAL_ERROR", propertiesOf(problem).get("errorCode"));
         }
 
         @Test
         @DisplayName("An unexpected failure is titled as an internal server error, masking the concrete exception")
         void titleIsMaskedAsInternalError() {
-            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
-                    handler.handleUnexpected(leaky, request).getTitle());
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(), problem.getTitle());
         }
 
         @Test
         @DisplayName("An unexpected failure answers with the generic internal message, not with the exception message")
         void detailIsTheGenericInternalMessage() {
-            assertEquals(ErrorCode.INTERNAL_ERROR.defaultMessage(),
-                    handler.handleUnexpected(leaky, request).getDetail());
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals(ErrorCode.INTERNAL_ERROR.defaultMessage(), problem.getDetail());
         }
 
         @Test
         @DisplayName("The connection string of the failing exception never reaches the response body")
         void doesNotLeakTheExceptionMessage() {
+            // Act
             ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
             String rendered = problem.getTitle() + "|" + problem.getDetail() + "|" + problem.getType()
                     + "|" + problem.getInstance() + "|" + propertiesOf(problem);
             assertFalse(rendered.contains(SECRET),
@@ -471,7 +649,10 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("The class name of the failing exception never reaches the response body either")
         void doesNotLeakTheExceptionType() {
+            // Act
             ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
             String rendered = problem.getTitle() + "|" + problem.getDetail() + "|" + problem.getType()
                     + "|" + problem.getInstance() + "|" + propertiesOf(problem);
             assertFalse(rendered.contains("IllegalStateException"),
@@ -481,7 +662,10 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("No stack trace element reaches the response body")
         void doesNotLeakTheStackTrace() {
+            // Act
             ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
             assertFalse(propertiesOf(problem).containsKey("stackTrace"));
             assertFalse(propertiesOf(problem).containsKey("exception"));
         }
@@ -489,29 +673,47 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("A failure whose cause carries the secret does not leak it either")
         void doesNotLeakTheCauseMessage() {
+            // Arrange
             RuntimeException wrapped = new RuntimeException("wrapper", new IllegalStateException(SECRET));
+
+            // Act
             ProblemDetail problem = handler.handleUnexpected(wrapped, request);
+
+            // Assert
             assertFalse(String.valueOf(propertiesOf(problem)).contains(SECRET));
         }
 
         @Test
         @DisplayName("An unexpected failure with no message at all is still answered with the generic internal message")
         void handlesAnExceptionWithoutMessage() {
-            assertEquals(ErrorCode.INTERNAL_ERROR.defaultMessage(),
-                    handler.handleUnexpected(new RuntimeException(), request).getDetail());
+            // Arrange
+            RuntimeException withoutMessage = new RuntimeException();
+
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(withoutMessage, request);
+
+            // Assert
+            assertEquals(ErrorCode.INTERNAL_ERROR.defaultMessage(), problem.getDetail());
         }
 
         @Test
         @DisplayName("An unexpected failure points the instance at the URI of the request that failed")
         void instanceIsTheRequestUri() {
-            assertEquals(URI.create(REQUEST_URI), handler.handleUnexpected(leaky, request).getInstance());
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals(URI.create(REQUEST_URI), problem.getInstance());
         }
 
         @Test
         @DisplayName("An unexpected failure points to the internal error documentation page")
         void publishesTheTypeUri() {
-            assertEquals(URI.create(TYPE_PREFIX + "internal_error"),
-                    handler.handleUnexpected(leaky, request).getType());
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(leaky, request);
+
+            // Assert
+            assertEquals(URI.create(TYPE_PREFIX + "internal_error"), problem.getType());
         }
     }
 
@@ -526,15 +728,27 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("The trace id of the current request is copied from the MDC into the body so support can correlate the log line")
         void traceIdIsCopiedFromTheMdc() {
+            // Arrange
             MDC.put("traceId", TRACE_ID);
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.ACCESS_DENIED), request);
+            BusinessException ex = new BusinessException(ErrorCode.ACCESS_DENIED);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(TRACE_ID, propertiesOf(problem).get("traceId"));
         }
 
         @Test
         @DisplayName("With an empty MDC the trace id is published as null instead of failing the response")
         void traceIdIsNullWhenTheMdcIsEmpty() {
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.ACCESS_DENIED), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.ACCESS_DENIED);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertTrue(propertiesOf(problem).containsKey("traceId"));
             assertNull(propertiesOf(problem).get("traceId"));
         }
@@ -542,30 +756,78 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("The trace id is published under the key the handler advertises as its contract")
         void traceIdUsesTheAdvertisedPropertyName() {
+            // Arrange
             MDC.put("traceId", TRACE_ID);
-            ProblemDetail problem = handler.handleUnexpected(new RuntimeException("boom"), request);
+            RuntimeException boom = new RuntimeException("boom");
+
+            // Act
+            ProblemDetail problem = handler.handleUnexpected(boom, request);
+
+            // Assert
             assertEquals(TRACE_ID, propertiesOf(problem).get(GlobalExceptionHandler.TRACE_ID_PROPERTY));
         }
 
         @Test
         @DisplayName("An unrelated MDC entry is not mistaken for the trace id")
         void unrelatedMdcEntriesAreIgnored() {
+            // Arrange
             MDC.put("userId", "ana@example.com");
-            ProblemDetail problem = handler.handleAccessDenied(new AccessDeniedException("denied"), request);
+            AccessDeniedException denied = new AccessDeniedException("denied");
+
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
             assertNull(propertiesOf(problem).get("traceId"));
             assertFalse(propertiesOf(problem).containsValue("ana@example.com"));
         }
 
+        /*
+         * "Every handler publishes the trace id" used to be a single test that called three handlers
+         * in a row. It is split into one test per handler so each one has a single Act; the business
+         * and unexpected handlers are already covered by the two trace id tests above.
+         */
+
         @Test
-        @DisplayName("Every handler publishes the trace id, not only the business one")
-        void everyHandlerPublishesTheTraceId() {
+        @DisplayName("The validation handler publishes the trace id too, not only the business one")
+        void validationHandlerPublishesTheTraceId() {
+            // Arrange
             MDC.put("traceId", TRACE_ID);
-            assertEquals(TRACE_ID, propertiesOf(handler.handleValidation(
-                    handlerMethodValidation(List.of()), request)).get("traceId"));
-            assertEquals(TRACE_ID, propertiesOf(handler.handleUnreadable(
-                    mock(HttpMessageNotReadableException.class), request)).get("traceId"));
-            assertEquals(TRACE_ID, propertiesOf(handler.handleAccessDenied(
-                    new AccessDeniedException("denied"), request)).get("traceId"));
+            HandlerMethodValidationException ex = handlerMethodValidation(List.of());
+
+            // Act
+            ProblemDetail problem = handler.handleValidation(ex, request);
+
+            // Assert
+            assertEquals(TRACE_ID, propertiesOf(problem).get("traceId"));
+        }
+
+        @Test
+        @DisplayName("The malformed body handler publishes the trace id too, not only the business one")
+        void unreadableHandlerPublishesTheTraceId() {
+            // Arrange
+            MDC.put("traceId", TRACE_ID);
+            HttpMessageNotReadableException ex = mock(HttpMessageNotReadableException.class);
+
+            // Act
+            ProblemDetail problem = handler.handleUnreadable(ex, request);
+
+            // Assert
+            assertEquals(TRACE_ID, propertiesOf(problem).get("traceId"));
+        }
+
+        @Test
+        @DisplayName("The access denied handler publishes the trace id too, not only the business one")
+        void accessDeniedHandlerPublishesTheTraceId() {
+            // Arrange
+            MDC.put("traceId", TRACE_ID);
+            AccessDeniedException denied = new AccessDeniedException("denied");
+
+            // Act
+            ProblemDetail problem = handler.handleAccessDenied(denied, request);
+
+            // Assert
+            assertEquals(TRACE_ID, propertiesOf(problem).get("traceId"));
         }
     }
 
@@ -580,10 +842,14 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("Every response carries a timestamp so the client can tell two identical failures apart")
         void publishesATimestamp() {
+            // Arrange
             java.time.Instant antes = java.time.Instant.now().minusSeconds(1);
+            BusinessException ex = new BusinessException(ErrorCode.ACCESS_DENIED);
 
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.ACCESS_DENIED), request);
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
 
+            // Assert
             // assertNotNull pasaría con cualquier cadena, incluida una constante: hay que
             // comprobar que es un instante y que corresponde a esta respuesta.
             Object publicado = propertiesOf(problem).get("timestamp");
@@ -596,15 +862,27 @@ class GlobalExceptionHandlerTest {
         @Test
         @DisplayName("The instance follows the request, so a different endpoint is reported under its own URI")
         void instanceFollowsTheRequest() {
+            // Arrange
             MockHttpServletRequest other = new MockHttpServletRequest("GET", "/api/v1/bookings/42");
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND), other);
+            BusinessException ex = new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, other);
+
+            // Assert
             assertEquals(URI.create("/api/v1/bookings/42"), problem.getInstance());
         }
 
         @Test
         @DisplayName("The documentation type is the lowercase name of the error code, so every code has its own page")
         void typeIsDerivedFromTheErrorCodeName() {
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.VERIFICATION_TOKEN_INVALID), request);
+            // Arrange
+            BusinessException ex = new BusinessException(ErrorCode.VERIFICATION_TOKEN_INVALID);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, request);
+
+            // Assert
             assertEquals(URI.create(TYPE_PREFIX + "verification_token_invalid"), problem.getType());
         }
 
@@ -618,16 +896,28 @@ class GlobalExceptionHandlerTest {
         @ValueSource(strings = {"/api/v1/bookings/a b", "/api/v1/bookings/{id}", "/api/v1/bookings/a|b"})
         @DisplayName("A request URI with a character illegal in a URI makes the advice itself fail instead of answering a problem detail")
         void requestUriWithIllegalCharacterBreaksTheAdvice(String rawUri) {
+            // Arrange
             MockHttpServletRequest malformed = new MockHttpServletRequest("GET", rawUri);
-            assertThrows(IllegalArgumentException.class,
-                    () -> handler.handleBusiness(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND), malformed));
+            BusinessException ex = new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+
+            // Act
+            Executable act = () -> handler.handleBusiness(ex, malformed);
+
+            // Assert
+            assertThrows(IllegalArgumentException.class, act);
         }
 
         @Test
         @DisplayName("A request URI with accented characters is reported normally, because non-ASCII characters are tolerated in a URI path")
         void requestUriWithAccentsIsReportedNormally() {
+            // Arrange
             MockHttpServletRequest accented = new MockHttpServletRequest("GET", "/api/v1/servicios/masaje-relajación");
-            ProblemDetail problem = handler.handleBusiness(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND), accented);
+            BusinessException ex = new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+
+            // Act
+            ProblemDetail problem = handler.handleBusiness(ex, accented);
+
+            // Assert
             assertEquals(URI.create("/api/v1/servicios/masaje-relajación"), problem.getInstance());
         }
     }
