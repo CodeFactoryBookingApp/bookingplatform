@@ -51,10 +51,14 @@ class ClientMapperTest {
     })
     @DisplayName("toEntity copies every attribute, including the status and the notification channel")
     void toEntityCopiesEveryAttribute(NotificationChannel channel, ClientStatus status) {
+        // Arrange
         UUID id = UUID.randomUUID();
+        Client client = domainClient(id, channel, status);
 
-        ClientEntity result = mapper.toEntity(domainClient(id, channel, status));
+        // Act
+        ClientEntity result = mapper.toEntity(client);
 
+        // Assert
         assertEquals(id, result.getId());
         assertEquals("Ana Perez", result.getFullName());
         assertEquals("1017", result.getDocument());
@@ -74,10 +78,14 @@ class ClientMapperTest {
     })
     @DisplayName("toDomain rebuilds the aggregate with every attribute, including the status")
     void toDomainCopiesEveryAttribute(NotificationChannel channel, ClientStatus status) {
+        // Arrange
         UUID id = UUID.randomUUID();
+        ClientEntity entity = entity(id, channel, status);
 
-        Client result = mapper.toDomain(entity(id, channel, status));
+        // Act
+        Client result = mapper.toDomain(entity);
 
+        // Assert
         assertEquals(id, result.getId());
         assertEquals("Ana Perez", result.getFullName());
         assertEquals("1017", result.getDocument());
@@ -92,11 +100,14 @@ class ClientMapperTest {
     @Test
     @DisplayName("A domain to entity to domain round trip loses nothing")
     void roundTripLosesNothing() {
+        // Arrange
         UUID id = UUID.randomUUID();
         Client original = domainClient(id, NotificationChannel.WHATSAPP, ClientStatus.SUSPENDED);
 
+        // Act
         Client back = mapper.toDomain(mapper.toEntity(original));
 
+        // Assert
         assertEquals(original.getId(), back.getId());
         assertEquals(original.getFullName(), back.getFullName());
         assertEquals(original.getDocument(), back.getDocument());
@@ -109,37 +120,66 @@ class ClientMapperTest {
     }
 
     @Test
-    @DisplayName("A brand new client keeps its behaviour after the round trip: only ACTIVE may confirm bookings")
+    @DisplayName("A brand new client keeps its PENDING_VERIFICATION status after the round trip")
     void roundTripPreservesTheBusinessState() {
+        // Arrange
         Client pending = Client.pendingVerification(UUID.randomUUID(), "Ana Perez", "1017",
                 LocalDate.of(1998, 4, 12), "ana.perez@example.com", "3001112233", "Medellin",
                 NotificationChannel.EMAIL);
 
+        // Act
         Client back = mapper.toDomain(mapper.toEntity(pending));
 
+        // Assert
         assertEquals(ClientStatus.PENDING_VERIFICATION, back.getStatus());
+    }
+
+    @Test
+    @DisplayName("A round-tripped pending client keeps its behaviour: email verification still moves it to ACTIVE")
+    void roundTrippedPendingClientCanStillBeVerified() {
+        // Arrange
+        Client pending = Client.pendingVerification(UUID.randomUUID(), "Ana Perez", "1017",
+                LocalDate.of(1998, 4, 12), "ana.perez@example.com", "3001112233", "Medellin",
+                NotificationChannel.EMAIL);
+        Client back = mapper.toDomain(mapper.toEntity(pending));
+
+        // Act
         back.verifyEmail();
+
+        // Assert
         assertEquals(ClientStatus.ACTIVE, back.getStatus());
     }
 
     @Test
     @DisplayName("Mapping a null client yields null instead of an empty entity")
     void toEntityOfNullIsNull() {
-        assertNull(mapper.toEntity(null));
+        // Act
+        ClientEntity result = mapper.toEntity(null);
+
+        // Assert
+        assertNull(result);
     }
 
     @Test
     @DisplayName("Mapping a null entity yields null instead of an empty aggregate")
     void toDomainOfNullIsNull() {
-        assertNull(mapper.toDomain(null));
+        // Act
+        Client result = mapper.toDomain(null);
+
+        // Assert
+        assertNull(result);
     }
 
     @Test
     @DisplayName("The mapper does not stamp the audit columns: they belong to JPA auditing")
     void mappedEntityCarriesNoAuditStamps() {
-        ClientEntity result = mapper.toEntity(domainClient(UUID.randomUUID(),
-                NotificationChannel.EMAIL, ClientStatus.ACTIVE));
+        // Arrange
+        Client client = domainClient(UUID.randomUUID(), NotificationChannel.EMAIL, ClientStatus.ACTIVE);
 
+        // Act
+        ClientEntity result = mapper.toEntity(client);
+
+        // Assert
         assertNull(result.getCreatedAt());
         assertNull(result.getUpdatedAt());
     }
