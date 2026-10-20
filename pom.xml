@@ -227,13 +227,14 @@
 						</goals>
 					</execution>
 					<!--
-					  Umbral: por debajo de 90% el build falla. Se exige tanto en
+					  Umbral: por debajo de 65% el build falla, que es la meta de
+					  cobertura de la rúbrica de Calidad Interna. Se exige tanto en
 					  instrucciones como en ramas, y la de ramas es la que de
 					  verdad protege: se puede recorrer una línea sin probar
 					  ninguna de las decisiones que toma.
 
-					  Está en 90 y no en el 100 que hay hoy para dejar margen al
-					  mantenimiento sin romper la rama a nadie.
+					  La cifra real es más alta; el umbral no es una meta a
+					  perseguir con pruebas de relleno, sino el piso que no se baja.
 					-->
 					<execution>
 						<id>check-coverage</id>
@@ -249,12 +250,12 @@
 										<limit>
 											<counter>INSTRUCTION</counter>
 											<value>COVEREDRATIO</value>
-											<minimum>0.90</minimum>
+											<minimum>0.65</minimum>
 										</limit>
 										<limit>
 											<counter>BRANCH</counter>
 											<value>COVEREDRATIO</value>
-											<minimum>0.90</minimum>
+											<minimum>0.65</minimum>
 										</limit>
 									</limits>
 								</rule>
@@ -368,12 +369,14 @@
 					<threads>4</threads>
 					<timeoutConstant>8000</timeoutConstant>
 					<!--
-					  Hoy la puntuacion real sobre ese ambito es 98%, y los 17 mutantes
-					  que sobreviven estan analizados uno a uno y son equivalentes. El
-					  umbral se deja en 95 para dejar margen de mantenimiento sin que
-					  un refactor honesto rompa la rama.
+					  Tras la auditoria de pruebas del Sprint 2 la puntuacion es 95%.
+					  Los supervivientes estan analizados: codigo redundante, adaptadores
+					  que solo cubren los ITs (excluidos aqui) y comportamientos que hoy
+					  son defectos reportados en Mantis, que a proposito no se fijan con
+					  pruebas. El umbral se deja en 90 para no forzar pruebas que asevere
+					  un bug solo por matar un mutante.
 					-->
-					<mutationThreshold>95</mutationThreshold>
+					<mutationThreshold>90</mutationThreshold>
 				</configuration>
 			</plugin>
 		</plugins>

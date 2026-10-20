@@ -165,6 +165,21 @@ class UserProvisioningServiceTest {
             // Assert
             verify(identityProvider).createUser("ana@example.com", VALID_PASSWORD, AppRole.CLIENT);
         }
+
+        /** The client row is keyed by this id; losing it would orphan the provider account. */
+        @Test
+        @DisplayName("A valid signup returns the identifier issued by the identity provider")
+        void returnsProviderUserId() {
+            // Arrange
+            UUID id = UUID.randomUUID();
+            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class))).thenReturn(id);
+
+            // Act
+            UUID result = service.provisionClientUser("ana@example.com", VALID_PASSWORD);
+
+            // Assert
+            assertEquals(id, result);
+        }
     }
 
     // ----------------------------------------------------------------- //
@@ -297,6 +312,21 @@ class UserProvisioningServiceTest {
     @Nested
     @DisplayName("Confirming the email with a one-time token")
     class ConfirmEmail {
+
+        /** ConfirmEmailUseCase activates the client whose id comes back here. */
+        @Test
+        @DisplayName("A valid token returns the confirmed user reported by the provider")
+        void validTokenReturnsConfirmedUser() {
+            // Arrange
+            ConfirmedUser confirmed = new ConfirmedUser(UUID.randomUUID(), "ana@example.com");
+            when(identityProvider.verifyEmailToken(anyString())).thenReturn(confirmed);
+
+            // Act
+            ConfirmedUser result = service.confirmEmail("token-hash");
+
+            // Assert
+            assertEquals(confirmed, result);
+        }
 
         @Test
         @DisplayName("The token hash is forwarded to the provider exactly as received")

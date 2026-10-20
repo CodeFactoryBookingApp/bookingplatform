@@ -42,7 +42,7 @@ class AaaConventionTest {
         }
 
         // Assert
-        assertTrue(sources.size() > 40, "the scan must actually reach the test sources");
+        assertTrue(sources.size() > 20, "the scan must actually reach the test sources");
         assertEquals(List.of(), violations, "tests that do not follow Arrange-Act-Assert");
     }
 

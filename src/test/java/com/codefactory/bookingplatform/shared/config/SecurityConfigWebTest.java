@@ -222,6 +222,28 @@ class SecurityConfigWebTest {
                 .andExpect(jsonPath("$.role").value("CLIENT"));
     }
 
+    /**
+     * HU-021 "según mi rol asignado": user_metadata is editable by the user, so a role planted
+     * there must not survive the real filter chain. The converter's unit tests cover the rule;
+     * this one proves the chain actually uses that converter.
+     */
+    @Test
+    @DisplayName("PRIVILEGE ESCALATION GUARD: admin in user_metadata does not beat client in app_metadata")
+    void appMetadataWinsEndToEnd() throws Exception {
+        // Arrange
+        stubToken("mixed-token", Map.of(
+                "app_metadata", Map.of("role", "client"),
+                "user_metadata", Map.of("role", "admin")));
+
+        // Act
+        ResultActions result = mockMvc.perform(
+                get("/api/v1/auth/me").header(HttpHeaders.AUTHORIZATION, "Bearer mixed-token"));
+
+        // Assert
+        result.andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("CLIENT"));
+    }
+
     @Test
     @DisplayName("An authenticated logout goes through and answers 204")
     void authenticatedLogoutAnswers204() throws Exception {
