@@ -8,9 +8,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,6 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * mapper and PostgreSQL. This test rebuilds the aggregate from the database at both ends of the
  * verification transition.
  *
+ * <p>Arrange-Act-Assert: the registration over HTTP is the Arrange; the Act is the step whose
+ * effect is measured (rebuilding the aggregate from PostgreSQL, or the email confirmation).
+ *
  * @see com.codefactory.bookingplatform.architecture.BookingConfirmationInvariantTest for the guard
  *      that fires when a booking-confirmation path is added without consulting the invariant.
  */
@@ -40,14 +45,14 @@ class ClientVerificationInvariantIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("HU-001 AC: a client persisted as PENDING_VERIFICATION cannot confirm bookings")
     void pendingClientCannotConfirmBookings() throws Exception {
-        mockMvc.perform(post("/api/v1/registrations")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(registrationPayload(EMAIL, DOCUMENT)))
-                .andExpect(status().isCreated());
+        // Arrange
+        UUID clientId = register();
 
-        UUID clientId = identityProvider.userIdOf(EMAIL);
+        // Act
         Client pending = reload(clientId);
-        assertTrue(pending.getStatus() == ClientStatus.PENDING_VERIFICATION);
+
+        // Assert
+        assertEquals(ClientStatus.PENDING_VERIFICATION, pending.getStatus());
         assertFalse(pending.canConfirmBooking(),
                 "an unverified client, read back from the database, must not be able to confirm a booking");
     }
@@ -55,22 +60,30 @@ class ClientVerificationInvariantIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("HU-001 AC: only after confirming the email does the client become able to confirm bookings")
     void confirmedClientCanConfirmBookings() throws Exception {
+        // Arrange
+        UUID clientId = register();
+        // precondition: before the confirmation the persisted client cannot confirm bookings
+        assertFalse(reload(clientId).canConfirmBooking());
+
+        // Act
+        ResultActions confirmation = mockMvc.perform(post("/api/v1/registrations/email-verifications")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\":\"" + identityProvider.currentEmailToken(EMAIL) + "\"}"));
+
+        // Assert
+        confirmation.andExpect(status().isOk());
+        Client active = reload(clientId);
+        assertEquals(ClientStatus.ACTIVE, active.getStatus());
+        assertTrue(active.canConfirmBooking(),
+                "the verification transition must be what flips the invariant, and it must survive persistence");
+    }
+
+    private UUID register() throws Exception {
         mockMvc.perform(post("/api/v1/registrations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registrationPayload(EMAIL, DOCUMENT)))
                 .andExpect(status().isCreated());
-        UUID clientId = identityProvider.userIdOf(EMAIL);
-        assertFalse(reload(clientId).canConfirmBooking());
-
-        mockMvc.perform(post("/api/v1/registrations/email-verifications")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\":\"" + identityProvider.currentEmailToken(EMAIL) + "\"}"))
-                .andExpect(status().isOk());
-
-        Client active = reload(clientId);
-        assertTrue(active.getStatus() == ClientStatus.ACTIVE);
-        assertTrue(active.canConfirmBooking(),
-                "the verification transition must be what flips the invariant, and it must survive persistence");
+        return identityProvider.userIdOf(EMAIL);
     }
 
     private Client reload(UUID clientId) {

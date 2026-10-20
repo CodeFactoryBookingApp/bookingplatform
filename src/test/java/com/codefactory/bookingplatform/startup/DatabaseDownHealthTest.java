@@ -12,7 +12,6 @@ import java.sql.SQLException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -38,22 +37,31 @@ class DatabaseDownHealthTest {
     @Test
     @DisplayName("An unreachable database turns the db indicator DOWN")
     void unreachableDatabaseIsDown() throws SQLException {
+        // Arrange
         DataSourceHealthIndicator indicator =
                 new DataSourceHealthIndicator(refusingDataSource("Connection refused"));
 
-        assertEquals(Status.DOWN, indicator.health().getStatus());
+        // Act
+        Health health = indicator.health();
+
+        // Assert
+        assertEquals(Status.DOWN, health.getStatus());
     }
 
     @Test
     @DisplayName("RISK: the details name the generic JDBC failure, the driver's root cause is dropped")
     void rootCauseIsNotReported() throws SQLException {
+        // Arrange
         DataSourceHealthIndicator indicator = new DataSourceHealthIndicator(
                 refusingDataSource("FATAL: (EMAXCONNSESSION) max clients reached"));
 
+        // Act
         Health health = indicator.health();
-        String error = String.valueOf(health.getDetails().get("error"));
 
-        assertNotNull(health.getDetails().get("error"));
+        // Assert
+        Object errorDetail = health.getDetails().get("error");
+        String error = String.valueOf(errorDetail);
+        assertNotNull(errorDetail);
         assertEquals("org.springframework.jdbc.CannotGetJdbcConnectionException: Failed to obtain JDBC Connection",
                 error);
         assertFalse(error.contains("EMAXCONNSESSION"),
@@ -63,10 +71,15 @@ class DatabaseDownHealthTest {
     @Test
     @DisplayName("RISK: the details exist but management.endpoint.health.show-details is never, so the caller only sees DOWN")
     void detailsAreNotExposedToTheCaller() throws SQLException {
+        // Arrange
         DataSourceHealthIndicator indicator =
                 new DataSourceHealthIndicator(refusingDataSource("Connection refused"));
 
-        assertFalse(indicator.health().getDetails().isEmpty(),
+        // Act
+        Health health = indicator.health();
+
+        // Assert
+        assertFalse(health.getDetails().isEmpty(),
                 "the indicator does produce details; it is the endpoint configuration that hides them");
     }
 }
