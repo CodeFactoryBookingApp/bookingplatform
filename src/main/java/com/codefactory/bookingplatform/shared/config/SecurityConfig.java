@@ -54,6 +54,12 @@ public class SecurityConfig {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * CSRF stays disabled on purpose: the API is stateless (no session, no cookies) and every
+     * protected call carries the access token in the Authorization header, which a browser never
+     * attaches on its own to a cross-site request. ADR-0003.
+     */
+    @SuppressWarnings("java:S4502")
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    SupabaseJwtAuthConverter supabaseJwtAuthConverter) throws Exception {

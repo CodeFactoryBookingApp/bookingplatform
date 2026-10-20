@@ -4,8 +4,22 @@ on:
   push:
     branches:
       - main
+      - feature/qa-unit-tests
   pull_request:
     types: [opened, synchronize, reopened]
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+# Metas de la rúbrica de Calidad Interna (Sprint 2 y 3).
+env:
+  PROJECT_KEY: CodeFactoryBookingApp_bookingplatform
+  MIN_COVERAGE: 65        # % de cobertura de pruebas unitarias
+  MAX_DEBT_MIN: 960       # deuda técnica: 2 días = 2 x 8 h x 60 min
+  MAX_COMPLEXITY: 50      # complejidad ciclomática, debe ser menor
+  MAX_SEVERE_ISSUES: 0    # hallazgos por encima de Minor (Major, Critical, Blocker)
+  MAX_CRITICAL_VULNS: 0   # vulnerabilidades críticas
 
 jobs:
   build:
@@ -42,3 +56,102 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./mvnw -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+
+      # El plan gratuito de SonarCloud no deja configurar Quality Gates propios, pero su API
+      # sí entrega las métricas. Estos dos pasos las consultan y publican la tabla en el
+      # resumen del job. Son informativos: no bloquean el pipeline ni el despliegue.
+      - name: Wait for Sonar processing
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          URL=$(grep ceTaskUrl target/sonar/report-task.txt | cut -d= -f2-)
+          for i in $(seq 1 30); do
+            S=$(curl -s -u "$SONAR_TOKEN:" "$URL" | jq -r '.task.status')
+            echo "Estado Sonar: $S"
+            case "$S" in
+              SUCCESS) exit 0 ;;
+              FAILED|CANCELED) echo "::warning::El análisis de Sonar terminó con estado $S"; exit 0 ;;
+            esac
+            sleep 5
+          done
+          echo "::warning::Timeout esperando a Sonar"
+          exit 0
+
+      - name: Validate quality criteria (informativo, no bloquea)
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          API=https://sonarcloud.io/api
+          if [ -n "$PR_NUMBER" ]; then SCOPE="pullRequest=$PR_NUMBER"; ORIGIN="pull request #$PR_NUMBER"
+          else SCOPE="branch=$BRANCH"; ORIGIN="rama $BRANCH"; fi
+          sq() { curl -s ${SONAR_TOKEN:+-u "$SONAR_TOKEN:"} "$API/$1&$SCOPE"; }
+
+          METRICS="measures/component?component=$PROJECT_KEY&metricKeys=coverage,sqale_index,complexity,cognitive_complexity,tests"
+          RESP=$(sq "$METRICS")
+          # El plan gratuito solo expone por API la rama principal y los pull requests.
+          # En cualquier otra rama se reportan las métricas del último análisis de main.
+          if echo "$RESP" | grep -q "non main branches"; then
+            SCOPE="branch=${{ github.event.repository.default_branch }}"
+            ORIGIN="main (el plan gratuito de SonarCloud no publica métricas de la rama $BRANCH)"
+            RESP=$(sq "$METRICS")
+          fi
+          if ! echo "$RESP" | jq -e '.component' >/dev/null 2>&1; then
+            echo "::warning::Error de Sonar: $RESP"
+            exit 0
+          fi
+          M=$(echo "$RESP" | jq -r '.component.measures[] | "\(.metric)=\(.value)"')
+          get() { echo "$M" | grep "^$1=" | cut -d= -f2; }
+
+          COV=$(get coverage)
+          DEBT=$(get sqale_index)
+          CX_TOTAL=$(get complexity)
+          COG_TOTAL=$(get cognitive_complexity)
+          TESTS=$(get tests)
+
+          # Complejidad de la clase más compleja: es la que dice si hay un módulo difícil de probar.
+          TREE=$(sq "measures/component_tree?component=$PROJECT_KEY&qualifiers=FIL&metricKeys=complexity&s=metric&metricSort=complexity&asc=false&ps=1")
+          CX_MAX=$(echo "$TREE" | jq -r '.components[0].measures[0].value // empty')
+          CX_FILE=$(echo "$TREE" | jq -r '.components[0].path // "N/A"')
+
+          SEVERE=$(sq "issues/search?componentKeys=$PROJECT_KEY&resolved=false&severities=MAJOR,CRITICAL,BLOCKER&ps=1" | jq -r '.total // "N/A"')
+          VULN=$(sq "issues/search?componentKeys=$PROJECT_KEY&resolved=false&types=VULNERABILITY&severities=CRITICAL,BLOCKER&ps=1" | jq -r '.total // "N/A"')
+
+          ok()  { echo "✅"; }
+          bad() { echo "❌"; }
+
+          COV_S=$(awk "BEGIN{exit !(${COV:-0} >= $MIN_COVERAGE)}" && ok || bad)
+          DEBT_S=$([ -n "$DEBT" ] && [ "$DEBT" -le "$MAX_DEBT_MIN" ] && ok || bad)
+          CX_S=$([ -n "$CX_MAX" ] && [ "$CX_MAX" -lt "$MAX_COMPLEXITY" ] && ok || bad)
+          SEV_S=$([ "$SEVERE" = "$MAX_SEVERE_ISSUES" ] && ok || bad)
+          VULN_S=$([ "$VULN" = "$MAX_CRITICAL_VULNS" ] && ok || bad)
+
+          {
+            echo "### Resultado de calidad"
+            echo "Fuente: SonarCloud, $ORIGIN."
+            echo ""
+            echo "| Criterio | Valor | Meta | Estado |"
+            echo "|---|---|---|---|"
+            echo "| Cobertura | ${COV:-N/A}% | ≥ ${MIN_COVERAGE}% | $COV_S |"
+            echo "| Deuda técnica | ${DEBT:-N/A} min | ≤ ${MAX_DEBT_MIN} min | $DEBT_S |"
+            echo "| Complejidad ciclomática (clase más compleja) | ${CX_MAX:-N/A} | < ${MAX_COMPLEXITY} | $CX_S |"
+            echo "| Hallazgos por encima de Minor | $SEVERE | ${MAX_SEVERE_ISSUES} | $SEV_S |"
+            echo "| Vulnerabilidades críticas | $VULN | ${MAX_CRITICAL_VULNS} | $VULN_S |"
+            echo ""
+            echo "| Referencia (no es criterio) | Valor |"
+            echo "|---|---|"
+            echo "| Clase más compleja | \`$CX_FILE\` |"
+            echo "| Complejidad ciclomática total del proyecto | ${CX_TOTAL:-N/A} |"
+            echo "| Complejidad cognitiva total del proyecto | ${COG_TOTAL:-N/A} |"
+            echo "| Pruebas unitarias | ${TESTS:-N/A} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if echo "$COV_S$DEBT_S$CX_S$SEV_S$VULN_S" | grep -q "❌"; then
+            echo "::warning title=Quality gates::Algunos criterios no se cumplen. Revisa la tabla en Summary."
+          fi
+          exit 0

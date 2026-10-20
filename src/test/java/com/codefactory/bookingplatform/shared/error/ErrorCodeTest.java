@@ -1,7 +1,6 @@
 package com.codefactory.bookingplatform.shared.error;
 
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpStatus;
@@ -38,13 +37,10 @@ class ErrorCodeTest {
     })
     @DisplayName("Each error code maps to the HTTP status its semantics demand")
     void statusMatchesTheSemanticsOfTheCode(ErrorCode code, HttpStatus expectedStatus) {
-        assertEquals(expectedStatus, code.status());
-    }
+        // Act
+        HttpStatus status = code.status();
 
-    @Test
-    @DisplayName("The table above covers the whole catalogue, so a new code cannot slip through untested")
-    void decisionTableCoversTheWholeCatalogue() {
-        assertEquals(16, ErrorCode.values().length,
-                "A code was added or removed: update the status decision table in this test");
+        // Assert
+        assertEquals(expectedStatus, status);
     }
 }

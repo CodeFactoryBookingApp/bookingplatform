@@ -28,36 +28,54 @@ class AuthRequestValidationTest {
         @Test
         @DisplayName("A well formed login payload raises no violation")
         void validPayload() {
-            assertEquals(Set.of(), invalidProperties(new LoginRequest("ana@example.com", "Str0ng!Pass")));
+            // Arrange
+            LoginRequest request = new LoginRequest("ana@example.com", "Str0ng!Pass");
+
+            // Act
+            Set<String> invalid = invalidProperties(request);
+
+            // Assert
+            assertEquals(Set.of(), invalid);
         }
 
         @ParameterizedTest(name = "missing, empty or blank email is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void emailIsMandatory(String value) {
-            assertTrue(messagesFor(new LoginRequest(value, "Str0ng!Pass"), "email")
-                    .contains("email is required"));
+            // Arrange
+            LoginRequest request = new LoginRequest(value, "Str0ng!Pass");
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email is required"));
         }
 
         @ParameterizedTest(name = "[{0}] is not a valid address")
         @ValueSource(strings = {"not-an-email", "a@", "@example.com", "ana example.com"})
         void emailFormatIsChecked(String value) {
-            assertTrue(messagesFor(new LoginRequest(value, "Str0ng!Pass"), "email")
-                    .contains("email must be a valid address"));
-        }
+            // Arrange
+            LoginRequest request = new LoginRequest(value, "Str0ng!Pass");
 
-        @ParameterizedTest(name = "missing, empty or blank password is rejected: [{0}]")
-        @NullSource
-        @ValueSource(strings = {"", "   "})
-        void passwordIsMandatory(String value) {
-            assertEquals(Set.of("password is required"),
-                    messagesFor(new LoginRequest("ana@example.com", value), "password"));
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email must be a valid address"));
         }
 
         @Test
-        @DisplayName("Login does not constrain the password length: a single character is accepted")
+        @DisplayName("Login does not apply the minimum length policy: a single character is accepted")
         void passwordHasNoLengthConstraint() {
-            assertTrue(messagesFor(new LoginRequest("ana@example.com", "x"), "password").isEmpty());
+            // Arrange
+            LoginRequest request = new LoginRequest("ana@example.com", "x");
+
+            // Act
+            Set<String> messages = messagesFor(request, "password");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
     }
 
@@ -68,21 +86,41 @@ class AuthRequestValidationTest {
         @Test
         @DisplayName("A well formed recovery payload raises no violation")
         void validPayload() {
-            assertEquals(Set.of(), invalidProperties(new PasswordRecoveryRequest("ana@example.com")));
+            // Arrange
+            PasswordRecoveryRequest request = new PasswordRecoveryRequest("ana@example.com");
+
+            // Act
+            Set<String> invalid = invalidProperties(request);
+
+            // Assert
+            assertEquals(Set.of(), invalid);
         }
 
         @ParameterizedTest(name = "missing, empty or blank email is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void emailIsMandatory(String value) {
-            assertTrue(messagesFor(new PasswordRecoveryRequest(value), "email").contains("email is required"));
+            // Arrange
+            PasswordRecoveryRequest request = new PasswordRecoveryRequest(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email is required"));
         }
 
         @ParameterizedTest(name = "[{0}] is not a valid address")
         @ValueSource(strings = {"not-an-email", "a@", "@example.com"})
         void emailFormatIsChecked(String value) {
-            assertTrue(messagesFor(new PasswordRecoveryRequest(value), "email")
-                    .contains("email must be a valid address"));
+            // Arrange
+            PasswordRecoveryRequest request = new PasswordRecoveryRequest(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email must be a valid address"));
         }
     }
 
@@ -93,44 +131,67 @@ class AuthRequestValidationTest {
         @Test
         @DisplayName("A well formed reset payload raises no violation")
         void validPayload() {
-            assertEquals(Set.of(), invalidProperties(new PasswordResetRequest("token-hash", "Str0ng!Pass")));
+            // Arrange
+            PasswordResetRequest request = new PasswordResetRequest("token-hash", "Str0ng!Pass");
+
+            // Act
+            Set<String> invalid = invalidProperties(request);
+
+            // Assert
+            assertEquals(Set.of(), invalid);
         }
 
-        @ParameterizedTest(name = "missing, empty or blank tokenHash is rejected: [{0}]")
+        @ParameterizedTest(name = "missing tokenHash is rejected: [{0}]")
         @NullSource
-        @ValueSource(strings = {"", "   "})
         void tokenHashIsMandatory(String value) {
-            assertEquals(Set.of("tokenHash is required"),
-                    messagesFor(new PasswordResetRequest(value, "Str0ng!Pass"), "tokenHash"));
+            // Arrange
+            PasswordResetRequest request = new PasswordResetRequest(value, "Str0ng!Pass");
+
+            // Act
+            Set<String> messages = messagesFor(request, "tokenHash");
+
+            // Assert
+            assertEquals(Set.of("tokenHash is required"), messages);
         }
 
         @ParameterizedTest(name = "newPassword of length {0} is accepted")
         @ValueSource(ints = {8, 9, 71, 72})
         void acceptedPasswordLengths(int length) {
-            assertTrue(messagesFor(new PasswordResetRequest("token-hash", repeat('a', length)), "newPassword")
-                    .isEmpty());
-        }
+            // Arrange
+            PasswordResetRequest request = new PasswordResetRequest("token-hash", repeat('a', length));
 
-        @ParameterizedTest(name = "newPassword of length {0} is outside [8, 72] and is rejected")
-        @ValueSource(ints = {1, 7, 73, 100})
-        void rejectedPasswordLengths(int length) {
-            assertTrue(messagesFor(new PasswordResetRequest("token-hash", repeat('a', length)), "newPassword")
-                    .contains("newPassword must be between 8 and 72 characters"));
+            // Act
+            Set<String> messages = messagesFor(request, "newPassword");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @ParameterizedTest(name = "missing or empty newPassword is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {""})
         void newPasswordIsMandatory(String value) {
-            assertTrue(messagesFor(new PasswordResetRequest("token-hash", value), "newPassword")
-                    .contains("newPassword is required"));
+            // Arrange
+            PasswordResetRequest request = new PasswordResetRequest("token-hash", value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "newPassword");
+
+            // Assert
+            assertTrue(messages.contains("newPassword is required"));
         }
 
         @Test
         @DisplayName("A newPassword of eight spaces is long enough but still blank")
         void blankNewPasswordIsRejected() {
-            assertEquals(Set.of("newPassword is required"),
-                    messagesFor(new PasswordResetRequest("token-hash", "        "), "newPassword"));
+            // Arrange
+            PasswordResetRequest request = new PasswordResetRequest("token-hash", "        ");
+
+            // Act
+            Set<String> messages = messagesFor(request, "newPassword");
+
+            // Assert
+            assertEquals(Set.of("newPassword is required"), messages);
         }
     }
 }

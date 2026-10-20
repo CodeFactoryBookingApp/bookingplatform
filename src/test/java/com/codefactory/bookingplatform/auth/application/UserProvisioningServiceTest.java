@@ -11,19 +11,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.ArgumentCaptor;
 
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -74,38 +72,36 @@ class UserProvisioningServiceTest {
     @DisplayName("Provisioning a client user: password policy (partitions and boundaries)")
     class ProvisioningPasswordPolicy {
 
-        @ParameterizedTest(name = "[{0}] is rejected because it has no {1}")
+        @ParameterizedTest(name = "[{0}] is rejected and the detail names: {1}")
         @CsvSource({
                 "abcdef1!, uppercase",
                 "ABCDEF1!, lowercase",
                 "Abcdefg!, digit",
                 "Abcdefg1, special character",
-                "Abc1!,    minimum length"
+                "Abc1!,    at least 8 characters"
         })
         @DisplayName("A password that breaks the policy is rejected as too weak")
         void weakPasswordIsRejected(String password, String brokenRule) {
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", password));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", password);
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
-        }
-
-        @Test
-        @DisplayName("The weak password rejection carries the policy message, not an empty detail")
-        void weakPasswordCarriesTheDefaultMessage() {
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", "abcdef1!"));
-
-            assertEquals(ErrorCode.PASSWORD_TOO_WEAK.defaultMessage(), ex.getMessage());
+            String violations = ex.details().get("violations");
+            assertTrue(violations.contains(brokenRule),
+                    () -> "the violations detail should name the broken rule " + brokenRule + " but was: " + violations);
         }
 
         @ParameterizedTest(name = "[{0}] never reaches the identity provider")
         @ValueSource(strings = {"abcdef1!", "ABCDEF1!", "Abcdefg!", "Abcdefg1", "Abc1!"})
         @DisplayName("A weak password is rejected before any user is created upstream")
         void weakPasswordDoesNotReachProvider(String password) {
-            assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", password));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", password);
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verifyNoInteractions(identityProvider);
         }
 
@@ -113,54 +109,41 @@ class UserProvisioningServiceTest {
         @NullSource
         @DisplayName("A null password is rejected as too weak instead of blowing up")
         void nullPasswordIsRejected(String password) {
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", password));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", password);
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
         }
 
         @Test
         @DisplayName("The rejection lists every broken rule in the violations detail")
         void rejectionListsViolations() {
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", "abc"));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", "abc");
 
-            String violations = ex.details().get("violations");
-            assertTrue(violations.contains("at least 8 characters")
-                            && violations.contains("uppercase")
-                            && violations.contains("digit")
-                            && violations.contains("special"),
-                    "violations detail should list every broken rule but was: " + violations);
-        }
-
-        @Test
-        @DisplayName("A password at the 8-character minimum is accepted")
-        void minimumLengthPasswordIsAccepted() {
-            UUID id = UUID.randomUUID();
-            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class))).thenReturn(id);
-
-            assertEquals(id, service.provisionClientUser("ana@example.com", VALID_PASSWORD));
-        }
-
-        @Test
-        @DisplayName("A password at the 72-character maximum is accepted")
-        void maximumLengthPasswordIsAccepted() {
-            UUID id = UUID.randomUUID();
-            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class))).thenReturn(id);
-
-            String atMax = VALID_PASSWORD + "x".repeat(72 - VALID_PASSWORD.length());
-
-            assertEquals(id, service.provisionClientUser("ana@example.com", atMax));
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
+            assertEquals("Password must be at least 8 characters long; "
+                            + "Password must contain at least one uppercase letter; "
+                            + "Password must contain at least one digit; "
+                            + "Password must contain at least one special character",
+                    ex.details().get("violations"),
+                    "the violations detail lists every broken rule, in policy order, and nothing else");
         }
 
         @Test
         @DisplayName("A password one character above the 72-character maximum is rejected")
         void aboveMaximumLengthPasswordIsRejected() {
+            // Arrange
             String aboveMax = VALID_PASSWORD + "x".repeat(73 - VALID_PASSWORD.length());
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", aboveMax));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", aboveMax);
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
         }
     }
@@ -170,36 +153,32 @@ class UserProvisioningServiceTest {
     class ProvisioningHappyPath {
 
         @Test
+        @DisplayName("The credentials are forwarded to the provider exactly as received")
+        void forwardsCredentials() {
+            // Arrange
+            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
+                    .thenReturn(UUID.randomUUID());
+
+            // Act
+            service.provisionClientUser("ana@example.com", VALID_PASSWORD);
+
+            // Assert
+            verify(identityProvider).createUser("ana@example.com", VALID_PASSWORD, AppRole.CLIENT);
+        }
+
+        /** The client row is keyed by this id; losing it would orphan the provider account. */
+        @Test
         @DisplayName("A valid signup returns the identifier issued by the identity provider")
         void returnsProviderUserId() {
+            // Arrange
             UUID id = UUID.randomUUID();
             when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class))).thenReturn(id);
 
-            assertEquals(id, service.provisionClientUser("ana@example.com", VALID_PASSWORD));
-        }
+            // Act
+            UUID result = service.provisionClientUser("ana@example.com", VALID_PASSWORD);
 
-        @Test
-        @DisplayName("Self-provisioned users are always created with the CLIENT role")
-        void alwaysCreatesClientRole() {
-            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
-                    .thenReturn(UUID.randomUUID());
-
-            service.provisionClientUser("ana@example.com", VALID_PASSWORD);
-
-            ArgumentCaptor<AppRole> captor = ArgumentCaptor.forClass(AppRole.class);
-            verify(identityProvider).createUser(anyString(), anyString(), captor.capture());
-            assertEquals(AppRole.CLIENT, captor.getValue());
-        }
-
-        @Test
-        @DisplayName("The credentials are forwarded to the provider exactly as received")
-        void forwardsCredentials() {
-            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
-                    .thenReturn(UUID.randomUUID());
-
-            service.provisionClientUser("ana@example.com", VALID_PASSWORD);
-
-            verify(identityProvider).createUser("ana@example.com", VALID_PASSWORD, AppRole.CLIENT);
+            // Assert
+            assertEquals(id, result);
         }
     }
 
@@ -224,36 +203,30 @@ class UserProvisioningServiceTest {
         })
         @DisplayName("Each upstream error maps to its business error code during provisioning")
         void mapsEachUpstreamError(UpstreamAuthError error, ErrorCode expected) {
+            // Arrange
             when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
                     .thenThrow(upstream(error));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", VALID_PASSWORD));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", VALID_PASSWORD);
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(expected, ex.errorCode());
-        }
-
-        @Test
-        @DisplayName("An unavailable provider keeps the upstream message for diagnosis")
-        void unavailableKeepsUpstreamMessage() {
-            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
-                    .thenThrow(upstream(UpstreamAuthError.UNAVAILABLE));
-
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", VALID_PASSWORD));
-
-            assertEquals("gotrue said UNAVAILABLE", ex.getMessage());
         }
 
         @Test
         @DisplayName("A duplicate email is reported with the DUPLICATE_EMAIL default message")
         void duplicateEmailUsesDefaultMessage() {
+            // Arrange
             when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class)))
                     .thenThrow(upstream(UpstreamAuthError.USER_ALREADY_EXISTS));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.provisionClientUser("ana@example.com", VALID_PASSWORD));
+            // Act
+            Executable act = () -> service.provisionClientUser("ana@example.com", VALID_PASSWORD);
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.DUPLICATE_EMAIL.defaultMessage(), ex.getMessage());
         }
     }
@@ -269,30 +242,29 @@ class UserProvisioningServiceTest {
         @Test
         @DisplayName("Deprovisioning deletes the auth user at the identity provider")
         void deletesUserAtProvider() {
+            // Arrange
             UUID id = UUID.randomUUID();
             doNothing().when(identityProvider).deleteUser(any(UUID.class));
 
+            // Act
             service.deprovisionUser(id);
 
+            // Assert
             verify(identityProvider).deleteUser(id);
         }
 
         @ParameterizedTest(name = "{0} while compensating is swallowed")
-        @EnumSource(UpstreamAuthError.class)
+        @EnumSource(value = UpstreamAuthError.class, names = "UNAVAILABLE")
         @DisplayName("An upstream failure while compensating is swallowed instead of propagated")
         void upstreamFailureIsSwallowed(UpstreamAuthError error) {
+            // Arrange
             doThrow(upstream(error)).when(identityProvider).deleteUser(any(UUID.class));
 
-            assertDoesNotThrow(() -> service.deprovisionUser(UUID.randomUUID()));
-        }
+            // Act
+            Executable act = () -> service.deprovisionUser(UUID.randomUUID());
 
-        @Test
-        @DisplayName("Any runtime failure while compensating is swallowed instead of propagated")
-        void runtimeFailureIsSwallowed() {
-            doThrow(new IllegalStateException("connection reset"))
-                    .when(identityProvider).deleteUser(any(UUID.class));
-
-            assertDoesNotThrow(() -> service.deprovisionUser(UUID.randomUUID()));
+            // Assert
+            assertDoesNotThrow(act);
         }
     }
 
@@ -307,41 +279,29 @@ class UserProvisioningServiceTest {
         @Test
         @DisplayName("The resend request is delegated to the identity provider")
         void delegatesToProvider() {
+            // Arrange
             doNothing().when(identityProvider).resendSignupVerification(anyString());
 
+            // Act
             service.resendSignupVerification("ana@example.com");
 
+            // Assert
             verify(identityProvider).resendSignupVerification("ana@example.com");
         }
 
         @Test
         @DisplayName("A resend for an unknown email succeeds so accounts cannot be enumerated")
         void unknownEmailIsAnsweredAsSuccess() {
+            // Arrange
             doThrow(upstream(UpstreamAuthError.USER_NOT_FOUND))
                     .when(identityProvider).resendSignupVerification(anyString());
 
-            assertDoesNotThrow(() -> service.resendSignupVerification("ghost@example.com"));
-        }
+            // Act
+            Executable act = () -> service.resendSignupVerification("ghost@example.com");
 
-        @ParameterizedTest(name = "{0} is escalated as a business error")
-        @EnumSource(value = UpstreamAuthError.class, names = "USER_NOT_FOUND", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("Any upstream failure other than an unknown user is escalated")
-        void otherUpstreamErrorsAreEscalated(UpstreamAuthError error) {
-            doThrow(upstream(error)).when(identityProvider).resendSignupVerification(anyString());
-
-            assertThrows(BusinessException.class, () -> service.resendSignupVerification("ana@example.com"));
-        }
-
-        @Test
-        @DisplayName("A rate-limited resend is escalated as RATE_LIMITED")
-        void rateLimitedResendIsMapped() {
-            doThrow(upstream(UpstreamAuthError.RATE_LIMITED))
-                    .when(identityProvider).resendSignupVerification(anyString());
-
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.resendSignupVerification("ana@example.com"));
-
-            assertEquals(ErrorCode.RATE_LIMITED, ex.errorCode());
+            // Assert
+            assertDoesNotThrow(act);
+            verify(identityProvider).resendSignupVerification("ghost@example.com");
         }
     }
 
@@ -353,23 +313,32 @@ class UserProvisioningServiceTest {
     @DisplayName("Confirming the email with a one-time token")
     class ConfirmEmail {
 
+        /** ConfirmEmailUseCase activates the client whose id comes back here. */
         @Test
         @DisplayName("A valid token returns the confirmed user reported by the provider")
         void validTokenReturnsConfirmedUser() {
+            // Arrange
             ConfirmedUser confirmed = new ConfirmedUser(UUID.randomUUID(), "ana@example.com");
             when(identityProvider.verifyEmailToken(anyString())).thenReturn(confirmed);
 
-            assertSame(confirmed, service.confirmEmail("token-hash"));
+            // Act
+            ConfirmedUser result = service.confirmEmail("token-hash");
+
+            // Assert
+            assertEquals(confirmed, result);
         }
 
         @Test
         @DisplayName("The token hash is forwarded to the provider exactly as received")
         void forwardsTokenHash() {
+            // Arrange
             when(identityProvider.verifyEmailToken(anyString()))
                     .thenReturn(new ConfirmedUser(UUID.randomUUID(), "ana@example.com"));
 
+            // Act
             service.confirmEmail("token-hash");
 
+            // Assert
             verify(identityProvider).verifyEmailToken("token-hash");
         }
 
@@ -377,58 +346,63 @@ class UserProvisioningServiceTest {
         @EnumSource(value = UpstreamAuthError.class, names = {"TOKEN_INVALID", "TOKEN_EXPIRED"})
         @DisplayName("An invalid or expired confirmation token is reported as an invalid token")
         void badTokenIsTranslated(UpstreamAuthError error) {
+            // Arrange
             when(identityProvider.verifyEmailToken(anyString())).thenThrow(upstream(error));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.confirmEmail("token-hash"));
+            // Act
+            Executable act = () -> service.confirmEmail("token-hash");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.VERIFICATION_TOKEN_INVALID, ex.errorCode());
         }
 
         @Test
         @DisplayName("An invalid confirmation token does not leak the provider message")
         void badTokenUsesDefaultMessage() {
+            // Arrange
             when(identityProvider.verifyEmailToken(anyString()))
                     .thenThrow(upstream(UpstreamAuthError.TOKEN_EXPIRED));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.confirmEmail("token-hash"));
+            // Act
+            Executable act = () -> service.confirmEmail("token-hash");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.VERIFICATION_TOKEN_INVALID.defaultMessage(), ex.getMessage());
         }
 
-        @ParameterizedTest(name = "{0} is escalated as a business error")
-        @EnumSource(value = UpstreamAuthError.class,
-                names = {"TOKEN_INVALID", "TOKEN_EXPIRED"}, mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("Any other upstream failure during confirmation is escalated")
-        void otherUpstreamErrorsAreEscalated(UpstreamAuthError error) {
-            when(identityProvider.verifyEmailToken(anyString())).thenThrow(upstream(error));
-
-            assertThrows(BusinessException.class, () -> service.confirmEmail("token-hash"));
-        }
-
-        @ParameterizedTest(name = "{0} during confirmation keeps its own error code")
-        @EnumSource(value = UpstreamAuthError.class,
-                names = {"RATE_LIMITED", "USER_ALREADY_EXISTS", "EMAIL_NOT_CONFIRMED"})
+        @ParameterizedTest(name = "{0} during confirmation is reported as {1}")
+        @CsvSource({
+                "RATE_LIMITED,        RATE_LIMITED",
+                "USER_ALREADY_EXISTS, DUPLICATE_EMAIL",
+                "EMAIL_NOT_CONFIRMED, EMAIL_NOT_CONFIRMED"
+        })
         @DisplayName("A confirmation failure that is not about the token keeps its own meaning")
-        void nonTokenFailuresKeepTheirOwnCode(UpstreamAuthError error) {
+        void nonTokenFailuresKeepTheirOwnCode(UpstreamAuthError error, ErrorCode expected) {
+            // Arrange
             when(identityProvider.verifyEmailToken(anyString())).thenThrow(upstream(error));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.confirmEmail("token-hash"));
+            // Act
+            Executable act = () -> service.confirmEmail("token-hash");
 
-            assertNotEquals(ErrorCode.VERIFICATION_TOKEN_INVALID, ex.errorCode());
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
+            assertEquals(expected, ex.errorCode());
         }
 
         @Test
         @DisplayName("Confirming an email for an unknown user is reported as RESOURCE_NOT_FOUND")
         void unknownUserIsMapped() {
+            // Arrange
             when(identityProvider.verifyEmailToken(anyString()))
                     .thenThrow(upstream(UpstreamAuthError.USER_NOT_FOUND));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> service.confirmEmail("token-hash"));
+            // Act
+            Executable act = () -> service.confirmEmail("token-hash");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
         }
     }

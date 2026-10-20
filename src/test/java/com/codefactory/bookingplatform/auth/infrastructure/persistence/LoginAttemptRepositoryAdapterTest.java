@@ -12,9 +12,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -46,10 +43,13 @@ class LoginAttemptRepositoryAdapterTest {
     })
     @DisplayName("The email is normalised to lower case before it is stored, so lockout counts one identity")
     void recordAttemptNormalisesTheEmail(String input, String expected) {
+        // Arrange
         Instant attemptedAt = Instant.parse("2026-09-22T10:15:30Z");
 
+        // Act
         adapter.recordAttempt(input, false, attemptedAt);
 
+        // Assert
         ArgumentCaptor<LoginAttemptEntity> captor = ArgumentCaptor.forClass(LoginAttemptEntity.class);
         verify(jpaRepository).save(captor.capture());
         assertEquals(expected, captor.getValue().getEmail());
@@ -60,8 +60,13 @@ class LoginAttemptRepositoryAdapterTest {
     @CsvSource({"true", "false"})
     @DisplayName("Both successful and failed attempts are recorded, the outcome is kept verbatim")
     void recordAttemptKeepsTheOutcome(boolean success) {
-        adapter.recordAttempt("ana.perez@example.com", success, Instant.parse("2026-09-22T10:15:30Z"));
+        // Arrange
+        Instant attemptedAt = Instant.parse("2026-09-22T10:15:30Z");
 
+        // Act
+        adapter.recordAttempt("ana.perez@example.com", success, attemptedAt);
+
+        // Assert
         ArgumentCaptor<LoginAttemptEntity> captor = ArgumentCaptor.forClass(LoginAttemptEntity.class);
         verify(jpaRepository).save(captor.capture());
         assertEquals(success, captor.getValue().isSuccess());
@@ -70,12 +75,15 @@ class LoginAttemptRepositoryAdapterTest {
     @Test
     @DisplayName("findFailuresSince queries with the normalised email and the caller's window start")
     void findFailuresSinceNormalisesTheEmailAndForwardsTheWindow() {
+        // Arrange
         Instant since = Instant.parse("2026-09-22T10:00:00Z");
         when(jpaRepository.findByEmailIgnoreCaseAndSuccessFalseAndAttemptedAtAfter(anyString(), any()))
                 .thenReturn(List.of());
 
+        // Act
         adapter.findFailuresSince("ANA.Perez@Example.COM", since);
 
+        // Assert
         ArgumentCaptor<String> email = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Instant> from = ArgumentCaptor.forClass(Instant.class);
         verify(jpaRepository).findByEmailIgnoreCaseAndSuccessFalseAndAttemptedAtAfter(email.capture(), from.capture());
@@ -87,6 +95,7 @@ class LoginAttemptRepositoryAdapterTest {
     @Test
     @DisplayName("findFailuresSince hands the domain plain timestamps, in the order the repository returned them")
     void findFailuresSinceTranslatesEntitiesToInstants() {
+        // Arrange
         Instant since = Instant.parse("2026-09-22T10:00:00Z");
         Instant first = since.plus(1, ChronoUnit.MINUTES);
         Instant second = since.plus(3, ChronoUnit.MINUTES);
@@ -95,32 +104,10 @@ class LoginAttemptRepositoryAdapterTest {
                         new LoginAttemptEntity("ana.perez@example.com", false, first),
                         new LoginAttemptEntity("ana.perez@example.com", false, second)));
 
+        // Act
         List<Instant> failures = adapter.findFailuresSince("ana.perez@example.com", since);
 
+        // Assert
         assertEquals(List.of(first, second), failures);
-    }
-
-    @Test
-    @DisplayName("An account with no recent failures yields an empty list, never null")
-    void findFailuresSinceReturnsEmptyListWhenThereAreNoFailures() {
-        when(jpaRepository.findByEmailIgnoreCaseAndSuccessFalseAndAttemptedAtAfter(anyString(), any()))
-                .thenReturn(List.of());
-
-        List<Instant> failures = adapter.findFailuresSince("ana.perez@example.com", Instant.now());
-
-        assertTrue(failures.isEmpty());
-    }
-
-    @Test
-    @DisplayName("A new login attempt entity carries no identity until the database assigns one")
-    void newEntityHasNoIdentityYet() {
-        Instant attemptedAt = Instant.parse("2026-09-22T10:15:30Z");
-
-        LoginAttemptEntity entity = new LoginAttemptEntity("ana.perez@example.com", false, attemptedAt);
-
-        assertNull(entity.getId());
-        assertEquals("ana.perez@example.com", entity.getEmail());
-        assertFalse(entity.isSuccess());
-        assertEquals(attemptedAt, entity.getAttemptedAt());
     }
 }

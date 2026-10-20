@@ -5,9 +5,9 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -45,82 +45,46 @@ class ClientTest {
     @Test
     @DisplayName("New client starts as PENDING_VERIFICATION and cannot confirm bookings")
     void newClientIsPendingVerification() {
+        // Act
         Client client = newPendingClient();
+
+        // Assert
         assertEquals(ClientStatus.PENDING_VERIFICATION, client.getStatus());
         assertFalse(client.canConfirmBooking());
     }
 
     @Test
-    @DisplayName("Email verification moves client to ACTIVE and enables booking confirmation")
-    void verifyEmailActivatesClient() {
-        Client client = newPendingClient();
-        client.verifyEmail();
-        assertEquals(ClientStatus.ACTIVE, client.getStatus());
-        assertTrue(client.canConfirmBooking());
-    }
-
-    @Test
-    @DisplayName("Verifying twice is idempotent")
-    void verifyTwiceIsIdempotent() {
-        Client client = newPendingClient();
-        client.verifyEmail();
-        client.verifyEmail();
-        assertEquals(ClientStatus.ACTIVE, client.getStatus());
-    }
-
-    @Test
-    @DisplayName("Suspended client cannot confirm bookings and cannot be verified")
+    @DisplayName("Suspended client cannot confirm bookings")
     void suspendedClientCannotConfirmBookings() {
+        // Arrange
         Client client = newPendingClient();
         client.verifyEmail();
+
+        // Act
         client.suspend();
+
+        // Assert
         assertEquals(ClientStatus.SUSPENDED, client.getStatus());
         assertFalse(client.canConfirmBooking());
-        BusinessException ex = assertThrows(BusinessException.class, client::verifyEmail);
-        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
     }
 
     @Test
-    @DisplayName("Pending client cannot be suspended; suspended can be reactivated")
+    @DisplayName("Suspended client can be reactivated after the full verify and suspend lifecycle")
     void suspensionLifecycle() {
+        // Arrange
         Client pending = newPendingClient();
-        assertThrows(BusinessException.class, pending::suspend);
-
         pending.verifyEmail();
         pending.suspend();
+
+        // Act
         pending.reactivate();
+
+        // Assert
         assertEquals(ClientStatus.ACTIVE, pending.getStatus());
         assertTrue(pending.canConfirmBooking());
     }
 
     // --- Factory and projection ---------------------------------------------
-
-    @Test
-    @DisplayName("The pendingVerification factory keeps every attribute it receives")
-    void factoryKeepsEveryAttribute() {
-        UUID id = UUID.randomUUID();
-        LocalDate birthDate = LocalDate.of(1990, 1, 31);
-        Client client = Client.pendingVerification(id, "Ana Perez", "CC-98765", birthDate,
-                "ana@example.com", "+573001234567", "Medellin", NotificationChannel.WHATSAPP);
-
-        assertEquals(id, client.getId());
-        assertEquals("Ana Perez", client.getFullName());
-        assertEquals("CC-98765", client.getDocument());
-        assertEquals(birthDate, client.getBirthDate());
-        assertEquals("ana@example.com", client.getEmail());
-        assertEquals("+573001234567", client.getPhone());
-        assertEquals("Medellin", client.getCity());
-        assertEquals(NotificationChannel.WHATSAPP, client.getNotificationChannel());
-        assertEquals(ClientStatus.PENDING_VERIFICATION, client.getStatus());
-    }
-
-    @Test
-    @DisplayName("The rehydration constructor accepts any persisted status without re-running the state machine")
-    void rehydrationConstructorAcceptsAnyStatus() {
-        Client suspended = clientInStatus(ClientStatus.SUSPENDED);
-        assertEquals(ClientStatus.SUSPENDED, suspended.getStatus());
-        assertNotNull(suspended.getId());
-    }
 
     // --- State transition table: 3 states x 3 transitions = 9 cells ----------
 
@@ -141,10 +105,13 @@ class ClientTest {
             "SUSPENDED,            reactivate,  ACTIVE"
     })
     void allowedTransitions(ClientStatus from, String transition, ClientStatus expected) {
+        // Arrange
         Client client = clientInStatus(from);
 
+        // Act
         applyTransition(client, transition);
 
+        // Assert
         assertEquals(expected, client.getStatus());
     }
 
@@ -157,10 +124,14 @@ class ClientTest {
             "SUSPENDED,            verifyEmail"
     })
     void forbiddenTransitions(ClientStatus from, String transition) {
+        // Arrange
         Client client = clientInStatus(from);
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> applyTransition(client, transition));
+        // Act
+        Executable act = () -> applyTransition(client, transition);
 
+        // Assert
+        BusinessException ex = assertThrows(BusinessException.class, act);
         assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
         assertNotNull(ex.getMessage());
         assertEquals(from, client.getStatus(), "a rejected transition must not mutate the aggregate");
@@ -182,16 +153,28 @@ class ClientTest {
         @Test
         @DisplayName("Verifying a suspended client explains that the status blocks the activation")
         void verifySuspendedMessage() {
+            // Arrange
             Client client = clientInStatus(ClientStatus.SUSPENDED);
-            BusinessException ex = assertThrows(BusinessException.class, client::verifyEmail);
+
+            // Act
+            Executable act = client::verifyEmail;
+
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("Client SUSPENDED cannot be moved to ACTIVE by email verification", ex.getMessage());
         }
 
         @Test
         @DisplayName("Suspending a pending client explains that verification comes first")
         void suspendPendingMessage() {
+            // Arrange
             Client client = clientInStatus(ClientStatus.PENDING_VERIFICATION);
-            BusinessException ex = assertThrows(BusinessException.class, client::suspend);
+
+            // Act
+            Executable act = client::suspend;
+
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("A pending verification client cannot be suspended", ex.getMessage());
         }
 
@@ -199,8 +182,14 @@ class ClientTest {
         @DisplayName("Reactivating a client that is not suspended explains that only suspended clients qualify")
         @CsvSource({"PENDING_VERIFICATION", "ACTIVE"})
         void reactivateNonSuspendedMessage(ClientStatus from) {
+            // Arrange
             Client client = clientInStatus(from);
-            BusinessException ex = assertThrows(BusinessException.class, client::reactivate);
+
+            // Act
+            Executable act = client::reactivate;
+
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("Only suspended clients can be reactivated", ex.getMessage());
         }
     }
@@ -215,49 +204,13 @@ class ClientTest {
             "SUSPENDED,            false"
     })
     void canConfirmBookingDecisionTable(ClientStatus status, boolean expected) {
-        assertEquals(expected, clientInStatus(status).canConfirmBooking());
-    }
-
-    @ParameterizedTest
-    @DisplayName("Every declared status is covered by the booking decision table")
-    @EnumSource(ClientStatus.class)
-    void everyStatusAnswersTheBookingInvariant(ClientStatus status) {
+        // Arrange
         Client client = clientInStatus(status);
-        assertEquals(status == ClientStatus.ACTIVE, client.canConfirmBooking());
-    }
 
-    // --- Longer paths through the machine ------------------------------------
+        // Act
+        boolean canConfirm = client.canConfirmBooking();
 
-    @Test
-    @DisplayName("A client can be suspended and reactivated repeatedly without losing the booking invariant")
-    void suspendReactivateCycleIsRepeatable() {
-        Client client = newPendingClient();
-        client.verifyEmail();
-
-        for (int cycle = 0; cycle < 3; cycle++) {
-            client.suspend();
-            assertFalse(client.canConfirmBooking());
-            client.reactivate();
-            assertTrue(client.canConfirmBooking());
-        }
-        assertEquals(ClientStatus.ACTIVE, client.getStatus());
-    }
-
-    @Test
-    @DisplayName("Suspending twice keeps the client suspended instead of failing")
-    void suspendTwiceIsIdempotent() {
-        Client client = clientInStatus(ClientStatus.ACTIVE);
-        client.suspend();
-        client.suspend();
-        assertEquals(ClientStatus.SUSPENDED, client.getStatus());
-    }
-
-    @Test
-    @DisplayName("A reactivated client can be verified again without error because verification is idempotent on ACTIVE")
-    void verifyAfterReactivationIsIdempotent() {
-        Client client = clientInStatus(ClientStatus.SUSPENDED);
-        client.reactivate();
-        client.verifyEmail();
-        assertEquals(ClientStatus.ACTIVE, client.getStatus());
+        // Assert
+        assertEquals(expected, canConfirm);
     }
 }

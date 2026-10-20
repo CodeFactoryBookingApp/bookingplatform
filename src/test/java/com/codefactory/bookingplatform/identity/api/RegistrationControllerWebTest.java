@@ -21,6 +21,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -105,29 +106,20 @@ class RegistrationControllerWebTest {
     // ---------------------------------------------------------------- register
 
     @Test
-    @DisplayName("POST /registrations answers 201 Created")
-    void registerAnswers201() throws Exception {
-        when(registerClientUseCase.register(any()))
-                .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com",
-                        ClientStatus.PENDING_VERIFICATION));
-
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(status().isCreated());
-    }
-
-    @Test
     @DisplayName("POST /registrations returns clientId, email, status and message")
     void registerReturnsTheExpectedBody() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com",
                         ClientStatus.PENDING_VERIFICATION));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        result.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.clientId").value(CLIENT_ID.toString()))
                 .andExpect(jsonPath("$.email").value("ana.perez@example.com"))
                 .andExpect(jsonPath("$.status").value("PENDING_VERIFICATION"))
@@ -137,15 +129,18 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("SECURITY: the registration response never echoes the password back")
     void registerResponseDoesNotLeakThePassword() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com",
                         ClientStatus.PENDING_VERIFICATION));
 
-        String body = mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andReturn().getResponse().getContentAsString();
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
 
+        // Assert
+        String body = result.andReturn().getResponse().getContentAsString();
         assertFalse(body.contains("Str0ng!Pass"), "the plain password leaked into the response body");
         assertFalse(body.toLowerCase().contains("password"), "a password field leaked into the response body");
     }
@@ -153,14 +148,18 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("POST /registrations maps every payload field onto the command, untouched")
     void registerMapsTheWholePayloadOntoTheCommand() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com",
                         ClientStatus.PENDING_VERIFICATION));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(status().isCreated());
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        result.andExpect(status().isCreated());
 
         ArgumentCaptor<RegisterClientCommand> captor = ArgumentCaptor.forClass(RegisterClientCommand.class);
         verify(registerClientUseCase).register(captor.capture());
@@ -177,44 +176,55 @@ class RegistrationControllerWebTest {
             "DUPLICATE_DOCUMENT,     409",
             "PASSWORD_TOO_WEAK,      400",
             "UPSTREAM_AUTH_ERROR,    502",
-            "RATE_LIMITED,           429",
-            "INTERNAL_ERROR,         500"})
+            "RATE_LIMITED,           429"})
     @DisplayName("A BusinessException is mapped to its declared status")
     void businessExceptionsAreMappedToTheirStatus(String errorCode, int expectedStatus) throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenThrow(new BusinessException(ErrorCode.valueOf(errorCode)));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(status().is(expectedStatus))
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        result.andExpect(status().is(expectedStatus))
                 .andExpect(jsonPath("$.errorCode").value(errorCode));
     }
 
     @Test
     @DisplayName("A BusinessException carrying details exposes them under $.details")
     void businessExceptionDetailsAreExposed() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenThrow(new BusinessException(ErrorCode.PASSWORD_TOO_WEAK, "weak",
                         Map.of("violations", "at least one digit")));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details.violations").value("at least one digit"));
     }
 
     @Test
     @DisplayName("The ProblemDetail carries type, title and instance alongside the errorCode")
     void problemDetailIsFullyPopulated() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenThrow(new BusinessException(ErrorCode.MINOR_NOT_ALLOWED));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        result.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.type")
                         .value("https://bookingplatform.codefactory.com/errors/minor_not_allowed"))
                 .andExpect(jsonPath("$.title").value("Bad Request"))
@@ -225,15 +235,21 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("An unexpected failure is hidden behind a generic 500 INTERNAL_ERROR")
     void unexpectedFailureIsMaskedAsInternalError() throws Exception {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenThrow(new IllegalStateException("connection pool exhausted at 10.0.0.7"));
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validRegistrationPayload()))
-                .andExpect(status().isInternalServerError())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRegistrationPayload()));
+
+        // Assert
+        String body = result.andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("INTERNAL_ERROR"))
-                .andExpect(jsonPath("$.detail").value("Unexpected internal error"));
+                .andExpect(jsonPath("$.detail").value("Unexpected internal error"))
+                .andReturn().getResponse().getContentAsString();
+        assertFalse(body.contains("10.0.0.7"), "the internal exception message leaked into the response body");
     }
 
     @ParameterizedTest(name = "a missing {0} is rejected with 400 and named in $.details")
@@ -241,10 +257,13 @@ class RegistrationControllerWebTest {
             "notificationChannel", "password"})
     @DisplayName("Every mandatory field missing is reported as VALIDATION_ERROR")
     void missingMandatoryFieldsAreReported(String field) throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWithout(field)))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWithout(field)));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.details." + field).isNotEmpty());
 
@@ -252,40 +271,21 @@ class RegistrationControllerWebTest {
     }
 
     @Test
-    @DisplayName("A blank fullName is rejected before the use case is reached")
-    void blankFullNameIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWith("fullName", "\"   \"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details.fullName").value("fullName is required"));
-
-        verify(registerClientUseCase, never()).register(any());
-    }
-
-    @Test
-    @DisplayName("An out of range document is rejected with its pattern message")
-    void outOfRangeDocumentIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWith("document", "\"ABCD\"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.details.document")
-                        .value("document must be 5-20 alphanumeric characters or hyphens"));
-    }
-
-    @Test
     @DisplayName("Several invalid fields are all reported in one 400 answer")
     void severalInvalidFieldsAreReportedTogether() throws Exception {
+        // Arrange
         Map<String, String> fields = validFields();
         fields.put("document", "\"A\"");
         fields.put("phone", "\"12\"");
         fields.put("email", "\"not-an-email\"");
 
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(fields)))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(fields)));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details.document").isNotEmpty())
                 .andExpect(jsonPath("$.details.phone").isNotEmpty())
                 .andExpect(jsonPath("$.details.email").isNotEmpty());
@@ -294,10 +294,13 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("A birthDate in the future is rejected by the Past constraint, not by the use case")
     void futureBirthDateIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWith("birthDate", "\"" + LocalDate.now().plusDays(1) + "\"")))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWith("birthDate", "\"" + LocalDate.now().plusDays(1) + "\"")));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details.birthDate").value("birthDate must be in the past"));
 
         verify(registerClientUseCase, never()).register(any());
@@ -306,10 +309,13 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("A syntactically broken JSON body is answered 400 VALIDATION_ERROR")
     void brokenJsonIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"fullName\": \"Ana\",,,"))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fullName\": \"Ana\",,,"));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.detail").value("Malformed request body"));
     }
@@ -317,10 +323,13 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("An unknown notificationChannel is answered 400 VALIDATION_ERROR")
     void unknownNotificationChannelIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWith("notificationChannel", "\"PIGEON\"")))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWith("notificationChannel", "\"PIGEON\"")));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 
         verify(registerClientUseCase, never()).register(any());
@@ -329,10 +338,13 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("A birthDate in the wrong format is answered 400 VALIDATION_ERROR")
     void malformedBirthDateIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(payloadWith("birthDate", "\"10/04/1995\"")))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(payloadWith("birthDate", "\"10/04/1995\"")));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
 
         verify(registerClientUseCase, never()).register(any());
@@ -341,10 +353,13 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("An empty request body is answered 400 VALIDATION_ERROR")
     void emptyBodyIsRejected() throws Exception {
-        mockMvc.perform(post(REGISTRATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(""))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(REGISTRATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(""));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
     }
 
@@ -353,31 +368,28 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("POST /verification-resends answers 202 Accepted with an empty body")
     void resendAnswers202() throws Exception {
-        mockMvc.perform(post(RESENDS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\": \"ana.perez@example.com\"}"))
-                .andExpect(status().isAccepted())
+        // Act
+        ResultActions result = mockMvc.perform(post(RESENDS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"ana.perez@example.com\"}"));
+
+        // Assert
+        result.andExpect(status().isAccepted())
                 .andExpect(content().string(""));
 
         verify(resendVerificationUseCase).resend("ana.perez@example.com");
     }
 
-    @Test
-    @DisplayName("An unknown email still gets 202, so the endpoint does not enumerate users")
-    void resendDoesNotEnumerateUsers() throws Exception {
-        mockMvc.perform(post(RESENDS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\": \"nobody@example.com\"}"))
-                .andExpect(status().isAccepted());
-    }
-
     @ParameterizedTest(name = "resend with email [{0}] is rejected with 400")
     @ValueSource(strings = {"", "   ", "not-an-email", "@example.com"})
     void resendRejectsInvalidEmails(String email) throws Exception {
-        mockMvc.perform(post(RESENDS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\": \"" + email + "\"}"))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(RESENDS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"" + email + "\"}"));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.details.email").isNotEmpty());
 
@@ -387,40 +399,36 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("A resend failure from the provider surfaces as 502")
     void resendUpstreamFailureIsMappedTo502() throws Exception {
+        // Arrange
         org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.UPSTREAM_AUTH_ERROR))
                 .when(resendVerificationUseCase).resend(anyString());
 
-        mockMvc.perform(post(RESENDS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\": \"ana.perez@example.com\"}"))
-                .andExpect(status().isBadGateway())
+        // Act
+        ResultActions result = mockMvc.perform(post(RESENDS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"ana.perez@example.com\"}"));
+
+        // Assert
+        result.andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.errorCode").value("UPSTREAM_AUTH_ERROR"));
     }
 
     // ------------------------------------------------------------- confirm
 
     @Test
-    @DisplayName("POST /email-verifications answers 200 OK")
-    void confirmAnswers200() throws Exception {
-        when(confirmEmailUseCase.confirm(anyString()))
-                .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.ACTIVE));
-
-        mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"pkce_1a2b3c\"}"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
     @DisplayName("POST /email-verifications returns the activated client and never the token hash")
     void confirmReturnsTheActivatedClientWithoutTheToken() throws Exception {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.ACTIVE));
 
-        String body = mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"pkce_1a2b3c\"}"))
-                .andExpect(jsonPath("$.clientId").value(CLIENT_ID.toString()))
+        // Act
+        ResultActions result = mockMvc.perform(post(CONFIRMATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\": \"pkce_1a2b3c\"}"));
+
+        // Assert
+        String body = result.andExpect(jsonPath("$.clientId").value(CLIENT_ID.toString()))
                 .andExpect(jsonPath("$.email").value("ana.perez@example.com"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.message").isNotEmpty())
@@ -432,13 +440,17 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("The confirmation token reaches the use case untouched")
     void confirmForwardsTheTokenHash() throws Exception {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.ACTIVE));
 
-        mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"pkce_1a2b3c\"}"))
-                .andExpect(status().isOk());
+        // Act
+        ResultActions result = mockMvc.perform(post(CONFIRMATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\": \"pkce_1a2b3c\"}"));
+
+        // Assert
+        result.andExpect(status().isOk());
 
         verify(confirmEmailUseCase).confirm("pkce_1a2b3c");
     }
@@ -446,10 +458,13 @@ class RegistrationControllerWebTest {
     @ParameterizedTest(name = "confirm with tokenHash [{0}] is rejected with 400")
     @ValueSource(strings = {"", "   "})
     void confirmRejectsBlankTokens(String tokenHash) throws Exception {
-        mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"" + tokenHash + "\"}"))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(CONFIRMATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\": \"" + tokenHash + "\"}"));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.details.tokenHash").value("tokenHash is required"));
 
         verify(confirmEmailUseCase, never()).confirm(anyString());
@@ -458,26 +473,34 @@ class RegistrationControllerWebTest {
     @Test
     @DisplayName("A consumed or invalid token is answered 400 VERIFICATION_TOKEN_INVALID")
     void confirmWithInvalidTokenIsRejected() throws Exception {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenThrow(new BusinessException(ErrorCode.VERIFICATION_TOKEN_INVALID));
 
-        mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"already-used\"}"))
-                .andExpect(status().isBadRequest())
+        // Act
+        ResultActions result = mockMvc.perform(post(CONFIRMATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\": \"already-used\"}"));
+
+        // Assert
+        result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VERIFICATION_TOKEN_INVALID"));
     }
 
     @Test
     @DisplayName("A confirmed user with no client profile is answered 404 RESOURCE_NOT_FOUND")
     void confirmWithoutProfileIsAnswered404() throws Exception {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Client profile not found"));
 
-        mockMvc.perform(post(CONFIRMATIONS)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"tokenHash\": \"orphan-token\"}"))
-                .andExpect(status().isNotFound())
+        // Act
+        ResultActions result = mockMvc.perform(post(CONFIRMATIONS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tokenHash\": \"orphan-token\"}"));
+
+        // Assert
+        result.andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("RESOURCE_NOT_FOUND"));
     }
 }

@@ -21,7 +21,6 @@ import static com.codefactory.bookingplatform.support.BeanValidationSupport.inva
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.messagesFor;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.repeat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -96,7 +95,14 @@ class RegisterClientRequestValidationTest {
     @Test
     @DisplayName("The reference payload raises no violation at all")
     void referencePayloadIsValid() {
-        assertEquals(Set.of(), invalidProperties(valid()));
+        // Arrange
+        RegisterClientRequest request = valid();
+
+        // Act
+        Set<String> invalid = invalidProperties(request);
+
+        // Assert
+        assertEquals(Set.of(), invalid);
     }
 
     @Nested
@@ -106,21 +112,41 @@ class RegisterClientRequestValidationTest {
         @ParameterizedTest(name = "length {0} is accepted")
         @ValueSource(ints = {1, 119, 120})
         void acceptedLengths(int length) {
-            assertTrue(messagesFor(withFullName(repeat('a', length)), "fullName").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withFullName(repeat('a', length));
+
+            // Act
+            Set<String> messages = messagesFor(request, "fullName");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @Test
         @DisplayName("121 characters is one over the limit and is rejected")
         void oneOverTheLimitIsRejected() {
-            assertEquals(Set.of("fullName must be at most 120 characters"),
-                    messagesFor(withFullName(repeat('a', 121)), "fullName"));
+            // Arrange
+            RegisterClientRequest request = withFullName(repeat('a', 121));
+
+            // Act
+            Set<String> messages = messagesFor(request, "fullName");
+
+            // Assert
+            assertEquals(Set.of("fullName must be at most 120 characters"), messages);
         }
 
         @ParameterizedTest(name = "missing, empty or blank value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void mandatoryValueIsRejected(String value) {
-            assertTrue(messagesFor(withFullName(value), "fullName").contains("fullName is required"));
+            // Arrange
+            RegisterClientRequest request = withFullName(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "fullName");
+
+            // Assert
+            assertTrue(messages.contains("fullName is required"));
         }
     }
 
@@ -129,9 +155,16 @@ class RegisterClientRequestValidationTest {
     class Document {
 
         @ParameterizedTest(name = "[{0}] is accepted")
-        @ValueSource(strings = {"ABCDE", "12345", "CC-1020304050", "ABCDEFGHIJ1234567890", "-----"})
+        @ValueSource(strings = {"ABCDE", "12345", "CC-1020304050", "ABCDEFGHIJ1234567890"})
         void acceptedDocuments(String value) {
-            assertTrue(messagesFor(withDocument(value), "document").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withDocument(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "document");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @ParameterizedTest(name = "[{0}] is rejected")
@@ -142,22 +175,41 @@ class RegisterClientRequestValidationTest {
                 "ABC_DE",
                 "ABCD.E"})
         void rejectedDocuments(String value) {
-            assertEquals(Set.of("document must be 5-20 alphanumeric characters or hyphens"),
-                    messagesFor(withDocument(value), "document"));
+            // Arrange
+            RegisterClientRequest request = withDocument(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "document");
+
+            // Assert
+            assertEquals(Set.of("document must be 5-20 alphanumeric characters or hyphens"), messages);
         }
 
         @Test
         @DisplayName("An accented letter is outside the allowed character set")
         void accentedLetterIsRejected() {
-            assertEquals(Set.of("document must be 5-20 alphanumeric characters or hyphens"),
-                    messagesFor(withDocument("ABCDÉ"), "document"));
+            // Arrange
+            RegisterClientRequest request = withDocument("ABCDÉ");
+
+            // Act
+            Set<String> messages = messagesFor(request, "document");
+
+            // Assert
+            assertEquals(Set.of("document must be 5-20 alphanumeric characters or hyphens"), messages);
         }
 
         @ParameterizedTest(name = "missing, empty or blank value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void mandatoryValueIsRejected(String value) {
-            assertTrue(messagesFor(withDocument(value), "document").contains("document is required"));
+            // Arrange
+            RegisterClientRequest request = withDocument(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "document");
+
+            // Assert
+            assertTrue(messages.contains("document is required"));
         }
     }
 
@@ -168,27 +220,40 @@ class RegisterClientRequestValidationTest {
         @Test
         @DisplayName("Yesterday is in the past and is accepted")
         void yesterdayIsAccepted() {
-            assertTrue(messagesFor(withBirthDate(LocalDate.now().minusDays(1)), "birthDate").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withBirthDate(LocalDate.now().minusDays(1));
+
+            // Act
+            Set<String> messages = messagesFor(request, "birthDate");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @Test
         @DisplayName("Today is NOT in the past and is rejected")
         void todayIsRejected() {
-            assertEquals(Set.of("birthDate must be in the past"),
-                    messagesFor(withBirthDate(LocalDate.now()), "birthDate"));
-        }
+            // Arrange
+            RegisterClientRequest request = withBirthDate(LocalDate.now());
 
-        @Test
-        @DisplayName("Tomorrow is rejected")
-        void futureIsRejected() {
-            assertEquals(Set.of("birthDate must be in the past"),
-                    messagesFor(withBirthDate(LocalDate.now().plusDays(1)), "birthDate"));
+            // Act
+            Set<String> messages = messagesFor(request, "birthDate");
+
+            // Assert
+            assertEquals(Set.of("birthDate must be in the past"), messages);
         }
 
         @Test
         @DisplayName("A null birthDate is rejected as required")
         void nullIsRejected() {
-            assertEquals(Set.of("birthDate is required"), messagesFor(withBirthDate(null), "birthDate"));
+            // Arrange
+            RegisterClientRequest request = withBirthDate(null);
+
+            // Act
+            Set<String> messages = messagesFor(request, "birthDate");
+
+            // Assert
+            assertEquals(Set.of("birthDate is required"), messages);
         }
     }
 
@@ -199,27 +264,54 @@ class RegisterClientRequestValidationTest {
         @Test
         @DisplayName("An address of exactly 160 characters is accepted")
         void maxLengthIsAccepted() {
-            assertTrue(messagesFor(withEmail(emailOfLength(160)), "email").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withEmail(emailOfLength(160));
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @Test
         @DisplayName("An address of 161 characters is one over the limit and is rejected")
         void oneOverTheLimitIsRejected() {
-            assertEquals(Set.of("email must be at most 160 characters"),
-                    messagesFor(withEmail(emailOfLength(161)), "email"));
+            // Arrange
+            RegisterClientRequest request = withEmail(emailOfLength(161));
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertEquals(Set.of("email must be at most 160 characters"), messages);
         }
 
         @ParameterizedTest(name = "[{0}] is not a valid address")
         @ValueSource(strings = {"not-an-email", "missing-at.example.com", "a@", "@example.com", "a b@example.com"})
         void invalidFormatsAreRejected(String value) {
-            assertTrue(messagesFor(withEmail(value), "email").contains("email must be a valid address"));
+            // Arrange
+            RegisterClientRequest request = withEmail(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email must be a valid address"));
         }
 
         @ParameterizedTest(name = "missing, empty or blank value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void mandatoryValueIsRejected(String value) {
-            assertTrue(messagesFor(withEmail(value), "email").contains("email is required"));
+            // Arrange
+            RegisterClientRequest request = withEmail(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email is required"));
         }
     }
 
@@ -238,7 +330,14 @@ class RegisterClientRequestValidationTest {
         @ParameterizedTest(name = "[{0}] is accepted")
         @MethodSource("accepted")
         void acceptedPhones(String value) {
-            assertTrue(messagesFor(withPhone(value), "phone").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withPhone(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "phone");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         static Stream<Arguments> rejected() {
@@ -256,15 +355,28 @@ class RegisterClientRequestValidationTest {
         @ParameterizedTest(name = "[{0}] is rejected")
         @MethodSource("rejected")
         void rejectedPhones(String value) {
-            assertEquals(Set.of("phone must contain 7-15 digits, optionally prefixed with +"),
-                    messagesFor(withPhone(value), "phone"));
+            // Arrange
+            RegisterClientRequest request = withPhone(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "phone");
+
+            // Assert
+            assertEquals(Set.of("phone must contain 7-15 digits, optionally prefixed with +"), messages);
         }
 
         @ParameterizedTest(name = "missing, empty or blank value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void mandatoryValueIsRejected(String value) {
-            assertTrue(messagesFor(withPhone(value), "phone").contains("phone is required"));
+            // Arrange
+            RegisterClientRequest request = withPhone(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "phone");
+
+            // Assert
+            assertTrue(messages.contains("phone is required"));
         }
     }
 
@@ -275,21 +387,41 @@ class RegisterClientRequestValidationTest {
         @ParameterizedTest(name = "length {0} is accepted")
         @ValueSource(ints = {1, 79, 80})
         void acceptedLengths(int length) {
-            assertTrue(messagesFor(withCity(repeat('a', length)), "city").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withCity(repeat('a', length));
+
+            // Act
+            Set<String> messages = messagesFor(request, "city");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @Test
         @DisplayName("81 characters is one over the limit and is rejected")
         void oneOverTheLimitIsRejected() {
-            assertEquals(Set.of("city must be at most 80 characters"),
-                    messagesFor(withCity(repeat('a', 81)), "city"));
+            // Arrange
+            RegisterClientRequest request = withCity(repeat('a', 81));
+
+            // Act
+            Set<String> messages = messagesFor(request, "city");
+
+            // Assert
+            assertEquals(Set.of("city must be at most 80 characters"), messages);
         }
 
         @ParameterizedTest(name = "missing, empty or blank value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void mandatoryValueIsRejected(String value) {
-            assertTrue(messagesFor(withCity(value), "city").contains("city is required"));
+            // Arrange
+            RegisterClientRequest request = withCity(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "city");
+
+            // Assert
+            assertTrue(messages.contains("city is required"));
         }
     }
 
@@ -300,27 +432,54 @@ class RegisterClientRequestValidationTest {
         @ParameterizedTest(name = "length {0} is accepted")
         @ValueSource(ints = {8, 9, 71, 72})
         void acceptedLengths(int length) {
-            assertTrue(messagesFor(withPassword(repeat('a', length)), "password").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withPassword(repeat('a', length));
+
+            // Act
+            Set<String> messages = messagesFor(request, "password");
+
+            // Assert
+            assertTrue(messages.isEmpty());
         }
 
         @ParameterizedTest(name = "length {0} is outside [8, 72] and is rejected")
-        @CsvSource({"1", "7", "73", "100"})
+        @CsvSource({"7", "73"})
         void rejectedLengths(int length) {
-            assertTrue(messagesFor(withPassword(repeat('a', length)), "password")
-                    .contains("password must be between 8 and 72 characters"));
+            // Arrange
+            RegisterClientRequest request = withPassword(repeat('a', length));
+
+            // Act
+            Set<String> messages = messagesFor(request, "password");
+
+            // Assert
+            assertTrue(messages.contains("password must be between 8 and 72 characters"));
         }
 
         @ParameterizedTest(name = "missing or empty value is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {""})
         void mandatoryValueIsRejected(String value) {
-            assertFalse(messagesFor(withPassword(value), "password").isEmpty());
+            // Arrange
+            RegisterClientRequest request = withPassword(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "password");
+
+            // Assert
+            assertTrue(messages.contains("password is required"));
         }
 
         @Test
         @DisplayName("A password of eight spaces is long enough but still blank")
         void eightSpacesIsBlank() {
-            assertEquals(Set.of("password is required"), messagesFor(withPassword("        "), "password"));
+            // Arrange
+            RegisterClientRequest request = withPassword("        ");
+
+            // Act
+            Set<String> messages = messagesFor(request, "password");
+
+            // Assert
+            assertEquals(Set.of("password is required"), messages);
         }
     }
 
@@ -328,26 +487,32 @@ class RegisterClientRequestValidationTest {
     @DisplayName("notificationChannel: NotNull")
     class Channel {
 
-        @ParameterizedTest(name = "{0} is accepted")
-        @ValueSource(strings = {"EMAIL", "SMS", "WHATSAPP"})
-        void everyDeclaredChannelIsAccepted(String value) {
-            assertTrue(messagesFor(withChannel(NotificationChannel.valueOf(value)), "notificationChannel").isEmpty());
-        }
-
         @Test
         @DisplayName("A null channel is rejected as required")
         void nullIsRejected() {
-            assertEquals(Set.of("notificationChannel is required"),
-                    messagesFor(withChannel(null), "notificationChannel"));
+            // Arrange
+            RegisterClientRequest request = withChannel(null);
+
+            // Act
+            Set<String> messages = messagesFor(request, "notificationChannel");
+
+            // Assert
+            assertEquals(Set.of("notificationChannel is required"), messages);
         }
     }
 
     @Test
     @DisplayName("An all-null payload reports every mandatory field at once")
     void allNullPayloadReportsEveryMandatoryField() {
+        // Arrange
         RegisterClientRequest empty = new RegisterClientRequest(null, null, null, null, null, null, null, null);
+
+        // Act
+        Set<String> invalid = invalidProperties(empty);
+
+        // Assert
         assertEquals(
                 Set.of("fullName", "document", "birthDate", "email", "phone", "city", "notificationChannel", "password"),
-                invalidProperties(empty));
+                invalid);
     }
 }

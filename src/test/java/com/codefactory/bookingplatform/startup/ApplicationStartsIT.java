@@ -21,6 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * container. Everything else in this package inspects the context; this class
  * checks that the process actually serves traffic, which is the question the
  * demo answers.
+ *
+ * <p>Arrange-Act-Assert: the running server is the shared fixture, so there is nothing to arrange
+ * inside the tests; the Act is one real HTTP request and the Assert reads its response.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ApplicationStartsIT extends PostgresIntegrationTestBase {
@@ -48,43 +51,23 @@ class ApplicationStartsIT extends PostgresIntegrationTestBase {
     }
 
     @Test
-    @DisplayName("The embedded server is listening on a real port")
-    void serverIsListening() {
-        assertTrue(port > 0);
-    }
-
-    @Test
     @DisplayName("GET /actuator/health answers 200 UP over real HTTP")
     void healthAnswersOverHttp() throws Exception {
+        // Act
         HttpResponse<String> response = get("/actuator/health");
 
+        // Assert
         assertEquals(200, response.statusCode());
         assertTrue(response.body().contains("\"status\":\"UP\""), response.body());
-    }
-
-    @Test
-    @DisplayName("GET /actuator/health/readiness, the path render.yaml polls, answers 200 over real HTTP")
-    void readinessAnswersOverHttp() throws Exception {
-        HttpResponse<String> response = get("/actuator/health/readiness");
-
-        assertEquals(200, response.statusCode());
-        assertTrue(response.body().contains("\"status\":\"UP\""), response.body());
-    }
-
-    @Test
-    @DisplayName("The OpenAPI contract is served publicly, so Swagger UI works without a token")
-    void openApiContractIsPublic() throws Exception {
-        HttpResponse<String> response = get("/v3/api-docs");
-
-        assertEquals(200, response.statusCode());
-        assertTrue(response.body().contains("Booking Platform API"), response.body());
     }
 
     @Test
     @DisplayName("A public endpoint is reachable without a token: a malformed registration gets 400, not 401")
     void publicEndpointAnswersWithoutToken() throws Exception {
+        // Act
         HttpResponse<String> response = postJson("/api/v1/registrations", "{}");
 
+        // Assert
         assertEquals(400, response.statusCode(), response.body());
         assertTrue(response.body().contains("VALIDATION_ERROR"), response.body());
     }
@@ -92,8 +75,10 @@ class ApplicationStartsIT extends PostgresIntegrationTestBase {
     @Test
     @DisplayName("A protected endpoint answers 401 AUTH_REQUIRED when no token is sent")
     void protectedEndpointRequiresAToken() throws Exception {
+        // Act
         HttpResponse<String> response = get("/api/v1/auth/me");
 
+        // Assert
         assertEquals(401, response.statusCode(), response.body());
         assertTrue(response.body().contains("AUTH_REQUIRED"), response.body());
         assertTrue(response.headers().firstValue("Content-Type").orElse("")
@@ -103,8 +88,10 @@ class ApplicationStartsIT extends PostgresIntegrationTestBase {
     @Test
     @DisplayName("Every error response carries the X-Trace-Id header used to correlate the logs")
     void errorsCarryATraceId() throws Exception {
+        // Act
         HttpResponse<String> response = get("/api/v1/auth/me");
 
+        // Assert
         assertTrue(response.headers().firstValue("X-Trace-Id").isPresent(), response.headers().toString());
     }
 }

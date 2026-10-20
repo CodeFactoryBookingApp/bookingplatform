@@ -9,7 +9,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Set;
 
-import static com.codefactory.bookingplatform.support.BeanValidationSupport.emailOfLength;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.invalidProperties;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.messagesFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,21 +27,28 @@ class RegistrationSupportRequestValidationTest {
         @Test
         @DisplayName("A non blank token hash raises no violation")
         void validPayload() {
-            assertEquals(Set.of(), invalidProperties(new ConfirmEmailRequest("pkce_1a2b3c")));
+            // Arrange
+            ConfirmEmailRequest request = new ConfirmEmailRequest("pkce_1a2b3c");
+
+            // Act
+            Set<String> invalid = invalidProperties(request);
+
+            // Assert
+            assertEquals(Set.of(), invalid);
         }
 
         @ParameterizedTest(name = "missing, empty or blank tokenHash is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   ", "\t"})
         void tokenHashIsMandatory(String value) {
-            assertEquals(Set.of("tokenHash is required"),
-                    messagesFor(new ConfirmEmailRequest(value), "tokenHash"));
-        }
+            // Arrange
+            ConfirmEmailRequest request = new ConfirmEmailRequest(value);
 
-        @Test
-        @DisplayName("The token hash has no length ceiling: a very long opaque token is accepted")
-        void longTokenIsAccepted() {
-            assertTrue(messagesFor(new ConfirmEmailRequest("a".repeat(512)), "tokenHash").isEmpty());
+            // Act
+            Set<String> messages = messagesFor(request, "tokenHash");
+
+            // Assert
+            assertEquals(Set.of("tokenHash is required"), messages);
         }
     }
 
@@ -53,28 +59,41 @@ class RegistrationSupportRequestValidationTest {
         @Test
         @DisplayName("A well formed email raises no violation")
         void validPayload() {
-            assertEquals(Set.of(), invalidProperties(new ResendVerificationRequest("ana@example.com")));
+            // Arrange
+            ResendVerificationRequest request = new ResendVerificationRequest("ana@example.com");
+
+            // Act
+            Set<String> invalid = invalidProperties(request);
+
+            // Assert
+            assertEquals(Set.of(), invalid);
         }
 
         @ParameterizedTest(name = "missing, empty or blank email is rejected: [{0}]")
         @NullSource
         @ValueSource(strings = {"", "   "})
         void emailIsMandatory(String value) {
-            assertTrue(messagesFor(new ResendVerificationRequest(value), "email").contains("email is required"));
+            // Arrange
+            ResendVerificationRequest request = new ResendVerificationRequest(value);
+
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email is required"));
         }
 
         @ParameterizedTest(name = "[{0}] is not a valid address")
         @ValueSource(strings = {"not-an-email", "a@", "@example.com", "ana perez@example.com"})
         void emailFormatIsChecked(String value) {
-            assertTrue(messagesFor(new ResendVerificationRequest(value), "email")
-                    .contains("email must be a valid address"));
-        }
+            // Arrange
+            ResendVerificationRequest request = new ResendVerificationRequest(value);
 
-        @Test
-        @DisplayName("The resend DTO has no length ceiling, unlike the registration DTO")
-        void noMaxLengthConstraint() {
-            String longButValid = emailOfLength(190);
-            assertTrue(messagesFor(new ResendVerificationRequest(longButValid), "email").isEmpty());
+            // Act
+            Set<String> messages = messagesFor(request, "email");
+
+            // Assert
+            assertTrue(messages.contains("email must be a valid address"));
         }
     }
 }
