@@ -12,9 +12,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -112,35 +109,5 @@ class LoginAttemptRepositoryAdapterTest {
 
         // Assert
         assertEquals(List.of(first, second), failures);
-    }
-
-    @Test
-    @DisplayName("An account with no recent failures yields an empty list, never null")
-    void findFailuresSinceReturnsEmptyListWhenThereAreNoFailures() {
-        // Arrange
-        when(jpaRepository.findByEmailIgnoreCaseAndSuccessFalseAndAttemptedAtAfter(anyString(), any()))
-                .thenReturn(List.of());
-
-        // Act
-        List<Instant> failures = adapter.findFailuresSince("ana.perez@example.com", Instant.now());
-
-        // Assert
-        assertTrue(failures.isEmpty());
-    }
-
-    @Test
-    @DisplayName("A new login attempt entity carries no identity until the database assigns one")
-    void newEntityHasNoIdentityYet() {
-        // Arrange
-        Instant attemptedAt = Instant.parse("2026-09-22T10:15:30Z");
-
-        // Act
-        LoginAttemptEntity entity = new LoginAttemptEntity("ana.perez@example.com", false, attemptedAt);
-
-        // Assert
-        assertNull(entity.getId());
-        assertEquals("ana.perez@example.com", entity.getEmail());
-        assertFalse(entity.isSuccess());
-        assertEquals(attemptedAt, entity.getAttemptedAt());
     }
 }

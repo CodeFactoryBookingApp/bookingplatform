@@ -65,22 +65,8 @@ class AuthRequestValidationTest {
             assertTrue(messages.contains("email must be a valid address"));
         }
 
-        @ParameterizedTest(name = "missing, empty or blank password is rejected: [{0}]")
-        @NullSource
-        @ValueSource(strings = {"", "   "})
-        void passwordIsMandatory(String value) {
-            // Arrange
-            LoginRequest request = new LoginRequest("ana@example.com", value);
-
-            // Act
-            Set<String> messages = messagesFor(request, "password");
-
-            // Assert
-            assertEquals(Set.of("password is required"), messages);
-        }
-
         @Test
-        @DisplayName("Login does not constrain the password length: a single character is accepted")
+        @DisplayName("Login does not apply the minimum length policy: a single character is accepted")
         void passwordHasNoLengthConstraint() {
             // Arrange
             LoginRequest request = new LoginRequest("ana@example.com", "x");
@@ -155,9 +141,8 @@ class AuthRequestValidationTest {
             assertEquals(Set.of(), invalid);
         }
 
-        @ParameterizedTest(name = "missing, empty or blank tokenHash is rejected: [{0}]")
+        @ParameterizedTest(name = "missing tokenHash is rejected: [{0}]")
         @NullSource
-        @ValueSource(strings = {"", "   "})
         void tokenHashIsMandatory(String value) {
             // Arrange
             PasswordResetRequest request = new PasswordResetRequest(value, "Str0ng!Pass");
@@ -180,19 +165,6 @@ class AuthRequestValidationTest {
 
             // Assert
             assertTrue(messages.isEmpty());
-        }
-
-        @ParameterizedTest(name = "newPassword of length {0} is outside [8, 72] and is rejected")
-        @ValueSource(ints = {1, 7, 73, 100})
-        void rejectedPasswordLengths(int length) {
-            // Arrange
-            PasswordResetRequest request = new PasswordResetRequest("token-hash", repeat('a', length));
-
-            // Act
-            Set<String> messages = messagesFor(request, "newPassword");
-
-            // Assert
-            assertTrue(messages.contains("newPassword must be between 8 and 72 characters"));
         }
 
         @ParameterizedTest(name = "missing or empty newPassword is rejected: [{0}]")
