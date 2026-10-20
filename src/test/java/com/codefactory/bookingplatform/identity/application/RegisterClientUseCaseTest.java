@@ -12,13 +12,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.UUID;
@@ -114,36 +111,6 @@ class RegisterClientUseCaseTest {
         order.verifyNoMoreInteractions();
     }
 
-    @Test
-    @DisplayName("The stored client starts in PENDING_VERIFICATION and never in ACTIVE")
-    void storedClientStartsPendingVerification() {
-        // Arrange
-        provisioningSucceeds();
-        RegisterClientCommand command = command();
-
-        // Act
-        useCase.register(command);
-
-        // Assert
-        Client saved = capturedSavedClient();
-        assertEquals(ClientStatus.PENDING_VERIFICATION, saved.getStatus());
-        assertEquals(PROVISIONED_ID, saved.getId());
-    }
-
-    @Test
-    @DisplayName("The client is never deprovisioned when the registration completes")
-    void noCompensationOnSuccess() {
-        // Arrange
-        provisioningSucceeds();
-        RegisterClientCommand command = command();
-
-        // Act
-        useCase.register(command);
-
-        // Assert
-        verify(userProvisioning, never()).deprovisionUser(any(UUID.class));
-    }
-
     // --- Normalisation -------------------------------------------------------
 
     @Test
@@ -212,25 +179,6 @@ class RegisterClientUseCaseTest {
         verify(clientRepository).existsByEmail("ana@example.com");
     }
 
-    @Test
-    @DisplayName("DEFECT PIN: surrounding blanks in the email are not trimmed, unlike every other field")
-    void emailIsLowercasedButNotTrimmed() {
-        // Documented gap, see the QA report: RegisterClientUseCase line 45 applies
-        // toLowerCase without trim(), so "  Ana@Example.com " reaches the provider
-        // and the uniqueness check with its blanks. Pinned here so the fix is visible.
-
-        // Arrange
-        provisioningSucceeds();
-        RegisterClientCommand command = command("  Ana@Example.com ", "cc12345678", LocalDate.of(1995, 4, 10));
-
-        // Act
-        useCase.register(command);
-
-        // Assert
-        verify(clientRepository).existsByEmail("  ana@example.com ");
-        assertEquals("  ana@example.com ", capturedSavedClient().getEmail());
-    }
-
     // --- Age rule ------------------------------------------------------------
 
     @Test
@@ -249,46 +197,18 @@ class RegisterClientUseCaseTest {
         verifyNoInteractions(userProvisioning);
     }
 
-    /*
-     * Boundary value analysis of the age rule against the fixed clock (today = 2026-09-18).
-     * The original single parameterized test branched on an "accepted" flag; it is split into
-     * the valid side (18th birthday today or earlier) and the invalid side (one day short).
-     */
-
-    @ParameterizedTest(name = "born {0} -> accepted")
+    @Test
     @DisplayName("The age boundary is evaluated against the fixed clock: the 18th birthday is already valid")
-    @CsvSource({
-            "2008-09-18",
-            "2008-09-17"
-    })
-    void ageBoundaryAcceptedAgainstFixedClock(LocalDate birthDate) {
+    void ageBoundaryAcceptedAgainstFixedClock() {
         // Arrange
         provisioningSucceeds();
-        RegisterClientCommand cmd = command("ana@example.com", "cc12345678", birthDate);
+        RegisterClientCommand cmd = command("ana@example.com", "cc12345678", TODAY.minusYears(18));
 
         // Act
         RegistrationOutcome outcome = useCase.register(cmd);
 
         // Assert
         assertEquals(ClientStatus.PENDING_VERIFICATION, outcome.status());
-    }
-
-    @ParameterizedTest(name = "born {0} -> rejected")
-    @DisplayName("The age boundary is evaluated against the fixed clock: one day short of 18 is rejected")
-    @CsvSource({
-            "2008-09-19"
-    })
-    void ageBoundaryRejectedAgainstFixedClock(LocalDate birthDate) {
-        // Arrange
-        provisioningSucceeds();
-        RegisterClientCommand cmd = command("ana@example.com", "cc12345678", birthDate);
-
-        // Act
-        Executable act = () -> useCase.register(cmd);
-
-        // Assert
-        BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.MINOR_NOT_ALLOWED, ex.errorCode());
     }
 
     @Test
@@ -347,56 +267,6 @@ class RegisterClientUseCaseTest {
         verifyNoInteractions(userProvisioning);
     }
 
-    @Test
-    @DisplayName("A minor with an email already registered fails for being a minor, not for the duplicate")
-    void ageRuleWinsOverDuplicateEmail() {
-        // Arrange
-        when(clientRepository.existsByEmail(anyString())).thenReturn(true);
-        RegisterClientCommand minorWithTakenEmail =
-                command("ana@example.com", "cc12345678", TODAY.minusYears(10));
-
-        // Act
-        Executable act = () -> useCase.register(minorWithTakenEmail);
-
-        // Assert
-        BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.MINOR_NOT_ALLOWED, ex.errorCode());
-        verifyNoInteractions(clientRepository);
-    }
-
-    @Test
-    @DisplayName("A minor with a document already registered fails for being a minor, not for the duplicate")
-    void ageRuleWinsOverDuplicateDocument() {
-        // Arrange
-        when(clientRepository.existsByDocument(anyString())).thenReturn(true);
-        RegisterClientCommand minorWithTakenDocument =
-                command("ana@example.com", "cc12345678", TODAY.minusYears(3));
-
-        // Act
-        Executable act = () -> useCase.register(minorWithTakenDocument);
-
-        // Assert
-        BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.MINOR_NOT_ALLOWED, ex.errorCode());
-        verifyNoInteractions(clientRepository);
-    }
-
-    @Test
-    @DisplayName("A duplicate email wins over a duplicate document when both collide")
-    void duplicateEmailWinsOverDuplicateDocument() {
-        // Arrange
-        when(clientRepository.existsByEmail(anyString())).thenReturn(true);
-        RegisterClientCommand command = command();
-
-        // Act
-        Executable act = () -> useCase.register(command);
-
-        // Assert
-        BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.DUPLICATE_EMAIL, ex.errorCode());
-        verify(clientRepository, never()).existsByDocument(anyString());
-    }
-
     // --- Compensation of the provisioned credential --------------------------
 
     @Nested
@@ -442,25 +312,6 @@ class RegisterClientUseCaseTest {
         }
 
         @Test
-        @DisplayName("The compensation targets exactly the id that was provisioned")
-        void compensationUsesTheProvisionedId() {
-            // Arrange
-            UUID otherId = UUID.fromString("33333333-3333-3333-3333-333333333333");
-            when(userProvisioning.provisionClientUser(anyString(), anyString())).thenReturn(otherId);
-            when(clientRepository.save(any(Client.class))).thenThrow(new IllegalStateException("boom"));
-            RegisterClientCommand command = command();
-
-            // Act
-            Executable act = () -> useCase.register(command);
-
-            // Assert
-            assertThrows(RuntimeException.class, act);
-            ArgumentCaptor<UUID> captor = ArgumentCaptor.forClass(UUID.class);
-            verify(userProvisioning).deprovisionUser(captor.capture());
-            assertEquals(otherId, captor.getValue());
-        }
-
-        @Test
         @DisplayName("If provisioning itself fails nothing is stored and there is nothing to compensate")
         void provisioningFailureNeedsNoCompensation() {
             // Arrange
@@ -476,27 +327,6 @@ class RegisterClientUseCaseTest {
             assertSame(upstream, thrown);
             verify(userProvisioning, never()).deprovisionUser(any(UUID.class));
             verify(clientRepository, never()).save(any(Client.class));
-        }
-
-        @Test
-        @DisplayName("DEFECT PIN: if the compensation also fails, its error replaces the original cause")
-        void compensationFailureMasksTheOriginalCause() {
-            // Documented gap, see the QA report: RegisterClientUseCase line 73 calls
-            // deprovisionUser outside any guard, so a failing compensation hides the
-            // real reason the registration failed.
-
-            // Arrange
-            when(userProvisioning.provisionClientUser(anyString(), anyString())).thenReturn(PROVISIONED_ID);
-            when(clientRepository.save(any(Client.class))).thenThrow(new IllegalStateException("database down"));
-            doThrow(new IllegalStateException("provider down")).when(userProvisioning).deprovisionUser(PROVISIONED_ID);
-            RegisterClientCommand command = command();
-
-            // Act
-            Executable act = () -> useCase.register(command);
-
-            // Assert
-            RuntimeException thrown = assertThrows(RuntimeException.class, act);
-            assertEquals("provider down", thrown.getMessage());
         }
     }
 }

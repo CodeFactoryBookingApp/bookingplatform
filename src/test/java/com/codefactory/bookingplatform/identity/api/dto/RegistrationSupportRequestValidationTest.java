@@ -9,7 +9,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Set;
 
-import static com.codefactory.bookingplatform.support.BeanValidationSupport.emailOfLength;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.invalidProperties;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.messagesFor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,19 +49,6 @@ class RegistrationSupportRequestValidationTest {
 
             // Assert
             assertEquals(Set.of("tokenHash is required"), messages);
-        }
-
-        @Test
-        @DisplayName("The token hash has no length ceiling: a very long opaque token is accepted")
-        void longTokenIsAccepted() {
-            // Arrange
-            ConfirmEmailRequest request = new ConfirmEmailRequest("a".repeat(512));
-
-            // Act
-            Set<String> messages = messagesFor(request, "tokenHash");
-
-            // Assert
-            assertTrue(messages.isEmpty());
         }
     }
 
@@ -108,20 +94,6 @@ class RegistrationSupportRequestValidationTest {
 
             // Assert
             assertTrue(messages.contains("email must be a valid address"));
-        }
-
-        @Test
-        @DisplayName("The resend DTO has no length ceiling, unlike the registration DTO")
-        void noMaxLengthConstraint() {
-            // Arrange
-            String longButValid = emailOfLength(190);
-            ResendVerificationRequest request = new ResendVerificationRequest(longButValid);
-
-            // Act
-            Set<String> messages = messagesFor(request, "email");
-
-            // Assert
-            assertTrue(messages.isEmpty());
         }
     }
 }

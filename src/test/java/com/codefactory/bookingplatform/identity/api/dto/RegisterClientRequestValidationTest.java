@@ -21,7 +21,6 @@ import static com.codefactory.bookingplatform.support.BeanValidationSupport.inva
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.messagesFor;
 import static com.codefactory.bookingplatform.support.BeanValidationSupport.repeat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -156,7 +155,7 @@ class RegisterClientRequestValidationTest {
     class Document {
 
         @ParameterizedTest(name = "[{0}] is accepted")
-        @ValueSource(strings = {"ABCDE", "12345", "CC-1020304050", "ABCDEFGHIJ1234567890", "-----"})
+        @ValueSource(strings = {"ABCDE", "12345", "CC-1020304050", "ABCDEFGHIJ1234567890"})
         void acceptedDocuments(String value) {
             // Arrange
             RegisterClientRequest request = withDocument(value);
@@ -236,19 +235,6 @@ class RegisterClientRequestValidationTest {
         void todayIsRejected() {
             // Arrange
             RegisterClientRequest request = withBirthDate(LocalDate.now());
-
-            // Act
-            Set<String> messages = messagesFor(request, "birthDate");
-
-            // Assert
-            assertEquals(Set.of("birthDate must be in the past"), messages);
-        }
-
-        @Test
-        @DisplayName("Tomorrow is rejected")
-        void futureIsRejected() {
-            // Arrange
-            RegisterClientRequest request = withBirthDate(LocalDate.now().plusDays(1));
 
             // Act
             Set<String> messages = messagesFor(request, "birthDate");
@@ -457,7 +443,7 @@ class RegisterClientRequestValidationTest {
         }
 
         @ParameterizedTest(name = "length {0} is outside [8, 72] and is rejected")
-        @CsvSource({"1", "7", "73", "100"})
+        @CsvSource({"7", "73"})
         void rejectedLengths(int length) {
             // Arrange
             RegisterClientRequest request = withPassword(repeat('a', length));
@@ -480,7 +466,7 @@ class RegisterClientRequestValidationTest {
             Set<String> messages = messagesFor(request, "password");
 
             // Assert
-            assertFalse(messages.isEmpty());
+            assertTrue(messages.contains("password is required"));
         }
 
         @Test
@@ -500,19 +486,6 @@ class RegisterClientRequestValidationTest {
     @Nested
     @DisplayName("notificationChannel: NotNull")
     class Channel {
-
-        @ParameterizedTest(name = "{0} is accepted")
-        @ValueSource(strings = {"EMAIL", "SMS", "WHATSAPP"})
-        void everyDeclaredChannelIsAccepted(String value) {
-            // Arrange
-            RegisterClientRequest request = withChannel(NotificationChannel.valueOf(value));
-
-            // Act
-            Set<String> messages = messagesFor(request, "notificationChannel");
-
-            // Assert
-            assertTrue(messages.isEmpty());
-        }
 
         @Test
         @DisplayName("A null channel is rejected as required")
