@@ -53,14 +53,17 @@ class ClientRepositoryAdapterTest {
     @Test
     @DisplayName("findById returns the domain client mapped from the stored entity")
     void findByIdMapsTheStoredEntity() {
+        // Arrange
         UUID id = UUID.randomUUID();
         ClientEntity entity = new ClientEntity();
         Client domain = sampleClient(id);
         when(jpaRepository.findById(id)).thenReturn(Optional.of(entity));
         when(mapper.toDomain(entity)).thenReturn(domain);
 
+        // Act
         Optional<Client> found = adapter.findById(id);
 
+        // Assert
         assertTrue(found.isPresent());
         assertSame(domain, found.get());
         verify(mapper).toDomain(entity);
@@ -69,10 +72,15 @@ class ClientRepositoryAdapterTest {
     @Test
     @DisplayName("An unknown id yields an empty optional and the mapper is never invoked")
     void findByIdOnUnknownIdReturnsEmpty() {
+        // Arrange
         UUID id = UUID.randomUUID();
         when(jpaRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertTrue(adapter.findById(id).isEmpty());
+        // Act
+        Optional<Client> found = adapter.findById(id);
+
+        // Assert
+        assertTrue(found.isEmpty());
         verify(mapper, never()).toDomain(any());
     }
 
@@ -84,13 +92,16 @@ class ClientRepositoryAdapterTest {
     })
     @DisplayName("Email lookups are case insensitive: the address is normalised before the query")
     void findByEmailNormalisesTheEmail(String input, String expected) {
+        // Arrange
         UUID id = UUID.randomUUID();
         ClientEntity entity = new ClientEntity();
         when(jpaRepository.findByEmailIgnoreCase(anyString())).thenReturn(Optional.of(entity));
         when(mapper.toDomain(entity)).thenReturn(sampleClient(id));
 
+        // Act
         Optional<Client> found = adapter.findByEmail(input);
 
+        // Assert
         ArgumentCaptor<String> email = ArgumentCaptor.forClass(String.class);
         verify(jpaRepository).findByEmailIgnoreCase(email.capture());
         assertEquals(expected, email.getValue());
@@ -100,9 +111,14 @@ class ClientRepositoryAdapterTest {
     @Test
     @DisplayName("An email with no client yields an empty optional")
     void findByEmailOnUnknownEmailReturnsEmpty() {
+        // Arrange
         when(jpaRepository.findByEmailIgnoreCase(anyString())).thenReturn(Optional.empty());
 
-        assertTrue(adapter.findByEmail("ana.perez@example.com").isEmpty());
+        // Act
+        Optional<Client> found = adapter.findByEmail("ana.perez@example.com");
+
+        // Assert
+        assertTrue(found.isEmpty());
         verify(mapper, never()).toDomain(any());
     }
 
@@ -113,10 +129,14 @@ class ClientRepositoryAdapterTest {
     })
     @DisplayName("Duplicate email detection normalises the address, so casing cannot bypass uniqueness")
     void existsByEmailNormalisesTheEmail(String input, String expected) {
+        // Arrange
         when(jpaRepository.existsByEmailIgnoreCase(expected)).thenReturn(true);
 
-        assertTrue(adapter.existsByEmail(input));
+        // Act
+        boolean exists = adapter.existsByEmail(input);
 
+        // Assert
+        assertTrue(exists);
         ArgumentCaptor<String> email = ArgumentCaptor.forClass(String.class);
         verify(jpaRepository).existsByEmailIgnoreCase(email.capture());
         assertEquals(expected, email.getValue());
@@ -125,19 +145,28 @@ class ClientRepositoryAdapterTest {
     @Test
     @DisplayName("A free email address reports no duplicate")
     void existsByEmailIsFalseWhenTheEmailIsFree() {
+        // Arrange
         when(jpaRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
 
-        assertFalse(adapter.existsByEmail("ana.perez@example.com"));
+        // Act
+        boolean exists = adapter.existsByEmail("ana.perez@example.com");
+
+        // Assert
+        assertFalse(exists);
     }
 
     @ParameterizedTest(name = "[{index}] document \"{0}\" is forwarded verbatim")
     @ValueSource(strings = {"1017", "cc-1017", "CC-1017"})
     @DisplayName("The document is forwarded verbatim: uniqueness is enforced by the case insensitive query")
     void existsByDocumentForwardsTheDocumentVerbatim(String document) {
+        // Arrange
         when(jpaRepository.existsByDocumentIgnoreCase(document)).thenReturn(true);
 
-        assertTrue(adapter.existsByDocument(document));
+        // Act
+        boolean exists = adapter.existsByDocument(document);
 
+        // Assert
+        assertTrue(exists);
         ArgumentCaptor<String> captured = ArgumentCaptor.forClass(String.class);
         verify(jpaRepository).existsByDocumentIgnoreCase(captured.capture());
         assertEquals(document, captured.getValue());
@@ -146,14 +175,20 @@ class ClientRepositoryAdapterTest {
     @Test
     @DisplayName("An unknown document reports no duplicate")
     void existsByDocumentIsFalseWhenTheDocumentIsFree() {
+        // Arrange
         when(jpaRepository.existsByDocumentIgnoreCase(anyString())).thenReturn(false);
 
-        assertFalse(adapter.existsByDocument("1017"));
+        // Act
+        boolean exists = adapter.existsByDocument("1017");
+
+        // Assert
+        assertFalse(exists);
     }
 
     @Test
     @DisplayName("save crosses the boundary twice: domain to entity on the way in, entity to domain on the way out")
     void saveGoesThroughTheMapperInBothDirections() {
+        // Arrange
         UUID id = UUID.randomUUID();
         Client incoming = sampleClient(id);
         ClientEntity toPersist = new ClientEntity();
@@ -163,8 +198,10 @@ class ClientRepositoryAdapterTest {
         when(jpaRepository.save(toPersist)).thenReturn(persisted);
         when(mapper.toDomain(persisted)).thenReturn(outgoing);
 
+        // Act
         Client saved = adapter.save(incoming);
 
+        // Assert
         assertSame(outgoing, saved);
         ArgumentCaptor<ClientEntity> captor = ArgumentCaptor.forClass(ClientEntity.class);
         verify(mapper).toEntity(incoming);

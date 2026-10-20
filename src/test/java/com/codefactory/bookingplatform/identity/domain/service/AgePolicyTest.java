@@ -28,19 +28,40 @@ class AgePolicyTest {
     @Test
     @DisplayName("Exactly 18 years old is accepted")
     void exactlyEighteenIsAdult() {
-        assertTrue(AgePolicy.isAdult(TODAY.minusYears(18), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.minusYears(18);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertTrue(adult);
     }
 
     @Test
     @DisplayName("One day short of 18 is rejected")
     void oneDayShortOfEighteenIsMinor() {
-        assertFalse(AgePolicy.isAdult(TODAY.minusYears(18).plusDays(1), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.minusYears(18).plusDays(1);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertFalse(adult);
     }
 
     @Test
     @DisplayName("Adults well over 18 are accepted")
     void olderAdultIsAdult() {
-        assertTrue(AgePolicy.isAdult(TODAY.minusYears(35), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.minusYears(35);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertTrue(adult);
     }
 
     // --- Boundary value analysis: the exact 18th birthday --------------------
@@ -48,7 +69,14 @@ class AgePolicyTest {
     @Test
     @DisplayName("The day after turning 18 is accepted")
     void oneDayAfterEighteenthBirthdayIsAdult() {
-        assertTrue(AgePolicy.isAdult(TODAY.minusYears(18).minusDays(1), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.minusYears(18).minusDays(1);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertTrue(adult);
     }
 
     @ParameterizedTest(name = "born {0} -> adult on 2026-09-18? {1}")
@@ -66,7 +94,11 @@ class AgePolicyTest {
             "2007-09-18, true"
     })
     void eighteenthBirthdayIsTheBoundary(LocalDate birthDate, boolean expectedAdult) {
-        assertEquals(expectedAdult, AgePolicy.isAdult(birthDate, TODAY));
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertEquals(expectedAdult, adult);
     }
 
     @ParameterizedTest(name = "age {0} -> adult? {1}")
@@ -80,19 +112,40 @@ class AgePolicyTest {
             "80, true"
     })
     void equivalencePartitionsByWholeYears(int age, boolean expectedAdult) {
-        assertEquals(expectedAdult, AgePolicy.isAdult(TODAY.minusYears(age), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.minusYears(age);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertEquals(expectedAdult, adult);
     }
 
     @Test
     @DisplayName("A newborn registering the same day is a minor")
     void bornTodayIsMinor() {
-        assertFalse(AgePolicy.isAdult(TODAY, TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY;
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertFalse(adult);
     }
 
     @Test
     @DisplayName("A birth date in the future is rejected instead of wrapping into a positive age")
     void futureBirthDateIsNotAdult() {
-        assertFalse(AgePolicy.isAdult(TODAY.plusYears(1), TODAY));
+        // Arrange
+        LocalDate birthDate = TODAY.plusYears(1);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(birthDate, TODAY);
+
+        // Assert
+        assertFalse(adult);
     }
 
     // --- Leap year: 29 February ---------------------------------------------
@@ -100,34 +153,66 @@ class AgePolicyTest {
     @Test
     @DisplayName("Someone born on 29 February is still a minor on 28 February of the common year they turn 18")
     void leapDayBornIsMinorOnFebruaryTwentyEighth() {
+        // Arrange
         LocalDate leapBirthDate = LocalDate.of(2008, 2, 29);
-        assertFalse(AgePolicy.isAdult(leapBirthDate, LocalDate.of(2026, 2, 28)));
+        LocalDate today = LocalDate.of(2026, 2, 28);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(leapBirthDate, today);
+
+        // Assert
+        assertFalse(adult);
     }
 
     @Test
     @DisplayName("Someone born on 29 February becomes an adult on 1 March of the common year they turn 18")
     void leapDayBornIsAdultOnMarchFirst() {
+        // Arrange
         LocalDate leapBirthDate = LocalDate.of(2008, 2, 29);
-        assertTrue(AgePolicy.isAdult(leapBirthDate, LocalDate.of(2026, 3, 1)));
+        LocalDate today = LocalDate.of(2026, 3, 1);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(leapBirthDate, today);
+
+        // Assert
+        assertTrue(adult);
     }
 
     @Test
     @DisplayName("Someone born on 29 February is an adult on 29 February of a later leap year")
     void leapDayBornIsAdultOnTheNextLeapAnniversary() {
+        // Arrange
         LocalDate leapBirthDate = LocalDate.of(2008, 2, 29);
-        assertTrue(AgePolicy.isAdult(leapBirthDate, LocalDate.of(2028, 2, 29)));
+        LocalDate today = LocalDate.of(2028, 2, 29);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(leapBirthDate, today);
+
+        // Assert
+        assertTrue(adult);
     }
 
     @Test
     @DisplayName("Someone born on 29 February is a minor on 28 February of the leap year before turning 18")
     void leapDayBornIsMinorTheDayBeforeTheLeapAnniversary() {
+        // Arrange
         LocalDate leapBirthDate = LocalDate.of(2008, 2, 29);
-        assertFalse(AgePolicy.isAdult(leapBirthDate, LocalDate.of(2026, 2, 27)));
+        LocalDate today = LocalDate.of(2026, 2, 27);
+
+        // Act
+        boolean adult = AgePolicy.isAdult(leapBirthDate, today);
+
+        // Assert
+        assertFalse(adult);
     }
 
     @Test
     @DisplayName("The minimum legal age published by the policy is 18")
     void minimumAgeIsEighteen() {
-        assertEquals(18, AgePolicy.MINIMUM_AGE);
+        // Act
+        int minimumAge = AgePolicy.MINIMUM_AGE;
+
+        // Assert
+        assertEquals(18, minimumAge);
     }
 }

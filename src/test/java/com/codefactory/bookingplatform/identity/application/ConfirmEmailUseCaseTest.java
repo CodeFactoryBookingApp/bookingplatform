@@ -11,6 +11,7 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
@@ -77,11 +78,14 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("A valid token activates the pending client and reports the new status")
     void validTokenActivatesPendingClient() {
+        // Arrange
         Client pending = clientInStatus(ClientStatus.PENDING_VERIFICATION);
         tokenResolvesTo(pending);
 
+        // Act
         RegistrationOutcome outcome = useCase.confirm(TOKEN);
 
+        // Assert
         assertEquals(CLIENT_ID, outcome.clientId());
         assertEquals("ana@example.com", outcome.email());
         assertEquals(ClientStatus.ACTIVE, outcome.status());
@@ -91,11 +95,14 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("The activated client is persisted after the status change, not before")
     void activatedClientIsPersisted() {
+        // Arrange
         Client pending = clientInStatus(ClientStatus.PENDING_VERIFICATION);
         tokenResolvesTo(pending);
 
+        // Act
         useCase.confirm(TOKEN);
 
+        // Assert
         ArgumentCaptor<Client> captor = ArgumentCaptor.forClass(Client.class);
         verify(clientRepository).save(captor.capture());
         assertSame(pending, captor.getValue());
@@ -110,10 +117,13 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("The client is looked up by the provider user id, which is also the client id")
     void clientIsLookedUpByProviderUserId() {
+        // Arrange
         tokenResolvesTo(clientInStatus(ClientStatus.PENDING_VERIFICATION));
 
+        // Act
         useCase.confirm(TOKEN);
 
+        // Assert
         verify(clientRepository).findById(CLIENT_ID);
     }
 
@@ -122,12 +132,15 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("Confirming twice is idempotent: the second call succeeds and keeps the client ACTIVE")
     void confirmingTwiceIsIdempotent() {
+        // Arrange
         Client pending = clientInStatus(ClientStatus.PENDING_VERIFICATION);
         tokenResolvesTo(pending);
-
         RegistrationOutcome first = useCase.confirm(TOKEN);
+
+        // Act
         RegistrationOutcome second = useCase.confirm(TOKEN);
 
+        // Assert
         assertEquals(ClientStatus.ACTIVE, first.status());
         assertEquals(ClientStatus.ACTIVE, second.status());
         assertEquals(first, second);
@@ -137,11 +150,14 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("Confirming an already ACTIVE client neither fails nor changes the status")
     void confirmingAnAlreadyActiveClientDoesNotFail() {
+        // Arrange
         Client active = clientInStatus(ClientStatus.ACTIVE);
         tokenResolvesTo(active);
 
+        // Act
         RegistrationOutcome outcome = useCase.confirm(TOKEN);
 
+        // Assert
         assertEquals(ClientStatus.ACTIVE, outcome.status());
         verify(clientRepository).save(active);
     }
@@ -151,11 +167,15 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("A token accepted by the provider without a client profile raises RESOURCE_NOT_FOUND")
     void missingClientProfileRaisesResourceNotFound() {
+        // Arrange
         when(userProvisioning.confirmEmail(TOKEN)).thenReturn(new ConfirmedUser(CLIENT_ID, "ana@example.com"));
         when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.empty());
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.confirm(TOKEN));
+        // Act
+        Executable act = () -> useCase.confirm(TOKEN);
 
+        // Assert
+        BusinessException ex = assertThrows(BusinessException.class, act);
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
         assertEquals("Client profile not found for the confirmed user", ex.getMessage());
         verify(clientRepository, never()).save(any(Client.class));
@@ -164,11 +184,15 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("An invalid or already used token fails at the provider and never touches the client profile")
     void invalidTokenIsPropagatedWithoutTouchingTheRepository() {
+        // Arrange
         BusinessException invalid = new BusinessException(ErrorCode.VERIFICATION_TOKEN_INVALID);
         when(userProvisioning.confirmEmail(anyString())).thenThrow(invalid);
 
-        BusinessException thrown = assertThrows(BusinessException.class, () -> useCase.confirm("used-token"));
+        // Act
+        Executable act = () -> useCase.confirm("used-token");
 
+        // Assert
+        BusinessException thrown = assertThrows(BusinessException.class, act);
         assertSame(invalid, thrown);
         verifyNoInteractions(clientRepository);
     }
@@ -176,12 +200,16 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("A suspended client cannot be reactivated through email confirmation and is not persisted")
     void suspendedClientCannotBeConfirmed() {
+        // Arrange
         Client suspended = clientInStatus(ClientStatus.SUSPENDED);
         when(userProvisioning.confirmEmail(TOKEN)).thenReturn(new ConfirmedUser(CLIENT_ID, "ana@example.com"));
         when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.of(suspended));
 
-        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.confirm(TOKEN));
+        // Act
+        Executable act = () -> useCase.confirm(TOKEN);
 
+        // Assert
+        BusinessException ex = assertThrows(BusinessException.class, act);
         assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
         assertEquals(ClientStatus.SUSPENDED, suspended.getStatus());
         assertFalse(suspended.canConfirmBooking());
@@ -191,12 +219,18 @@ class ConfirmEmailUseCaseTest {
     @Test
     @DisplayName("A failure while persisting the activation is propagated to the caller")
     void persistenceFailureIsPropagated() {
+        // Arrange
         when(userProvisioning.confirmEmail(TOKEN)).thenReturn(new ConfirmedUser(CLIENT_ID, "ana@example.com"));
         when(clientRepository.findById(CLIENT_ID))
                 .thenReturn(Optional.of(clientInStatus(ClientStatus.PENDING_VERIFICATION)));
         RuntimeException boom = new IllegalStateException("database down");
         when(clientRepository.save(any(Client.class))).thenThrow(boom);
 
-        assertSame(boom, assertThrows(RuntimeException.class, () -> useCase.confirm(TOKEN)));
+        // Act
+        Executable act = () -> useCase.confirm(TOKEN);
+
+        // Assert
+        RuntimeException thrown = assertThrows(RuntimeException.class, act);
+        assertSame(boom, thrown);
     }
 }

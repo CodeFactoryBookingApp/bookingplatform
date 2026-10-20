@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -58,22 +59,28 @@ class TraceIdFilterTest {
     @Test
     @DisplayName("An incoming X-Trace-Id is honoured and echoed back untouched")
     void incomingTraceIdIsHonoured() throws Exception {
+        // Arrange
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "trace-from-the-gateway");
 
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         assertEquals("trace-from-the-gateway", response.getHeader(TraceIdFilter.TRACE_ID_HEADER));
     }
 
     @Test
     @DisplayName("The incoming trace id is the one visible in the MDC while the chain runs")
     void incomingTraceIdIsVisibleInMdcDuringTheChain() throws Exception {
+        // Arrange
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "trace-from-the-gateway");
         AtomicReference<String> seenInsideChain = new AtomicReference<>();
         FilterChain capturing = (req, res) -> seenInsideChain.set(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
 
+        // Act
         filter.doFilterInternal(request, response, capturing);
 
+        // Assert
         assertEquals("trace-from-the-gateway", seenInsideChain.get());
     }
 
@@ -81,12 +88,15 @@ class TraceIdFilterTest {
     @NullSource
     @ValueSource(strings = {"", "   ", "\t"})
     void missingOrBlankHeaderIsReplaced(String incoming) throws Exception {
+        // Arrange
         if (incoming != null) {
             request.addHeader(TraceIdFilter.TRACE_ID_HEADER, incoming);
         }
 
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         String generated = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
         assertDoesNotThrow(() -> UUID.fromString(generated));
     }
@@ -94,111 +104,150 @@ class TraceIdFilterTest {
     @Test
     @DisplayName("The response always carries the trace id header, even when none came in")
     void responseAlwaysCarriesTheHeader() throws Exception {
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         assertNotNull(response.getHeader(TraceIdFilter.TRACE_ID_HEADER));
     }
 
     @Test
     @DisplayName("Two requests without an incoming header get two different generated ids")
     void generatedIdsAreUnique() throws Exception {
+        // Arrange
         filter.doFilterInternal(request, response, chain);
         String first = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
-
+        MockHttpServletRequest secondRequest = new MockHttpServletRequest("GET", "/api/v1/auth/me");
         MockHttpServletResponse secondResponse = new MockHttpServletResponse();
-        filter.doFilterInternal(new MockHttpServletRequest("GET", "/api/v1/auth/me"), secondResponse, chain);
-        String second = secondResponse.getHeader(TraceIdFilter.TRACE_ID_HEADER);
 
+        // Act
+        filter.doFilterInternal(secondRequest, secondResponse, chain);
+
+        // Assert
+        String second = secondResponse.getHeader(TraceIdFilter.TRACE_ID_HEADER);
         org.junit.jupiter.api.Assertions.assertNotEquals(first, second);
     }
 
     @Test
     @DisplayName("The response header and the MDC value seen by the chain are the same id")
     void headerAndMdcValueMatch() throws Exception {
+        // Arrange
         AtomicReference<String> seenInsideChain = new AtomicReference<>();
         FilterChain capturing = (req, res) -> seenInsideChain.set(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
 
+        // Act
         filter.doFilterInternal(request, response, capturing);
 
+        // Assert
         assertEquals(seenInsideChain.get(), response.getHeader(TraceIdFilter.TRACE_ID_HEADER));
     }
 
     @Test
     @DisplayName("The chain is invoked exactly once with the very same request and response")
     void chainIsInvokedOnce() throws Exception {
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         verify(chain).doFilter(request, response);
     }
 
     @Test
     @DisplayName("The MDC is cleaned once the chain returns normally")
     void mdcIsCleanedAfterASuccessfulChain() throws Exception {
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
     }
 
     @Test
     @DisplayName("CONTEXT LEAK GUARD: the MDC is cleaned even when the chain throws a ServletException")
     void mdcIsCleanedWhenTheChainThrowsServletException() throws Exception {
+        // Arrange
         doThrow(new ServletException("boom")).when(chain).doFilter(any(ServletRequest.class), any(ServletResponse.class));
 
-        assertThrows(ServletException.class, () -> filter.doFilterInternal(request, response, chain));
+        // Act
+        Executable act = () -> filter.doFilterInternal(request, response, chain);
+
+        // Assert
+        assertThrows(ServletException.class, act);
         assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
     }
 
     @Test
     @DisplayName("CONTEXT LEAK GUARD: the MDC is cleaned even when the chain throws an IOException")
     void mdcIsCleanedWhenTheChainThrowsIoException() throws Exception {
+        // Arrange
         doThrow(new IOException("socket closed")).when(chain)
                 .doFilter(any(ServletRequest.class), any(ServletResponse.class));
 
-        assertThrows(IOException.class, () -> filter.doFilterInternal(request, response, chain));
+        // Act
+        Executable act = () -> filter.doFilterInternal(request, response, chain);
+
+        // Assert
+        assertThrows(IOException.class, act);
         assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
     }
 
     @Test
     @DisplayName("CONTEXT LEAK GUARD: the MDC is cleaned even when the chain throws an unchecked exception")
     void mdcIsCleanedWhenTheChainThrowsRuntimeException() throws Exception {
+        // Arrange
         doThrow(new IllegalStateException("unexpected")).when(chain)
                 .doFilter(any(ServletRequest.class), any(ServletResponse.class));
 
-        assertThrows(IllegalStateException.class, () -> filter.doFilterInternal(request, response, chain));
+        // Act
+        Executable act = () -> filter.doFilterInternal(request, response, chain);
+
+        // Assert
+        assertThrows(IllegalStateException.class, act);
         assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
     }
 
     @Test
     @DisplayName("A failing request still answers with the trace id header, so the caller can report it")
     void headerIsSetBeforeTheChainRuns() throws Exception {
+        // Arrange
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "trace-before-failure");
         doThrow(new IllegalStateException("unexpected")).when(chain)
                 .doFilter(any(ServletRequest.class), any(ServletResponse.class));
 
-        assertThrows(IllegalStateException.class, () -> filter.doFilterInternal(request, response, chain));
+        // Act
+        Executable act = () -> filter.doFilterInternal(request, response, chain);
+
+        // Assert
+        assertThrows(IllegalStateException.class, act);
         assertEquals("trace-before-failure", response.getHeader(TraceIdFilter.TRACE_ID_HEADER));
     }
 
     @Test
     @DisplayName("A stale trace id left over from a previous request is overwritten, never reused")
     void staleMdcValueIsOverwritten() throws Exception {
+        // Arrange
         MDC.put(TraceIdFilter.TRACE_ID_MDC_KEY, "stale-value-from-a-previous-request");
         AtomicReference<String> seenInsideChain = new AtomicReference<>();
         FilterChain capturing = (req, res) -> seenInsideChain.set(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "fresh-value");
 
+        // Act
         filter.doFilterInternal(request, response, capturing);
 
+        // Assert
         assertEquals("fresh-value", seenInsideChain.get());
     }
 
     @Test
     @DisplayName("Going through the public doFilter entry point behaves like doFilterInternal")
     void publicDoFilterEntryPointWorks() throws Exception {
+        // Arrange
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "through-the-front-door");
 
+        // Act
         filter.doFilter(request, response, chain);
 
+        // Assert
         assertEquals("through-the-front-door", response.getHeader(TraceIdFilter.TRACE_ID_HEADER));
         assertNull(MDC.get(TraceIdFilter.TRACE_ID_MDC_KEY));
     }
@@ -206,25 +255,35 @@ class TraceIdFilterTest {
     @Test
     @DisplayName("Only one trace id header value is written, never a second appended one")
     void headerIsSetNotAdded() throws Exception {
+        // Arrange
         request.addHeader(TraceIdFilter.TRACE_ID_HEADER, "single-value");
 
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         assertEquals(1, response.getHeaders(TraceIdFilter.TRACE_ID_HEADER).size());
     }
 
     @Test
     @DisplayName("The published constants keep the contract the logging pattern relies on")
     void constantsAreStable() {
-        assertEquals("X-Trace-Id", TraceIdFilter.TRACE_ID_HEADER);
-        assertEquals("traceId", TraceIdFilter.TRACE_ID_MDC_KEY);
+        // Act
+        String header = TraceIdFilter.TRACE_ID_HEADER;
+        String mdcKey = TraceIdFilter.TRACE_ID_MDC_KEY;
+
+        // Assert
+        assertEquals("X-Trace-Id", header);
+        assertEquals("traceId", mdcKey);
     }
 
     @Test
     @DisplayName("A generated trace id is a random UUID, not a predictable counter")
     void generatedTraceIdIsAUuid() throws Exception {
+        // Act
         filter.doFilterInternal(request, response, chain);
 
+        // Assert
         String generated = response.getHeader(TraceIdFilter.TRACE_ID_HEADER);
         assertNotNull(generated);
         assertTrue(generated.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"));

@@ -10,6 +10,7 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -63,11 +64,14 @@ class ResendVerificationUseCaseTest {
     @Test
     @DisplayName("A known email gets a new verification message from the identity provider")
     void knownEmailTriggersTheProvider() {
+        // Arrange
         when(clientRepository.findByEmail("ana@example.com"))
                 .thenReturn(Optional.of(clientWithEmail("ana@example.com", ClientStatus.PENDING_VERIFICATION)));
 
+        // Act
         useCase.resend("ana@example.com");
 
+        // Assert
         verify(userProvisioning).resendSignupVerification("ana@example.com");
     }
 
@@ -79,11 +83,14 @@ class ResendVerificationUseCaseTest {
             "ana@example.com,  ana@example.com"
     })
     void emailIsNormalisedBeforeLookupAndResend(String typedEmail, String normalisedEmail) {
+        // Arrange
         when(clientRepository.findByEmail(normalisedEmail))
                 .thenReturn(Optional.of(clientWithEmail(normalisedEmail, ClientStatus.PENDING_VERIFICATION)));
 
+        // Act
         useCase.resend(typedEmail);
 
+        // Assert
         verify(clientRepository).findByEmail(normalisedEmail);
         verify(userProvisioning).resendSignupVerification(normalisedEmail);
     }
@@ -92,11 +99,14 @@ class ResendVerificationUseCaseTest {
     @DisplayName("The resend is offered whatever the client status is, because the provider owns that decision")
     @EnumSource(ClientStatus.class)
     void resendIsOfferedForEveryStatus(ClientStatus status) {
+        // Arrange
         when(clientRepository.findByEmail("ana@example.com"))
                 .thenReturn(Optional.of(clientWithEmail("ana@example.com", status)));
 
+        // Act
         useCase.resend("ana@example.com");
 
+        // Assert
         verify(userProvisioning).resendSignupVerification("ana@example.com");
     }
 
@@ -105,18 +115,26 @@ class ResendVerificationUseCaseTest {
     @Test
     @DisplayName("An unknown email is silently accepted so the endpoint cannot be used to enumerate users")
     void unknownEmailIsSilentlyAccepted() {
+        // Arrange
         when(clientRepository.findByEmail("desconocido@example.com")).thenReturn(Optional.empty());
 
-        assertDoesNotThrow(() -> useCase.resend("desconocido@example.com"));
+        // Act
+        Executable act = () -> useCase.resend("desconocido@example.com");
+
+        // Assert
+        assertDoesNotThrow(act);
     }
 
     @Test
     @DisplayName("An unknown email never reaches the identity provider")
     void unknownEmailDoesNotReachTheProvider() {
+        // Arrange
         when(clientRepository.findByEmail(anyString())).thenReturn(Optional.empty());
 
+        // Act
         useCase.resend("DESCONOCIDO@example.com");
 
+        // Assert
         verify(clientRepository).findByEmail("desconocido@example.com");
         verifyNoInteractions(userProvisioning);
     }
@@ -126,12 +144,18 @@ class ResendVerificationUseCaseTest {
     @Test
     @DisplayName("A provider failure while resending is propagated instead of being swallowed")
     void providerFailureIsPropagated() {
+        // Arrange
         when(clientRepository.findByEmail("ana@example.com"))
                 .thenReturn(Optional.of(clientWithEmail("ana@example.com", ClientStatus.PENDING_VERIFICATION)));
         BusinessException upstream = new BusinessException(ErrorCode.UPSTREAM_AUTH_ERROR);
         doThrow(upstream).when(userProvisioning).resendSignupVerification("ana@example.com");
 
-        assertSame(upstream, assertThrows(BusinessException.class, () -> useCase.resend("ana@example.com")));
+        // Act
+        Executable act = () -> useCase.resend("ana@example.com");
+
+        // Assert
+        BusinessException thrown = assertThrows(BusinessException.class, act);
+        assertSame(upstream, thrown);
     }
 
     @Test
@@ -139,7 +163,12 @@ class ResendVerificationUseCaseTest {
     void nullEmailFailsWithNullPointerException() {
         // Documented gap, see the QA report: ResendVerificationUseCase line 29 calls
         // toLowerCase on the raw argument with no null guard of its own.
-        assertThrows(NullPointerException.class, () -> useCase.resend(null));
+
+        // Act
+        Executable act = () -> useCase.resend(null);
+
+        // Assert
+        assertThrows(NullPointerException.class, act);
         verifyNoInteractions(clientRepository);
         verifyNoInteractions(userProvisioning);
     }

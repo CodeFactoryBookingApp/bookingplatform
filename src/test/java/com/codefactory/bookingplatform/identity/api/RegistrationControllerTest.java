@@ -57,11 +57,15 @@ class RegistrationControllerTest {
     @Test
     @DisplayName("Registration hands every submitted field to the use case in its own slot")
     void registrationMapsTheWholeRequest() {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.PENDING_VERIFICATION));
+        RegisterClientRequest request = request();
 
-        controller.register(request());
+        // Act
+        controller.register(request);
 
+        // Assert
         ArgumentCaptor<RegisterClientCommand> captor = ArgumentCaptor.forClass(RegisterClientCommand.class);
         verify(registerClientUseCase).register(captor.capture());
         RegisterClientCommand command = captor.getValue();
@@ -78,11 +82,15 @@ class RegistrationControllerTest {
     @Test
     @DisplayName("Registration answers with the client id, email and status the use case produced")
     void registrationAnswersWithTheOutcome() {
+        // Arrange
         when(registerClientUseCase.register(any()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.PENDING_VERIFICATION));
+        RegisterClientRequest request = request();
 
-        RegisterClientResponse response = controller.register(request());
+        // Act
+        RegisterClientResponse response = controller.register(request);
 
+        // Assert
         assertEquals(CLIENT_ID, response.clientId());
         assertEquals("ana.perez@example.com", response.email());
         assertEquals(ClientStatus.PENDING_VERIFICATION, response.status());
@@ -91,30 +99,43 @@ class RegistrationControllerTest {
     @Test
     @DisplayName("A verification resend reaches the resend use case with the submitted email")
     void resendForwardsTheEmail() {
-        controller.resendVerification(new ResendVerificationRequest("ana.perez@example.com"));
+        // Arrange
+        ResendVerificationRequest request = new ResendVerificationRequest("ana.perez@example.com");
 
+        // Act
+        controller.resendVerification(request);
+
+        // Assert
         verify(resendVerificationUseCase).resend("ana.perez@example.com");
     }
 
     @Test
     @DisplayName("Email confirmation forwards the one-time token hash to the confirmation use case")
     void confirmForwardsTheTokenHash() {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.ACTIVE));
+        ConfirmEmailRequest request = new ConfirmEmailRequest("token-hash");
 
-        controller.confirmEmail(new ConfirmEmailRequest("token-hash"));
+        // Act
+        controller.confirmEmail(request);
 
+        // Assert
         verify(confirmEmailUseCase).confirm("token-hash");
     }
 
     @Test
     @DisplayName("A confirmed email is answered with the activated client")
     void confirmAnswersWithTheActivatedClient() {
+        // Arrange
         when(confirmEmailUseCase.confirm(anyString()))
                 .thenReturn(new RegistrationOutcome(CLIENT_ID, "ana.perez@example.com", ClientStatus.ACTIVE));
+        ConfirmEmailRequest request = new ConfirmEmailRequest("token-hash");
 
-        ConfirmEmailResponse response = controller.confirmEmail(new ConfirmEmailRequest("token-hash"));
+        // Act
+        ConfirmEmailResponse response = controller.confirmEmail(request);
 
+        // Assert
         assertEquals(CLIENT_ID, response.clientId());
         assertEquals("ana.perez@example.com", response.email());
         assertEquals(ClientStatus.ACTIVE, response.status());
