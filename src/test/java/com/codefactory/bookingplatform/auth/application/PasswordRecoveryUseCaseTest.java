@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -53,10 +54,13 @@ class PasswordRecoveryUseCaseTest {
         @Test
         @DisplayName("A recovery request for a known email is delegated to the identity provider")
         void delegatesToProvider() {
+            // Arrange
             doNothing().when(identityProvider).sendPasswordRecovery(anyString());
 
+            // Act
             useCase.requestRecovery("ana@example.com");
 
+            // Assert
             verify(identityProvider).sendPasswordRecovery("ana@example.com");
         }
 
@@ -64,10 +68,13 @@ class PasswordRecoveryUseCaseTest {
         @ValueSource(strings = {"ana@example.com", "ANA@EXAMPLE.COM", "Ana.Perez@Example.Com"})
         @DisplayName("The email is forwarded to the provider exactly as received")
         void forwardsEmailAsReceived(String email) {
+            // Arrange
             doNothing().when(identityProvider).sendPasswordRecovery(anyString());
 
+            // Act
             useCase.requestRecovery(email);
 
+            // Assert
             verify(identityProvider).sendPasswordRecovery(email);
         }
     }
@@ -83,20 +90,28 @@ class PasswordRecoveryUseCaseTest {
         @Test
         @DisplayName("A recovery request for an unknown email succeeds so accounts cannot be enumerated")
         void unknownEmailIsAnsweredAsSuccess() {
+            // Arrange
             doThrow(new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, "user not found"))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            assertDoesNotThrow(() -> useCase.requestRecovery("ghost@example.com"));
+            // Act
+            Executable act = () -> useCase.requestRecovery("ghost@example.com");
+
+            // Assert
+            assertDoesNotThrow(act);
         }
 
         @Test
         @DisplayName("An unknown email is still sent to the provider before being absorbed")
         void unknownEmailStillReachesProvider() {
+            // Arrange
             doThrow(new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, "user not found"))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
+            // Act
             useCase.requestRecovery("ghost@example.com");
 
+            // Assert
             verify(identityProvider).sendPasswordRecovery("ghost@example.com");
         }
     }
@@ -114,24 +129,30 @@ class PasswordRecoveryUseCaseTest {
                 names = {"USER_NOT_FOUND", "RATE_LIMITED"}, mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("Any upstream failure other than an unknown user is reported as an upstream auth error")
         void otherUpstreamErrorsBecomeUpstreamAuthError(UpstreamAuthError error) {
+            // Arrange
             doThrow(new UpstreamAuthException(error, "gotrue said " + error))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.requestRecovery("ana@example.com"));
+            // Act
+            Executable act = () -> useCase.requestRecovery("ana@example.com");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.UPSTREAM_AUTH_ERROR, ex.errorCode());
         }
 
         @Test
         @DisplayName("ANTI-ENUMERATION: a provider rate limit is answered 429, never as a generic 500")
         void rateLimitIsTranslatedInsteadOfEscaping() {
+            // Arrange
             doThrow(new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many emails"))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.requestRecovery("ana@example.com"));
+            // Act
+            Executable act = () -> useCase.requestRecovery("ana@example.com");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.RATE_LIMITED, ex.errorCode());
             assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.errorCode().status());
         }
@@ -140,24 +161,30 @@ class PasswordRecoveryUseCaseTest {
         @EnumSource(value = UpstreamAuthError.class, names = "USER_NOT_FOUND", mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("No upstream failure escapes unmapped, so none of them can surface as a 500")
         void noUpstreamErrorEscapesUnmapped(UpstreamAuthError error) {
+            // Arrange
             doThrow(new UpstreamAuthException(error, "gotrue said " + error))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.requestRecovery("ana@example.com"));
+            // Act
+            Executable act = () -> useCase.requestRecovery("ana@example.com");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertNotEquals(ErrorCode.INTERNAL_ERROR, ex.errorCode());
         }
 
         @Test
         @DisplayName("The upstream message is kept in the rejection so the trace stays useful")
         void keepsTheUpstreamMessage() {
+            // Arrange
             doThrow(new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out"))
                     .when(identityProvider).sendPasswordRecovery(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.requestRecovery("ana@example.com"));
+            // Act
+            Executable act = () -> useCase.requestRecovery("ana@example.com");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("gotrue timed out", ex.getMessage());
         }
     }

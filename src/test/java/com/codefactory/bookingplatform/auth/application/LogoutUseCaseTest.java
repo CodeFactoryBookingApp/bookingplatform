@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -50,19 +51,27 @@ class LogoutUseCaseTest {
         @Test
         @DisplayName("Logout revokes the session at the identity provider with the given access token")
         void revokesSessionAtProvider() {
+            // Arrange
             doNothing().when(identityProvider).signOut(anyString());
 
+            // Act
             useCase.logout("jwt-access-token");
 
+            // Assert
             verify(identityProvider).signOut("jwt-access-token");
         }
 
         @Test
         @DisplayName("A revoked session returns normally without raising anything")
         void successReturnsQuietly() {
+            // Arrange
             doNothing().when(identityProvider).signOut(anyString());
 
-            assertDoesNotThrow(() -> useCase.logout("jwt-access-token"));
+            // Act
+            Executable act = () -> useCase.logout("jwt-access-token");
+
+            // Assert
+            assertDoesNotThrow(act);
         }
     }
 
@@ -78,9 +87,14 @@ class LogoutUseCaseTest {
         @EnumSource(value = UpstreamAuthError.class, names = {"TOKEN_INVALID", "TOKEN_EXPIRED"})
         @DisplayName("Logging out an already invalid or expired session succeeds")
         void alreadyInvalidSessionIsTreatedAsSuccess(UpstreamAuthError error) {
+            // Arrange
             doThrow(new UpstreamAuthException(error, "session gone")).when(identityProvider).signOut(anyString());
 
-            assertDoesNotThrow(() -> useCase.logout("stale-token"));
+            // Act
+            Executable act = () -> useCase.logout("stale-token");
+
+            // Assert
+            assertDoesNotThrow(act);
         }
     }
 
@@ -97,30 +111,43 @@ class LogoutUseCaseTest {
                 names = {"TOKEN_INVALID", "TOKEN_EXPIRED"}, mode = EnumSource.Mode.EXCLUDE)
         @DisplayName("Any other upstream failure is escalated as an upstream auth error")
         void otherUpstreamErrorsAreEscalated(UpstreamAuthError error) {
+            // Arrange
             doThrow(new UpstreamAuthException(error, "gotrue down")).when(identityProvider).signOut(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class, () -> useCase.logout("token"));
+            // Act
+            Executable act = () -> useCase.logout("token");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.UPSTREAM_AUTH_ERROR, ex.errorCode());
         }
 
         @Test
         @DisplayName("An escalated upstream failure keeps the provider message for diagnosis")
         void escalatedFailureKeepsUpstreamMessage() {
+            // Arrange
             doThrow(new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out"))
                     .when(identityProvider).signOut(anyString());
 
-            BusinessException ex = assertThrows(BusinessException.class, () -> useCase.logout("token"));
+            // Act
+            Executable act = () -> useCase.logout("token");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("gotrue timed out", ex.getMessage());
         }
 
         @Test
         @DisplayName("A non-auth runtime failure is not swallowed by the logout use case")
         void unrelatedRuntimeFailurePropagates() {
+            // Arrange
             doThrow(new IllegalStateException("connection reset")).when(identityProvider).signOut(anyString());
 
-            assertThrows(IllegalStateException.class, () -> useCase.logout("token"));
+            // Act
+            Executable act = () -> useCase.logout("token");
+
+            // Assert
+            assertThrows(IllegalStateException.class, act);
         }
     }
 }

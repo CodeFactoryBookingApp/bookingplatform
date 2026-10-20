@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -49,6 +50,8 @@ import static org.mockito.Mockito.when;
  *    block, every arm of the mapping switch, both sides of the lock guard.
  *  - Interaction verification: the provider must not be reached while locked, and
  *    the attempt must be recorded with the normalized email.
+ *
+ * Every test follows Arrange-Act-Assert with a single Act per test.
  */
 class LoginUseCaseTest {
 
@@ -95,53 +98,74 @@ class LoginUseCaseTest {
         @Test
         @DisplayName("One failure below the threshold still lets the user log in")
         void oneBelowThresholdIsNotLocked() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS - 1);
             when(identityProvider.requestPasswordToken("ana@example.com", "pwd")).thenReturn(tokens);
 
-            assertSame(tokens, useCase.login("ana@example.com", "pwd"));
+            // Act
+            AuthTokens result = useCase.login("ana@example.com", "pwd");
+
+            // Assert
+            assertSame(tokens, result);
         }
 
         @Test
         @DisplayName("Exactly maxFailedAttempts recent failures lock the account")
         void exactlyAtThresholdIsLocked() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS);
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.ACCOUNT_LOCKED, ex.errorCode());
         }
 
         @Test
         @DisplayName("One failure above the threshold keeps the account locked")
         void oneAboveThresholdIsLocked() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS + 1);
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.ACCOUNT_LOCKED, ex.errorCode());
         }
 
         @Test
         @DisplayName("An account with no previous failures is never locked")
         void noFailuresIsNotLocked() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
-            assertSame(tokens, useCase.login("ana@example.com", "pwd"));
+            // Act
+            AuthTokens result = useCase.login("ana@example.com", "pwd");
+
+            // Assert
+            assertSame(tokens, result);
         }
 
         @Test
         @DisplayName("Failures older than the lock window do not lock the account")
         void staleFailuresOutsideWindowDoNotLock() {
+            // Arrange
             when(loginAttemptRepository.findFailuresSince(anyString(), any(Instant.class)))
                     .thenReturn(List.of(NOW.minus(Duration.ofMinutes(16)),
                             NOW.minus(Duration.ofMinutes(17)),
                             NOW.minus(Duration.ofMinutes(18))));
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
-            assertSame(tokens, useCase.login("ana@example.com", "pwd"));
+            // Act
+            AuthTokens result = useCase.login("ana@example.com", "pwd");
+
+            // Assert
+            assertSame(tokens, result);
         }
     }
 
@@ -156,42 +180,56 @@ class LoginUseCaseTest {
         @Test
         @DisplayName("A locked account never reaches the identity provider")
         void lockedAccountDoesNotCallProvider() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS);
 
-            assertThrows(BusinessException.class, () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verifyNoInteractions(identityProvider);
         }
 
         @Test
         @DisplayName("A login rejected by the lock is not recorded as a new attempt")
         void lockedAccountDoesNotRecordAttempt() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS);
 
-            assertThrows(BusinessException.class, () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verify(loginAttemptRepository, never()).recordAttempt(anyString(), anyBoolean(), any(Instant.class));
         }
 
         @Test
         @DisplayName("The lock reports retryAfterMinutes as the configured window in minutes")
         void lockReportsRetryAfterMinutes() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS);
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(String.valueOf(LOCK_WINDOW.toMinutes()), ex.details().get("retryAfterMinutes"));
         }
 
         @Test
         @DisplayName("The lock is reported with the ACCOUNT_LOCKED default message")
         void lockUsesDefaultMessage() {
+            // Arrange
             givenRecentFailures(MAX_FAILED_ATTEMPTS);
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.ACCOUNT_LOCKED.defaultMessage(), ex.getMessage());
         }
     }
@@ -212,12 +250,15 @@ class LoginUseCaseTest {
         })
         @DisplayName("The email is lowercased before looking up the recent failures")
         void emailIsNormalizedBeforeQuery(String rawEmail, String expected) {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
+            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
+            // Act
             useCase.login(rawEmail, "pwd");
 
-            ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+            // Assert
             verify(loginAttemptRepository).findFailuresSince(captor.capture(), any(Instant.class));
             assertEquals(expected, captor.getValue());
         }
@@ -229,34 +270,44 @@ class LoginUseCaseTest {
         })
         @DisplayName("The email is lowercased before recording a successful attempt")
         void emailIsNormalizedBeforeRecordingSuccess(String rawEmail, String expected) {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
+            // Act
             useCase.login(rawEmail, "pwd");
 
+            // Assert
             verify(loginAttemptRepository).recordAttempt(eq(expected), anyBoolean(), any(Instant.class));
         }
 
         @Test
         @DisplayName("The email is lowercased before recording a failed attempt")
         void emailIsNormalizedBeforeRecordingFailure() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString()))
                     .thenThrow(upstream(UpstreamAuthError.INVALID_CREDENTIALS));
 
-            assertThrows(BusinessException.class, () -> useCase.login("ANA@Example.COM", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ANA@Example.COM", "pwd");
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verify(loginAttemptRepository).recordAttempt(eq("ana@example.com"), eq(false), any(Instant.class));
         }
 
         @Test
         @DisplayName("The normalized email, not the raw one, is sent to the identity provider")
         void normalizedEmailIsSentToProvider() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
+            // Act
             useCase.login("ANA@EXAMPLE.COM", "pwd");
 
+            // Assert
             verify(identityProvider).requestPasswordToken("ana@example.com", "pwd");
         }
     }
@@ -268,12 +319,15 @@ class LoginUseCaseTest {
         @Test
         @DisplayName("Recent failures are looked up from now minus the lock window")
         void queriesFailuresSinceNowMinusWindow() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
+            ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
 
+            // Act
             useCase.login("ana@example.com", "pwd");
 
-            ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
+            // Assert
             verify(loginAttemptRepository).findFailuresSince(anyString(), captor.capture());
             assertEquals(NOW.minus(LOCK_WINDOW), captor.getValue());
         }
@@ -286,20 +340,28 @@ class LoginUseCaseTest {
         @Test
         @DisplayName("A correct login returns the tokens issued by the identity provider")
         void returnsProviderTokens() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
-            assertSame(tokens, useCase.login("ana@example.com", "pwd"));
+            // Act
+            AuthTokens result = useCase.login("ana@example.com", "pwd");
+
+            // Assert
+            assertSame(tokens, result);
         }
 
         @Test
         @DisplayName("A correct login is recorded as a successful attempt at the current instant")
         void recordsSuccessTrue() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
 
+            // Act
             useCase.login("ana@example.com", "pwd");
 
+            // Assert
             verify(loginAttemptRepository).recordAttempt("ana@example.com", true, NOW);
         }
     }
@@ -318,11 +380,15 @@ class LoginUseCaseTest {
                 names = {"INVALID_CREDENTIALS", "EMAIL_NOT_CONFIRMED"})
         @DisplayName("Credential-related upstream errors count towards the lock")
         void credentialErrorsAreRecorded(UpstreamAuthError error) {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenThrow(upstream(error));
 
-            assertThrows(BusinessException.class, () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verify(loginAttemptRepository).recordAttempt("ana@example.com", false, NOW);
         }
 
@@ -332,11 +398,15 @@ class LoginUseCaseTest {
                         "USER_ALREADY_EXISTS", "TOKEN_INVALID", "TOKEN_EXPIRED"})
         @DisplayName("Infrastructure or unrelated upstream errors never count towards the lock")
         void nonCredentialErrorsAreNotRecorded(UpstreamAuthError error) {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenThrow(upstream(error));
 
-            assertThrows(BusinessException.class, () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            assertThrows(BusinessException.class, act);
             verify(loginAttemptRepository, never()).recordAttempt(anyString(), anyBoolean(), any(Instant.class));
         }
     }
@@ -362,51 +432,63 @@ class LoginUseCaseTest {
         })
         @DisplayName("Each upstream error maps to its business error code")
         void mapsEachUpstreamError(UpstreamAuthError error, ErrorCode expected) {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString())).thenThrow(upstream(error));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(expected, ex.errorCode());
         }
 
         @Test
         @DisplayName("An unmapped upstream failure keeps the provider message for diagnosis")
         void unmappedErrorKeepsUpstreamMessage() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString()))
                     .thenThrow(upstream(UpstreamAuthError.UNAVAILABLE));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals("gotrue said UNAVAILABLE", ex.getMessage());
         }
 
         @Test
         @DisplayName("A mapped upstream failure does not leak the provider message")
         void mappedErrorUsesDefaultMessage() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString()))
                     .thenThrow(upstream(UpstreamAuthError.INVALID_CREDENTIALS));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.INVALID_CREDENTIALS.defaultMessage(), ex.getMessage());
         }
 
         @Test
         @DisplayName("A rejected login carries no extra details to the client")
         void failedLoginCarriesNoDetails() {
+            // Arrange
             givenRecentFailures(0);
             when(identityProvider.requestPasswordToken(anyString(), anyString()))
                     .thenThrow(upstream(UpstreamAuthError.INVALID_CREDENTIALS));
 
-            BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.login("ana@example.com", "pwd"));
+            // Act
+            Executable act = () -> useCase.login("ana@example.com", "pwd");
 
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
             assertTrue(ex.details().isEmpty());
         }
     }

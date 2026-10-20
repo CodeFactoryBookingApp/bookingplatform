@@ -20,19 +20,26 @@ class UpstreamAuthExceptionTest {
     @Test
     @DisplayName("A serialised upstream failure keeps its classified error and message")
     void survivesJavaSerialisation() throws Exception {
+        // Arrange
         UpstreamAuthException original =
                 new UpstreamAuthException(UpstreamAuthError.RATE_LIMITED, "too many calls");
 
+        // Act
+        UpstreamAuthException restored = serialiseAndRestore(original);
+
+        // Assert
+        assertEquals(UpstreamAuthError.RATE_LIMITED, restored.error());
+        assertEquals("too many calls", restored.getMessage());
+    }
+
+    /** Round-trips the exception through Java serialisation, the behaviour under test. */
+    private static UpstreamAuthException serialiseAndRestore(UpstreamAuthException original) throws Exception {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {
             out.writeObject(original);
         }
-        UpstreamAuthException restored;
         try (ObjectInputStream in = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
-            restored = (UpstreamAuthException) in.readObject();
+            return (UpstreamAuthException) in.readObject();
         }
-
-        assertEquals(UpstreamAuthError.RATE_LIMITED, restored.error());
-        assertEquals("too many calls", restored.getMessage());
     }
 }

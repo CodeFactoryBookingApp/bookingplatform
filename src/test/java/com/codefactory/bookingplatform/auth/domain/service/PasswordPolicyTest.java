@@ -3,12 +3,14 @@ package com.codefactory.bookingplatform.auth.domain.service;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -26,6 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * of missing classes. White box: every {@code if} in {@link PasswordPolicy#violations(String)},
  * both sides of the compound conditions {@code password == null || length < MIN} and
  * {@code password != null && length > MAX}, and both outcomes of each of the four regex probes.</p>
+ *
+ * <p>Every test follows Arrange-Act-Assert with a single Act per test.</p>
  */
 class PasswordPolicyTest {
 
@@ -51,27 +55,41 @@ class PasswordPolicyTest {
     @Test
     @DisplayName("Strong password passes the policy")
     void strongPasswordIsValid() {
-        assertTrue(PasswordPolicy.isValid("Str0ng!Pass"));
+        // Act
+        boolean valid = PasswordPolicy.isValid("Str0ng!Pass");
+
+        // Assert
+        assertTrue(valid);
     }
 
     @Test
     @DisplayName("Short password is rejected")
     void shortPasswordIsRejected() {
+        // Act
         List<String> violations = PasswordPolicy.violations("Ab1!");
+
+        // Assert
         assertFalse(violations.isEmpty());
     }
 
     @Test
     @DisplayName("Password without required character classes reports every missing rule")
     void reportsAllMissingRules() {
+        // Act
         List<String> violations = PasswordPolicy.violations("todolowercase");
+
+        // Assert
         assertEqualsAtLeast(violations, 3);
     }
 
     @Test
     @DisplayName("Null password is rejected without NPE")
     void nullPasswordIsRejected() {
-        assertFalse(PasswordPolicy.isValid(null));
+        // Act
+        boolean valid = PasswordPolicy.isValid(null);
+
+        // Assert
+        assertFalse(valid);
     }
 
     private void assertEqualsAtLeast(List<String> violations, int minimum) {
@@ -90,15 +108,26 @@ class PasswordPolicyTest {
         @Test
         @DisplayName("The policy declares 8 and 72 as the accepted length boundaries")
         void boundariesAreEightAndSeventyTwo() {
-            assertEquals(8, PasswordPolicy.MIN_LENGTH);
-            assertEquals(72, PasswordPolicy.MAX_LENGTH);
+            // Act
+            int minLength = PasswordPolicy.MIN_LENGTH;
+            int maxLength = PasswordPolicy.MAX_LENGTH;
+
+            // Assert
+            assertEquals(8, minLength);
+            assertEquals(72, maxLength);
         }
 
         @ParameterizedTest(name = "length {0} is rejected as too short")
         @ValueSource(ints = {1, 7})
         @DisplayName("A password shorter than 8 characters is rejected for length even if it has every character class")
         void belowMinimumLengthIsRejected(int length) {
-            List<String> violations = PasswordPolicy.violations(passwordOfLength(length));
+            // Arrange
+            String password = passwordOfLength(length);
+
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
             assertTrue(violations.contains(TOO_SHORT), () -> "Expected the too-short violation, got " + violations);
         }
 
@@ -106,8 +135,14 @@ class PasswordPolicyTest {
         @ValueSource(ints = {8, 9, 71, 72})
         @DisplayName("A password between 8 and 72 characters that meets every character class is accepted")
         void lengthsInsideTheRangeAreAccepted(int length) {
+            // Arrange
             String password = passwordOfLength(length);
-            assertIterableEquals(List.of(), PasswordPolicy.violations(password),
+
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
+            assertIterableEquals(List.of(), violations,
                     () -> "Expected no violations for a valid password of length " + length);
         }
 
@@ -115,28 +150,79 @@ class PasswordPolicyTest {
         @ValueSource(ints = {73, 100})
         @DisplayName("A password longer than 72 characters is rejected for length")
         void aboveMaximumLengthIsRejected(int length) {
-            List<String> violations = PasswordPolicy.violations(passwordOfLength(length));
+            // Arrange
+            String password = passwordOfLength(length);
+
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
             assertTrue(violations.contains(TOO_LONG), () -> "Expected the too-long violation, got " + violations);
         }
 
         @Test
-        @DisplayName("Exactly 72 characters is the last accepted length and 73 is the first rejected one")
+        @DisplayName("Exactly 72 characters is the last accepted length")
         void maximumBoundaryIsInclusive() {
-            assertTrue(PasswordPolicy.isValid(passwordOfLength(72)));
-            assertFalse(PasswordPolicy.isValid(passwordOfLength(73)));
+            // Arrange
+            String password = passwordOfLength(72);
+
+            // Act
+            boolean valid = PasswordPolicy.isValid(password);
+
+            // Assert
+            assertTrue(valid);
         }
 
         @Test
-        @DisplayName("Exactly 8 characters is the first accepted length and 7 is the last rejected one")
+        @DisplayName("73 characters is the first rejected length above the maximum")
+        void firstLengthAboveMaximumIsInvalid() {
+            // Arrange
+            String password = passwordOfLength(73);
+
+            // Act
+            boolean valid = PasswordPolicy.isValid(password);
+
+            // Assert
+            assertFalse(valid);
+        }
+
+        @Test
+        @DisplayName("Exactly 8 characters is the first accepted length")
         void minimumBoundaryIsInclusive() {
-            assertTrue(PasswordPolicy.isValid(passwordOfLength(8)));
-            assertFalse(PasswordPolicy.isValid(passwordOfLength(7)));
+            // Arrange
+            String password = passwordOfLength(8);
+
+            // Act
+            boolean valid = PasswordPolicy.isValid(password);
+
+            // Assert
+            assertTrue(valid);
+        }
+
+        @Test
+        @DisplayName("7 characters is the last rejected length below the minimum")
+        void lastLengthBelowMinimumIsInvalid() {
+            // Arrange
+            String password = passwordOfLength(7);
+
+            // Act
+            boolean valid = PasswordPolicy.isValid(password);
+
+            // Assert
+            assertFalse(valid);
         }
 
         @Test
         @DisplayName("An over-long password whose only defect is the length reports just that one violation")
         void tooLongReportsOnlyTheLengthViolation() {
-            assertIterableEquals(List.of(TOO_LONG), PasswordPolicy.violations(passwordOfLength(73)));
+            // Arrange
+            String password = passwordOfLength(73);
+
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
+            assertIterableEquals(List.of(TOO_LONG), violations);
         }
     }
 
@@ -151,20 +237,30 @@ class PasswordPolicyTest {
         @Test
         @DisplayName("A null password reports only the minimum-length violation, because no character rule can be evaluated")
         void nullReportsOnlyTheLengthViolation() {
-            assertIterableEquals(List.of(TOO_SHORT), PasswordPolicy.violations(null));
+            // Act
+            List<String> violations = PasswordPolicy.violations(null);
+
+            // Assert
+            assertIterableEquals(List.of(TOO_SHORT), violations);
         }
 
         @Test
         @DisplayName("An empty password breaks the length rule and all four character-class rules at once")
         void emptyPasswordBreaksEveryRule() {
+            // Act
             List<String> violations = PasswordPolicy.violations("");
+
+            // Assert
             assertIterableEquals(List.of(TOO_SHORT, NO_UPPER, NO_LOWER, NO_DIGIT, NO_SPECIAL), violations);
         }
 
         @Test
         @DisplayName("An empty password reports the four character-class violations, the only input that can break all four")
         void emptyPasswordReportsTheFourCharacterClassViolations() {
+            // Act
             List<String> violations = PasswordPolicy.violations("");
+
+            // Assert
             assertTrue(violations.containsAll(List.of(NO_UPPER, NO_LOWER, NO_DIGIT, NO_SPECIAL)),
                     () -> "Expected the four character-class violations, got " + violations);
         }
@@ -173,13 +269,20 @@ class PasswordPolicyTest {
         @NullAndEmptySource
         @DisplayName("Neither null nor an empty password is ever valid")
         void nullAndEmptyAreNeverValid(String password) {
-            assertFalse(PasswordPolicy.isValid(password));
+            // Act
+            boolean valid = PasswordPolicy.isValid(password);
+
+            // Assert
+            assertFalse(valid);
         }
 
         @Test
         @DisplayName("A blank password made only of spaces still fails upper, lower and digit but not the special rule")
         void blankPasswordFailsEveryRuleButSpecial() {
+            // Act
             List<String> violations = PasswordPolicy.violations("         ");
+
+            // Assert
             assertIterableEquals(List.of(NO_UPPER, NO_LOWER, NO_DIGIT), violations);
         }
     }
@@ -201,13 +304,21 @@ class PasswordPolicyTest {
         })
         @DisplayName("Breaking a single character-class requirement reports that requirement and nothing else")
         void singleMissingClassReportsOnlyThatViolation(String password, String expectedViolation) {
-            assertIterableEquals(List.of(expectedViolation), PasswordPolicy.violations(password));
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
+            assertIterableEquals(List.of(expectedViolation), violations);
         }
 
         @Test
         @DisplayName("A password missing three character classes reports the three of them in rule order")
         void threeMissingClassesAreAllReported() {
-            assertIterableEquals(List.of(NO_UPPER, NO_DIGIT, NO_SPECIAL), PasswordPolicy.violations("todolowercase"));
+            // Act
+            List<String> violations = PasswordPolicy.violations("todolowercase");
+
+            // Assert
+            assertIterableEquals(List.of(NO_UPPER, NO_DIGIT, NO_SPECIAL), violations);
         }
 
         @ParameterizedTest(name = "\"{0}\" is accepted")
@@ -222,26 +333,41 @@ class PasswordPolicyTest {
         })
         @DisplayName("Any non-alphanumeric character counts as special, including accents, symbols, spaces and tabs")
         void nonAlphanumericCharactersCountAsSpecial(String password) {
-            assertIterableEquals(List.of(), PasswordPolicy.violations(password),
+            // Act
+            List<String> violations = PasswordPolicy.violations(password);
+
+            // Assert
+            assertIterableEquals(List.of(), violations,
                     () -> "Expected \"" + password + "\" to be accepted");
         }
 
         @Test
         @DisplayName("A space alone satisfies the special-character requirement")
         void spaceCountsAsSpecialCharacter() {
-            assertTrue(PasswordPolicy.isValid("Passw0rd here"));
+            // Act
+            boolean valid = PasswordPolicy.isValid("Passw0rd here");
+
+            // Assert
+            assertTrue(valid);
         }
 
         @Test
         @DisplayName("An accented letter satisfies the special-character requirement because the rule is non-ASCII-alphanumeric")
         void accentedLetterCountsAsSpecialCharacter() {
-            assertTrue(PasswordPolicy.isValid("Contraseña1"));
+            // Act
+            boolean valid = PasswordPolicy.isValid("Contraseña1");
+
+            // Assert
+            assertTrue(valid);
         }
 
         @Test
         @DisplayName("Uppercase and lowercase rules only accept ASCII letters, so a non-ASCII-only password fails both")
         void nonAsciiLettersDoNotSatisfyTheCaseRules() {
+            // Act
             List<String> violations = PasswordPolicy.violations("ÑÑññÑÑññ1");
+
+            // Assert
             assertIterableEquals(List.of(NO_UPPER, NO_LOWER), violations);
         }
     }
@@ -290,32 +416,64 @@ class PasswordPolicyTest {
     })
     @DisplayName("The policy accepts a password only when it satisfies every rule at once")
     void isValidReflectsTheWholePolicy(String password, boolean esperado) {
-        assertEquals(esperado, PasswordPolicy.isValid(password),
+        // Act
+        boolean valid = PasswordPolicy.isValid(password);
+
+        // Assert
+        assertEquals(esperado, valid,
                 () -> "the policy disagreed on [" + password + "]");
     }
 
     @Test
     @DisplayName("The returned violation list is a fresh list on every call, so callers cannot poison the policy")
     void violationsReturnsAFreshList() {
+        // Arrange
         List<String> first = PasswordPolicy.violations("");
         first.clear();
-        assertFalse(PasswordPolicy.violations("").isEmpty(),
+
+        // Act
+        List<String> second = PasswordPolicy.violations("");
+
+        // Assert
+        assertFalse(second.isEmpty(),
                 "Mutating a previously returned list must not affect later calls");
     }
 
     @Test
     @DisplayName("PasswordPolicy is a utility class that cannot be instantiated")
     void policyCannotBeInstantiated() throws Exception {
-        var constructor = PasswordPolicy.class.getDeclaredConstructor();
-        assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()),
+        // Arrange
+        Constructor<PasswordPolicy> constructor = PasswordPolicy.class.getDeclaredConstructor();
+
+        // Act
+        int modifiers = constructor.getModifiers();
+
+        // Assert
+        assertTrue(java.lang.reflect.Modifier.isPrivate(modifiers),
                 "The only constructor must be private");
+    }
+
+    @Test
+    @DisplayName("The private constructor still builds an instance when forced through reflection")
+    void privateConstructorBuildsAnInstanceReflectively() throws Exception {
+        // Arrange
+        Constructor<PasswordPolicy> constructor = PasswordPolicy.class.getDeclaredConstructor();
         constructor.setAccessible(true);
-        assertEquals(PasswordPolicy.class, constructor.newInstance().getClass());
+
+        // Act
+        PasswordPolicy instance = constructor.newInstance();
+
+        // Assert
+        assertEquals(PasswordPolicy.class, instance.getClass());
     }
 
     @Test
     @DisplayName("Evaluating a null password never throws a NullPointerException")
     void nullPasswordNeverThrows() {
-        assertDoesNotThrow(() -> PasswordPolicy.violations(null));
+        // Act
+        Executable act = () -> PasswordPolicy.violations(null);
+
+        // Assert
+        assertDoesNotThrow(act);
     }
 }
