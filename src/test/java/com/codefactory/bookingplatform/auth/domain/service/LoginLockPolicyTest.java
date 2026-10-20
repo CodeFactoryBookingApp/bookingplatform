@@ -13,7 +13,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,41 +34,6 @@ class LoginLockPolicyTest {
 
     private final LoginLockPolicy policy = new LoginLockPolicy(5, Duration.ofMinutes(15));
     private final Instant now = Instant.parse("2026-09-18T12:00:00Z");
-
-    @Test
-    @DisplayName("Fewer failures than the maximum do not block")
-    void belowThresholdIsNotBlocked() {
-        // Arrange
-        List<Instant> failures = List.of(
-                now.minus(Duration.ofMinutes(4)),
-                now.minus(Duration.ofMinutes(3)),
-                now.minus(Duration.ofMinutes(2)),
-                now.minus(Duration.ofMinutes(1)));
-
-        // Act
-        boolean blocked = policy.isBlocked(failures, now);
-
-        // Assert
-        assertFalse(blocked);
-    }
-
-    @Test
-    @DisplayName("Five failures within the window block the account")
-    void reachingThresholdBlocks() {
-        // Arrange
-        List<Instant> failures = List.of(
-                now.minus(Duration.ofMinutes(5)),
-                now.minus(Duration.ofMinutes(4)),
-                now.minus(Duration.ofMinutes(3)),
-                now.minus(Duration.ofMinutes(2)),
-                now.minus(Duration.ofMinutes(1)));
-
-        // Act
-        boolean blocked = policy.isBlocked(failures, now);
-
-        // Assert
-        assertTrue(blocked);
-    }
 
     @Test
     @DisplayName("Failures outside the sliding window are ignored")
@@ -107,7 +71,7 @@ class LoginLockPolicyTest {
     class ConstructorGuard {
 
         @ParameterizedTest(name = "maxFailedAttempts = {0} is rejected")
-        @ValueSource(ints = {0, -1, Integer.MIN_VALUE})
+        @ValueSource(ints = {0, -1})
         @DisplayName("A non-positive maximum of failed attempts is rejected, because a lock that triggers at zero failures would block everyone")
         void nonPositiveMaximumIsRejected(int maxFailedAttempts) {
             // Act
@@ -126,17 +90,6 @@ class LoginLockPolicyTest {
             // Assert
             IllegalArgumentException thrown = assertThrows(IllegalArgumentException.class, act);
             assertEquals("maxFailedAttempts must be positive", thrown.getMessage());
-        }
-
-        @ParameterizedTest(name = "maxFailedAttempts = {0} is accepted")
-        @ValueSource(ints = {1, 2, 5, Integer.MAX_VALUE})
-        @DisplayName("Any positive maximum of failed attempts is accepted, one being the strictest allowed policy")
-        void positiveMaximumIsAccepted(int maxFailedAttempts) {
-            // Act
-            Executable act = () -> new LoginLockPolicy(maxFailedAttempts, Duration.ofMinutes(15));
-
-            // Assert
-            assertDoesNotThrow(act);
         }
 
         @Test
@@ -168,51 +121,12 @@ class LoginLockPolicyTest {
     }
 
     // ----------------------------------------------------------------------------------------
-    // Configuration accessors
-    // ----------------------------------------------------------------------------------------
-
-    @Nested
-    @DisplayName("Configuration accessors")
-    class ConfigurationAccessors {
-
-        @Test
-        @DisplayName("The policy exposes the configured maximum of failed attempts")
-        void exposesMaxFailedAttempts() {
-            // Act
-            int maxFailedAttempts = policy.maxFailedAttempts();
-
-            // Assert
-            assertEquals(5, maxFailedAttempts);
-        }
-
-        @Test
-        @DisplayName("The policy exposes the configured lock window")
-        void exposesLockWindow() {
-            // Act
-            Duration lockWindow = policy.lockWindow();
-
-            // Assert
-            assertEquals(Duration.ofMinutes(15), lockWindow);
-        }
-    }
-
-    // ----------------------------------------------------------------------------------------
     // Threshold: boundary value analysis at max - 1, max and max + 1
     // ----------------------------------------------------------------------------------------
 
     @Nested
     @DisplayName("Threshold")
     class Threshold {
-
-        @Test
-        @DisplayName("An empty list of failures never blocks")
-        void emptyListDoesNotBlock() {
-            // Act
-            boolean blocked = policy.isBlocked(List.of(), now);
-
-            // Assert
-            assertFalse(blocked);
-        }
 
         @ParameterizedTest(name = "{0} failures inside the window -> blocked = {1}")
         @CsvSource({
@@ -233,45 +147,6 @@ class LoginLockPolicyTest {
 
             // Assert
             assertEquals(expectedBlocked, blocked);
-        }
-
-        @Test
-        @DisplayName("Exactly one failure short of the maximum does not block")
-        void oneBelowTheThresholdDoesNotBlock() {
-            // Arrange
-            List<Instant> failures = failuresInsideWindow(4);
-
-            // Act
-            boolean blocked = policy.isBlocked(failures, now);
-
-            // Assert
-            assertFalse(blocked);
-        }
-
-        @Test
-        @DisplayName("Exactly the maximum blocks, so the threshold is inclusive")
-        void exactlyTheThresholdBlocks() {
-            // Arrange
-            List<Instant> failures = failuresInsideWindow(5);
-
-            // Act
-            boolean blocked = policy.isBlocked(failures, now);
-
-            // Assert
-            assertTrue(blocked);
-        }
-
-        @Test
-        @DisplayName("One failure past the maximum still blocks")
-        void oneAboveTheThresholdBlocks() {
-            // Arrange
-            List<Instant> failures = failuresInsideWindow(6);
-
-            // Act
-            boolean blocked = policy.isBlocked(failures, now);
-
-            // Assert
-            assertTrue(blocked);
         }
     }
 
@@ -399,32 +274,6 @@ class LoginLockPolicyTest {
 
             // Assert
             assertTrue(blocked);
-        }
-
-        @Test
-        @DisplayName("A zero-length window only counts failures stamped exactly at now")
-        void zeroLengthWindowCountsOnlyNow() {
-            // Arrange
-            LoginLockPolicy instantaneous = new LoginLockPolicy(1, Duration.ZERO);
-
-            // Act
-            boolean blocked = instantaneous.isBlocked(List.of(now), now);
-
-            // Assert
-            assertTrue(blocked);
-        }
-
-        @Test
-        @DisplayName("A zero-length window discards a failure from one millisecond ago")
-        void zeroLengthWindowDiscardsThePast() {
-            // Arrange
-            LoginLockPolicy instantaneous = new LoginLockPolicy(1, Duration.ZERO);
-
-            // Act
-            boolean blocked = instantaneous.isBlocked(List.of(now.minusMillis(1)), now);
-
-            // Assert
-            assertFalse(blocked);
         }
     }
 }

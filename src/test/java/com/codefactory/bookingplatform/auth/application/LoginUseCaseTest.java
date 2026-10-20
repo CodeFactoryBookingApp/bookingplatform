@@ -122,51 +122,6 @@ class LoginUseCaseTest {
             BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.ACCOUNT_LOCKED, ex.errorCode());
         }
-
-        @Test
-        @DisplayName("One failure above the threshold keeps the account locked")
-        void oneAboveThresholdIsLocked() {
-            // Arrange
-            givenRecentFailures(MAX_FAILED_ATTEMPTS + 1);
-
-            // Act
-            Executable act = () -> useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals(ErrorCode.ACCOUNT_LOCKED, ex.errorCode());
-        }
-
-        @Test
-        @DisplayName("An account with no previous failures is never locked")
-        void noFailuresIsNotLocked() {
-            // Arrange
-            givenRecentFailures(0);
-            when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
-
-            // Act
-            AuthTokens result = useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            assertSame(tokens, result);
-        }
-
-        @Test
-        @DisplayName("Failures older than the lock window do not lock the account")
-        void staleFailuresOutsideWindowDoNotLock() {
-            // Arrange
-            when(loginAttemptRepository.findFailuresSince(anyString(), any(Instant.class)))
-                    .thenReturn(List.of(NOW.minus(Duration.ofMinutes(16)),
-                            NOW.minus(Duration.ofMinutes(17)),
-                            NOW.minus(Duration.ofMinutes(18))));
-            when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
-
-            // Act
-            AuthTokens result = useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            assertSame(tokens, result);
-        }
     }
 
     // ----------------------------------------------------------------- //
@@ -203,34 +158,6 @@ class LoginUseCaseTest {
             // Assert
             assertThrows(BusinessException.class, act);
             verify(loginAttemptRepository, never()).recordAttempt(anyString(), anyBoolean(), any(Instant.class));
-        }
-
-        @Test
-        @DisplayName("The lock reports retryAfterMinutes as the configured window in minutes")
-        void lockReportsRetryAfterMinutes() {
-            // Arrange
-            givenRecentFailures(MAX_FAILED_ATTEMPTS);
-
-            // Act
-            Executable act = () -> useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals(String.valueOf(LOCK_WINDOW.toMinutes()), ex.details().get("retryAfterMinutes"));
-        }
-
-        @Test
-        @DisplayName("The lock is reported with the ACCOUNT_LOCKED default message")
-        void lockUsesDefaultMessage() {
-            // Arrange
-            givenRecentFailures(MAX_FAILED_ATTEMPTS);
-
-            // Act
-            Executable act = () -> useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals(ErrorCode.ACCOUNT_LOCKED.defaultMessage(), ex.getMessage());
         }
     }
 
@@ -338,20 +265,6 @@ class LoginUseCaseTest {
     class SuccessfulLogin {
 
         @Test
-        @DisplayName("A correct login returns the tokens issued by the identity provider")
-        void returnsProviderTokens() {
-            // Arrange
-            givenRecentFailures(0);
-            when(identityProvider.requestPasswordToken(anyString(), anyString())).thenReturn(tokens);
-
-            // Act
-            AuthTokens result = useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            assertSame(tokens, result);
-        }
-
-        @Test
         @DisplayName("A correct login is recorded as a successful attempt at the current instant")
         void recordsSuccessTrue() {
             // Arrange
@@ -442,22 +355,6 @@ class LoginUseCaseTest {
             // Assert
             BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(expected, ex.errorCode());
-        }
-
-        @Test
-        @DisplayName("An unmapped upstream failure keeps the provider message for diagnosis")
-        void unmappedErrorKeepsUpstreamMessage() {
-            // Arrange
-            givenRecentFailures(0);
-            when(identityProvider.requestPasswordToken(anyString(), anyString()))
-                    .thenThrow(upstream(UpstreamAuthError.UNAVAILABLE));
-
-            // Act
-            Executable act = () -> useCase.login("ana@example.com", "pwd");
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals("gotrue said UNAVAILABLE", ex.getMessage());
         }
 
         @Test

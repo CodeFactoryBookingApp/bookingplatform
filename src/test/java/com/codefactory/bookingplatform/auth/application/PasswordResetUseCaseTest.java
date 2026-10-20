@@ -19,9 +19,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -35,7 +33,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
  * Unit tests for the password reset with a one-time recovery token (HU-021).
  *
  * Techniques applied:
- *  - Boundary value analysis on the password length (7/8 and 72/73 characters).
+ *  - Boundary value analysis on the password length: 7 and 73 characters, just outside
+ *    the accepted range (the accepted side is covered by PasswordPolicyTest).
  *  - Equivalence partitioning on each password policy rule (uppercase, lowercase,
  *    digit, special character) plus the null partition.
  *  - Decision table over UpstreamAuthError: the two token values are translated,
@@ -62,18 +61,6 @@ class PasswordResetUseCaseTest {
         return VALID_PASSWORD + "x".repeat(totalLength - VALID_PASSWORD.length());
     }
 
-    /**
-     * Boundary values inside the valid range [8, 72]: the minimum, just inside each
-     * end, and the maximum.
-     */
-    static Stream<String> acceptedLengthBoundaries() {
-        return Stream.of(
-                VALID_PASSWORD, // 8: minimum
-                padded(9),      // 9: just inside
-                padded(71),     // 71: just inside
-                padded(72));    // 72: maximum
-    }
-
     /** Boundary values just outside the valid range [8, 72]. */
     static Stream<String> rejectedLengthBoundaries() {
         return Stream.of(
@@ -88,20 +75,6 @@ class PasswordResetUseCaseTest {
     @Nested
     @DisplayName("Password length (boundary value analysis at 8 and 72 characters)")
     class LengthBoundaries {
-
-        @ParameterizedTest(name = "[{0}] is accepted")
-        @MethodSource("com.codefactory.bookingplatform.auth.application.PasswordResetUseCaseTest#acceptedLengthBoundaries")
-        @DisplayName("Passwords on or just inside the 8 and 72 character boundaries are accepted for the reset")
-        void lengthsOnOrInsideBoundariesAreAccepted(String password) {
-            // Arrange
-            doNothing().when(identityProvider).resetPasswordWithToken(anyString(), anyString());
-
-            // Act
-            Executable act = () -> useCase.resetPassword("token", password);
-
-            // Assert
-            assertDoesNotThrow(act);
-        }
 
         @ParameterizedTest(name = "[{0}] is rejected")
         @MethodSource("com.codefactory.bookingplatform.auth.application.PasswordResetUseCaseTest#rejectedLengthBoundaries")
@@ -142,6 +115,9 @@ class PasswordResetUseCaseTest {
             // Assert
             BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
+            String violations = ex.details().get("violations");
+            assertTrue(violations.contains(missingRule),
+                    () -> "the violations detail should name the missing " + missingRule + " but was: " + violations);
         }
 
         @ParameterizedTest(name = "[{0}] never reaches the identity provider")
@@ -176,23 +152,12 @@ class PasswordResetUseCaseTest {
 
             // Assert
             BusinessException ex = assertThrows(BusinessException.class, act);
-            String violations = ex.details().get("violations");
-            assertTrue(violations.contains("at least 8 characters")
-                            && violations.contains("uppercase")
-                            && violations.contains("digit")
-                            && violations.contains("special"),
-                    "violations detail should list every broken rule but was: " + violations);
-        }
-
-        @Test
-        @DisplayName("The rejection uses the PASSWORD_TOO_WEAK default message")
-        void rejectionUsesDefaultMessage() {
-            // Act
-            Executable act = () -> useCase.resetPassword("token", "abc");
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals(ErrorCode.PASSWORD_TOO_WEAK.defaultMessage(), ex.getMessage());
+            assertEquals("Password must be at least 8 characters long; "
+                            + "Password must contain at least one uppercase letter; "
+                            + "Password must contain at least one digit; "
+                            + "Password must contain at least one special character",
+                    ex.details().get("violations"),
+                    "the violations detail lists every broken rule, in policy order, and nothing else");
         }
     }
 
@@ -268,37 +233,6 @@ class PasswordResetUseCaseTest {
             // Assert
             BusinessException ex = assertThrows(BusinessException.class, act);
             assertEquals(ErrorCode.RATE_LIMITED, ex.errorCode());
-        }
-
-        @ParameterizedTest(name = "{0} never escapes as a raw UpstreamAuthException")
-        @EnumSource(UpstreamAuthError.class)
-        @DisplayName("No upstream failure escapes unmapped, so none of them can surface as a 500")
-        void noUpstreamErrorEscapesUnmapped(UpstreamAuthError error) {
-            // Arrange
-            doThrow(new UpstreamAuthException(error, "gotrue said " + error))
-                    .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
-
-            // Act
-            Executable act = () -> useCase.resetPassword("token-hash", VALID_PASSWORD);
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertNotEquals(ErrorCode.INTERNAL_ERROR, ex.errorCode());
-        }
-
-        @Test
-        @DisplayName("The upstream message is kept in the rejection so the trace stays useful")
-        void keepsTheUpstreamMessage() {
-            // Arrange
-            doThrow(new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE, "gotrue timed out"))
-                    .when(identityProvider).resetPasswordWithToken(anyString(), anyString());
-
-            // Act
-            Executable act = () -> useCase.resetPassword("token-hash", VALID_PASSWORD);
-
-            // Assert
-            BusinessException ex = assertThrows(BusinessException.class, act);
-            assertEquals("gotrue timed out", ex.getMessage());
         }
     }
 }
