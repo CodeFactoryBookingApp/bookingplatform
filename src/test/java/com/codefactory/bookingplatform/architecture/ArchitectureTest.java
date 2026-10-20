@@ -1,85 +1,189 @@
 package com.codefactory.bookingplatform.architecture;
 
+import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import com.tngtech.archunit.lang.EvaluationResult;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Enforces the modular monolith + clean architecture rules (ADR-001):
  *
  * dependency rule: api -> application -> domain <- infrastructure
  * modules talk to each other only through application/domain, never infrastructure or api.
+ *
+ * <p>Each rule follows Arrange-Act-Assert: the production classes are imported once by
+ * {@link AnalyzeClasses} and injected as {@code classes}; the method builds the rule (Arrange),
+ * evaluates it against those classes (Act) and checks that the evaluation reports no violation
+ * (Assert). {@code rule.evaluate(classes)} plus the empty-report check is exactly what
+ * {@code rule.check(classes)} does, so the rules are as strict as they were as {@code ArchRule} fields.
  */
 @AnalyzeClasses(packages = "com.codefactory.bookingplatform", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
 
     @ArchTest
-    static final ArchRule DOMAIN_IS_FREE_OF_FRAMEWORKS = noClasses()
-            .that().resideInAPackage("..domain..")
-            .should().dependOnClassesThat().resideInAnyPackage(
-                    "org.springframework..",
-                    "jakarta.persistence..",
-                    "tools.jackson..",
-                    "com.fasterxml.jackson..",
-                    "io.swagger.v3..")
-            .because("the domain layer must stay pure and framework independent");
+    static void domainIsFreeOfFrameworks(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..domain..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework..",
+                        "jakarta.persistence..",
+                        "tools.jackson..",
+                        "com.fasterxml.jackson..",
+                        "io.swagger.v3..")
+                .because("the domain layer must stay pure and framework independent");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule APPLICATION_DOES_NOT_DEPEND_ON_ADAPTERS = noClasses()
-            .that().resideInAPackage("..application..")
-            .should().dependOnClassesThat().resideInAnyPackage("..api..", "..infrastructure..")
-            .because("use cases must depend on ports, not on adapters");
+    static void applicationDoesNotDependOnAdapters(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..application..")
+                .should().dependOnClassesThat().resideInAnyPackage("..api..", "..infrastructure..")
+                .because("use cases must depend on ports, not on adapters");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule DOMAIN_DOES_NOT_DEPEND_ON_OUTER_LAYERS = noClasses()
-            .that().resideInAPackage("..domain..")
-            .should().dependOnClassesThat().resideInAnyPackage("..application..", "..api..", "..infrastructure..")
-            .because("the dependency rule points inwards");
+    static void domainDoesNotDependOnOuterLayers(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..domain..")
+                .should().dependOnClassesThat().resideInAnyPackage("..application..", "..api..", "..infrastructure..")
+                .because("the dependency rule points inwards");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule INFRASTRUCTURE_DOES_NOT_DEPEND_ON_API = noClasses()
-            .that().resideInAPackage("..infrastructure..")
-            .should().dependOnClassesThat().resideInAPackage("..api..")
-            .because("adapters must not depend on the web layer");
+    static void infrastructureDoesNotDependOnApi(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..infrastructure..")
+                .should().dependOnClassesThat().resideInAPackage("..api..")
+                .because("adapters must not depend on the web layer");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule IDENTITY_ONLY_USES_AUTH_PUBLIC_API = noClasses()
-            .that().resideInAPackage("..identity..")
-            .should().dependOnClassesThat().resideInAnyPackage("..auth.api..", "..auth.infrastructure..")
-            .because("cross-module calls go through the auth application facade only");
+    static void identityOnlyUsesAuthPublicApi(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..identity..")
+                .should().dependOnClassesThat().resideInAnyPackage("..auth.api..", "..auth.infrastructure..")
+                .because("cross-module calls go through the auth application facade only");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule AUTH_DOES_NOT_DEPEND_ON_IDENTITY = noClasses()
-            .that().resideInAPackage("..auth..")
-            .should().dependOnClassesThat().resideInAPackage("..identity..")
-            .because("the transversal auth module must stay independent of business modules");
+    static void authDoesNotDependOnIdentity(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..auth..")
+                .should().dependOnClassesThat().resideInAPackage("..identity..")
+                .because("the transversal auth module must stay independent of business modules");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule SHARED_KERNEL_IS_MODULE_AGNOSTIC = noClasses()
-            .that().resideInAPackage("..shared..")
-            .should().dependOnClassesThat().resideInAnyPackage("..identity..", "..auth..")
-            .because("the shared kernel must not know any business module");
+    static void sharedKernelIsModuleAgnostic(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = noClasses()
+                .that().resideInAPackage("..shared..")
+                .should().dependOnClassesThat().resideInAnyPackage("..identity..", "..auth..")
+                .because("the shared kernel must not know any business module");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule CONTROLLERS_LIVE_IN_API_PACKAGES = classes()
-            .that().haveSimpleNameEndingWith("Controller")
-            .should().resideInAPackage("..api..")
-            .because("web adapters belong to the api layer");
+    static void controllersLiveInApiPackages(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = classes()
+                .that().haveSimpleNameEndingWith("Controller")
+                .should().resideInAPackage("..api..")
+                .because("web adapters belong to the api layer");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule USE_CASES_LIVE_IN_APPLICATION_PACKAGES = classes()
-            .that().haveSimpleNameEndingWith("UseCase")
-            .should().resideInAPackage("..application..")
-            .because("use cases belong to the application layer");
+    static void useCasesLiveInApplicationPackages(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = classes()
+                .that().haveSimpleNameEndingWith("UseCase")
+                .should().resideInAPackage("..application..")
+                .because("use cases belong to the application layer");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
 
     @ArchTest
-    static final ArchRule JPA_ENTITIES_LIVE_IN_INFRASTRUCTURE = classes()
-            .that().haveSimpleNameEndingWith("Entity")
-            .and().resideOutsideOfPackage("..shared..")
-            .should().resideInAPackage("..infrastructure..")
-            .because("JPA entities are persistence adapters, not domain models");
+    static void jpaEntitiesLiveInInfrastructure(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = classes()
+                .that().haveSimpleNameEndingWith("Entity")
+                .and().resideOutsideOfPackage("..shared..")
+                .should().resideInAPackage("..infrastructure..")
+                .because("JPA entities are persistence adapters, not domain models");
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
+
+    /** Same verdict as {@code ArchRule.check}: fails with ArchUnit's own report when any class breaks the rule. */
+    private static void assertNoViolations(EvaluationResult result) {
+        assertFalse(result.hasViolation(), () -> result.getFailureReport().toString());
+    }
 }

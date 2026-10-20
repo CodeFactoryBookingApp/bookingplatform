@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.util.Objects;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -30,26 +33,30 @@ class HttpStatusTranslationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("DEFECT D9: an unsupported HTTP method returns 500 instead of 405")
     void unsupportedMethodShouldBe405() throws Exception {
+        // Act
         // /api/v1/registrations only maps POST
         MockHttpServletResponse response = mockMvc.perform(get("/api/v1/registrations"))
                 .andReturn().getResponse();
 
+        // Assert
         assertEquals(500, response.getStatus(), """
                 Current behaviour pinned. RFC 9110 and the API guideline require 405 Method Not Allowed \
                 with an Allow header. If this now returns 405 the defect was fixed: flip the expectation.""");
         assertEquals("INTERNAL_ERROR", errorCodeOf(response));
-        assertEquals("", response.getHeader("Allow") == null ? "" : response.getHeader("Allow"),
+        assertEquals("", Objects.requireNonNullElse(response.getHeader("Allow"), ""),
                 "a 405 must carry Allow; today no Allow header is emitted at all");
     }
 
     @Test
     @DisplayName("DEFECT D9: an unsupported media type returns 500 instead of 415")
     void unsupportedMediaTypeShouldBe415() throws Exception {
+        // Act
         MockHttpServletResponse response = mockMvc.perform(post("/api/v1/registrations")
                         .contentType(MediaType.TEXT_PLAIN)
                         .content("fullName=Ana"))
                 .andReturn().getResponse();
 
+        // Assert
         assertEquals(500, response.getStatus(), """
                 Current behaviour pinned. The guideline requires 415 Unsupported Media Type. \
                 If this now returns 415 the defect was fixed: flip the expectation.""");
@@ -59,9 +66,11 @@ class HttpStatusTranslationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("DEFECT D9: an unknown path under a public prefix returns 500 instead of 404")
     void unknownPathShouldBe404() throws Exception {
+        // Act
         MockHttpServletResponse response = mockMvc.perform(get("/api/v1/registrations/no-such-resource"))
                 .andReturn().getResponse();
 
+        // Assert
         assertEquals(500, response.getStatus(), """
                 Current behaviour pinned. An unmapped path must answer 404 Not Found. \
                 If this now returns 404 the defect was fixed: flip the expectation.""");
@@ -71,13 +80,16 @@ class HttpStatusTranslationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("DEFECT D9: an unsupported method on an authenticated endpoint also returns 500")
     void unsupportedMethodOnProtectedEndpointShouldBe405() throws Exception {
+        // Arrange
         // /api/v1/auth/me maps GET only; a valid token gets us past security so MVC is what answers
-        String token = jwks().accessToken(java.util.UUID.randomUUID(), "ana.perez@example.com", "CLIENT");
+        String token = jwks().accessToken(UUID.randomUUID(), "ana.perez@example.com", "CLIENT");
 
+        // Act
         MockHttpServletResponse response = mockMvc.perform(put("/api/v1/auth/me")
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse();
 
+        // Assert
         assertEquals(500, response.getStatus(),
                 "Current behaviour pinned; 405 is the correct answer. Flip the expectation once fixed.");
     }
@@ -85,11 +97,13 @@ class HttpStatusTranslationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("Regression guard: malformed JSON still maps to 400 VALIDATION_ERROR")
     void malformedJsonStillMapsTo400() throws Exception {
+        // Act
         MockHttpServletResponse response = mockMvc.perform(post("/api/v1/registrations")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ this is not json "))
                 .andReturn().getResponse();
 
+        // Assert
         assertEquals(400, response.getStatus());
         assertEquals("VALIDATION_ERROR", errorCodeOf(response));
     }

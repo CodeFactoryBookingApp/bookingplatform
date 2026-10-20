@@ -11,8 +11,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
@@ -48,13 +50,14 @@ class MissingSupabaseCredentialTest {
     private static final String NO_KEY = "";
 
     private MockRestServiceServer server;
+    private RestClient.Builder builder;
     private GoTrueClient clientWithoutCredential;
 
     @BeforeEach
     void setUp() {
         RestClient.Builder realBuilder = RestClient.builder().baseUrl(BASE);
         server = MockRestServiceServer.bindTo(realBuilder).build();
-        RestClient.Builder builder = mock(RestClient.Builder.class);
+        builder = mock(RestClient.Builder.class);
         when(builder.baseUrl(anyString())).thenReturn(builder);
         when(builder.build()).thenReturn(realBuilder.build());
         clientWithoutCredential = new GoTrueClient(new SupabaseProperties(BASE, NO_KEY), builder);
@@ -67,35 +70,49 @@ class MissingSupabaseCredentialTest {
         @Test
         @DisplayName("RISK: building the adapter with an empty secret key does not fail, so nothing warns at startup")
         void adapterIsBuiltWithoutCredential() {
-            assertNotNull(clientWithoutCredential);
+            // Arrange
+            SupabaseProperties propertiesWithoutCredential = new SupabaseProperties(BASE, NO_KEY);
+
+            // Act
+            GoTrueClient adapter = new GoTrueClient(propertiesWithoutCredential, builder);
+
+            // Assert
+            assertNotNull(adapter);
         }
 
         @Test
         @DisplayName("RISK: the login call leaves with an empty apikey header instead of being refused locally")
         void loginRequestCarriesAnEmptyApiKey() {
+            // Arrange
             server.expect(requestTo(BASE + "/token?grant_type=password"))
                     .andExpect(method(HttpMethod.POST))
                     .andExpect(header("apikey", ""))
-                    .andRespond(withStatus(org.springframework.http.HttpStatus.UNAUTHORIZED)
+                    .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body("{\"message\":\"Invalid API key\"}"));
 
-            assertThrows(UpstreamAuthException.class,
-                    () -> clientWithoutCredential.requestPasswordToken("ana.perez@example.com", "Str0ng!Pass"));
+            // Act
+            Executable act = () -> clientWithoutCredential.requestPasswordToken("ana.perez@example.com", "Str0ng!Pass");
+
+            // Assert
+            assertThrows(UpstreamAuthException.class, act);
             server.verify();
         }
 
         @Test
         @DisplayName("RISK: Supabase answering 401 to an unauthenticated login is reported as INVALID_CREDENTIALS")
         void missingCredentialLooksLikeAWrongPassword() {
+            // Arrange
             server.expect(requestTo(BASE + "/token?grant_type=password"))
-                    .andRespond(withStatus(org.springframework.http.HttpStatus.UNAUTHORIZED)
+                    .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body("{\"message\":\"Invalid API key\"}"));
 
-            UpstreamAuthException failure = assertThrows(UpstreamAuthException.class,
-                    () -> clientWithoutCredential.requestPasswordToken("ana.perez@example.com", "Str0ng!Pass"));
+            // Act
+            Executable act = () -> clientWithoutCredential.requestPasswordToken("ana.perez@example.com", "Str0ng!Pass");
 
+            // Assert
+            UpstreamAuthException failure = assertThrows(UpstreamAuthException.class, act);
             assertEquals(UpstreamAuthError.INVALID_CREDENTIALS, failure.error(),
                     "a missing deployment credential is reported to the user as a wrong password");
         }
@@ -103,17 +120,20 @@ class MissingSupabaseCredentialTest {
         @Test
         @DisplayName("Registration fails with UNAVAILABLE instead, so the same root cause shows two different faces")
         void registrationReportsUnavailable() {
+            // Arrange
             server.expect(requestTo(BASE + "/admin/users"))
                     .andExpect(method(HttpMethod.POST))
                     .andExpect(header("apikey", ""))
                     .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer "))
-                    .andRespond(withStatus(org.springframework.http.HttpStatus.UNAUTHORIZED)
+                    .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body("{\"message\":\"Invalid API key\"}"));
 
-            UpstreamAuthException failure = assertThrows(UpstreamAuthException.class,
-                    () -> clientWithoutCredential.createUser("ana.perez@example.com", "Str0ng!Pass", AppRole.CLIENT));
+            // Act
+            Executable act = () -> clientWithoutCredential.createUser("ana.perez@example.com", "Str0ng!Pass", AppRole.CLIENT);
 
+            // Assert
+            UpstreamAuthException failure = assertThrows(UpstreamAuthException.class, act);
             assertEquals(UpstreamAuthError.UNAVAILABLE, failure.error());
             server.verify();
         }
@@ -131,16 +151,24 @@ class MissingSupabaseCredentialTest {
         @Test
         @DisplayName("RISK: the decoder is built without ever contacting the JWKS endpoint")
         void decoderIsBuiltWithoutContactingTheJwksEndpoint() {
-            assertDoesNotThrow(config::jwtDecoder,
-                    "a wrong SUPABASE_URL is invisible until the first token arrives");
+            // Act
+            Executable act = config::jwtDecoder;
+
+            // Assert
+            assertDoesNotThrow(act, "a wrong SUPABASE_URL is invisible until the first token arrives");
         }
 
         @Test
         @DisplayName("The misconfiguration only surfaces when a token is decoded")
         void failureSurfacesOnFirstDecode() {
+            // Arrange
             JwtDecoder decoder = config.jwtDecoder();
 
-            assertThrows(JwtException.class, () -> decoder.decode("not-a-real-token"));
+            // Act
+            Executable act = () -> decoder.decode("not-a-real-token");
+
+            // Assert
+            assertThrows(JwtException.class, act);
         }
     }
 }

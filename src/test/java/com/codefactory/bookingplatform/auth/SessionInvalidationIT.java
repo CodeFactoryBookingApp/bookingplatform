@@ -4,6 +4,7 @@ import com.codefactory.bookingplatform.support.JwtIntegrationTestBase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -18,6 +19,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>{@code AuthFlowIT.logoutRevokesSession} only checks that {@code signOut} is <em>invoked</em>
  * with the bearer value. That is the call, not the effect. These tests log in for real, use the
  * token the provider handed out, log out, and then try the same token again.
+ *
+ * <p>Arrange-Act-Assert: the real login (and, where the scenario needs it, an earlier logout) is the
+ * Arrange, guarded with the status each step must produce; the request under test is the Act.
  */
 class SessionInvalidationIT extends JwtIntegrationTestBase {
 
@@ -28,15 +32,18 @@ class SessionInvalidationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("HU-021 AC 'cierre de sesión invalida la sesión': logout revokes the session at the provider")
     void logoutRevokesTheIssuedSession() throws Exception {
+        // Arrange
         String accessToken = loginAndGetAccessToken();
-
+        // precondition: the token the provider handed out opens a protected endpoint
         mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value(EMAIL));
 
-        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isNoContent());
+        // Act
+        ResultActions result = mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken));
 
+        // Assert
+        result.andExpect(status().isNoContent());
         assertTrue(identityProvider.isSessionRevoked(accessToken),
                 "logout must revoke at the provider the exact token the client was holding");
     }
@@ -62,15 +69,17 @@ class SessionInvalidationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("HU-021 DEFECT D8: after logout the access token is still accepted (no revocation check)")
     void accessTokenSurvivesLogout() throws Exception {
+        // Arrange
         String accessToken = loginAndGetAccessToken();
-
         mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isNoContent());
 
+        // Act
         int statusAfterLogout = mockMvc.perform(get("/api/v1/auth/me")
                         .header("Authorization", "Bearer " + accessToken))
                 .andReturn().getResponse().getStatus();
 
+        // Assert
         assertEquals(200, statusAfterLogout,
                 "Current behaviour pinned: HU-021 asks for 401 here. If this now returns 401 the defect "
                         + "was fixed - flip the expectation and move this test out of the DEFECT group.");
@@ -79,19 +88,26 @@ class SessionInvalidationIT extends JwtIntegrationTestBase {
     @Test
     @DisplayName("HU-021 AC: logging out twice is idempotent and never leaks an upstream error")
     void logoutIsIdempotent() throws Exception {
+        // Arrange
         String accessToken = loginAndGetAccessToken();
+        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
 
-        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isNoContent());
-        mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken))
-                .andExpect(status().isNoContent());
+        // Act
+        ResultActions secondLogout = mockMvc.perform(post("/api/v1/auth/logout").header("Authorization", "Bearer " + accessToken));
+
+        // Assert
+        secondLogout.andExpect(status().isNoContent());
     }
 
     @Test
     @DisplayName("HU-021 AC: logout without a bearer token is rejected with 401")
     void logoutRequiresAuthentication() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout"))
-                .andExpect(status().isUnauthorized())
+        // Act
+        ResultActions result = mockMvc.perform(post("/api/v1/auth/logout"));
+
+        // Assert
+        result.andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"));
     }
 
