@@ -13,7 +13,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -112,14 +111,11 @@ class HappyPathAcceptanceIT extends JwtIntegrationTestBase {
                 .content(loginPayload()));
 
         // Assert
-        String loginBody = result
-                .andExpect(status().isOk())
+        result.andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.tokenType").value("bearer"))
                 .andExpect(jsonPath("$.expiresIn").value(900))
-                .andExpect(jsonPath("$.refreshToken").isNotEmpty())
-                .andReturn().getResponse().getContentAsString();
-        String accessToken = JsonPath.read(loginBody, "$.accessToken");
-        assertNotNull(accessToken);
+                .andExpect(jsonPath("$.refreshToken").isNotEmpty());
     }
 
     @Test

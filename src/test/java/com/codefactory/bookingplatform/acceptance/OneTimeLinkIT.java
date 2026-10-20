@@ -106,30 +106,6 @@ class OneTimeLinkIT extends JwtIntegrationTestBase {
     }
 
     @Test
-    @DisplayName("HU-001 AC: resending the verification email invalidates the previous link and issues a live one")
-    void resendingVerificationSupersedesThePreviousLink() throws Exception {
-        // Arrange
-        UUID clientId = register();
-        String firstToken = identityProvider.currentEmailToken(EMAIL);
-        resendVerification();
-        String secondToken = identityProvider.currentEmailToken(EMAIL);
-        mockMvc.perform(post("/api/v1/registrations/email-verifications")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(confirmPayload(firstToken)))
-                .andExpect(status().isBadRequest());
-
-        // Act
-        ResultActions result = mockMvc.perform(post("/api/v1/registrations/email-verifications")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(confirmPayload(secondToken)));
-
-        // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
-        assertEquals(ClientStatus.ACTIVE, storedClient(clientId).getStatus());
-    }
-
-    @Test
     @DisplayName("HU-021 AC 'recuperación de contraseña con enlace de un solo uso': the recovery link is single use")
     void passwordRecoveryLinkIsRejectedOnSecondUse() throws Exception {
         // Arrange

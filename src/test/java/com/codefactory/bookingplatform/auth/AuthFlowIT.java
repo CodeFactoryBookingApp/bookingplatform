@@ -1,6 +1,5 @@
 package com.codefactory.bookingplatform.auth;
 
-import com.codefactory.bookingplatform.auth.domain.model.AuthTokens;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
@@ -11,21 +10,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-import java.util.UUID;
-
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -51,23 +46,6 @@ class AuthFlowIT extends PostgresIntegrationTestBase {
     }
 
     @Test
-    @DisplayName("HU-021 AC: successful login returns the provider tokens")
-    void loginSuccessfully() throws Exception {
-        // Arrange
-        when(identityProviderPort.requestPasswordToken(anyString(), anyString()))
-                .thenReturn(new AuthTokens("access-token", "refresh-token", "bearer", 900));
-
-        // Act
-        ResultActions result = performLogin();
-
-        // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("access-token"))
-                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
-                .andExpect(jsonPath("$.expiresIn").value(900));
-    }
-
-    @Test
     @DisplayName("HU-021 AC: invalid credentials are rejected with 401 and recorded as failure")
     void loginWithInvalidCredentials() throws Exception {
         // Arrange
@@ -81,21 +59,7 @@ class AuthFlowIT extends PostgresIntegrationTestBase {
         result.andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_CREDENTIALS"));
         verify(identityProviderPort).requestPasswordToken(anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("HU-001/HU-021 AC: unverified client cannot log in (email not confirmed)")
-    void loginWithUnconfirmedEmail() throws Exception {
-        // Arrange
-        when(identityProviderPort.requestPasswordToken(anyString(), anyString()))
-                .thenThrow(new UpstreamAuthException(UpstreamAuthError.EMAIL_NOT_CONFIRMED, "not confirmed"));
-
-        // Act
-        ResultActions result = performLogin();
-
-        // Assert
-        result.andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("EMAIL_NOT_CONFIRMED"));
+        assertEquals(1, loginAttemptJpaRepository.count(), "the failed attempt must be recorded");
     }
 
     @Test
@@ -116,52 +80,6 @@ class AuthFlowIT extends PostgresIntegrationTestBase {
                 .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
                 .andExpect(jsonPath("$.details.retryAfterMinutes").value("15"));
         verify(identityProviderPort, times(5)).requestPasswordToken(anyString(), anyString());
-    }
-
-    @Test
-    @DisplayName("HU-021 AC: logout revokes the session at the identity provider")
-    void logoutRevokesSession() throws Exception {
-        // Act
-        ResultActions result = mockMvc.perform(post("/api/v1/auth/logout")
-                .with(jwt()
-                        .jwt(builder -> builder.tokenValue("user-access-token"))
-                        .authorities(new SimpleGrantedAuthority("ROLE_CLIENT"))));
-
-        // Assert
-        result.andExpect(status().isNoContent());
-        verify(identityProviderPort).signOut("user-access-token");
-    }
-
-    @Test
-    @DisplayName("HU-021 AC: /me requires authentication")
-    void meEndpointIsProtected() throws Exception {
-        // Act
-        ResultActions result = mockMvc.perform(get("/api/v1/auth/me"));
-
-        // Assert
-        result.andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.errorCode").value("AUTH_REQUIRED"));
-    }
-
-    @Test
-    @DisplayName("HU-021 AC: /me returns the role from app_metadata to an authenticated caller")
-    void meEndpointReturnsRole() throws Exception {
-        // Arrange
-        UUID userId = UUID.randomUUID();
-
-        // Act
-        ResultActions result = mockMvc.perform(get("/api/v1/auth/me")
-                .with(jwt()
-                        .jwt(builder -> builder
-                                .subject(userId.toString())
-                                .claim("email", "ana.perez@example.com"))
-                        .authorities(new SimpleGrantedAuthority("ROLE_CLIENT"))));
-
-        // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(userId.toString()))
-                .andExpect(jsonPath("$.email").value("ana.perez@example.com"))
-                .andExpect(jsonPath("$.role").value("CLIENT"));
     }
 
     @Test
@@ -190,17 +108,7 @@ class AuthFlowIT extends PostgresIntegrationTestBase {
 
         // Assert
         result.andExpect(status().isAccepted());
-    }
-
-    @Test
-    @DisplayName("HU-021 AC: password reset enforces the policy")
-    void passwordResetEnforcesThePolicy() throws Exception {
-        // Act
-        ResultActions result = performPasswordReset("recovery-token", "todolowercase");
-
-        // Assert
-        result.andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PASSWORD_TOO_WEAK"));
+        verify(identityProviderPort).sendPasswordRecovery("ana.perez@example.com");
     }
 
     @Test

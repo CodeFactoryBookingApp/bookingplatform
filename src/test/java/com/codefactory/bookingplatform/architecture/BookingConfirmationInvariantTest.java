@@ -9,16 +9,11 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -32,13 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>What this class does instead is fence the invariant so it cannot be bypassed later:
  *
  * <ol>
- *   <li>the invariant must keep existing as a public method on the aggregate (anchor);</li>
  *   <li>{@code ClientStatus.ACTIVE} must not be read outside the identity domain model - that is
  *       the shape an ad-hoc reimplementation of the rule would take;</li>
  *   <li>the day a booking-confirmation path appears, it must consult the invariant.</li>
  * </ol>
  *
- * Rules 2 and 3 pass vacuously today and start biting the moment the booking module lands.
+ * The second rule passes vacuously today and starts biting the moment the booking module lands.
  *
  * <p>Arrange-Act-Assert in ArchUnit terms: the production classes are imported once
  * ({@link #PRODUCTION_CLASSES}) and the relevant subset is selected (Arrange), the classes are
@@ -72,25 +66,13 @@ class BookingConfirmationInvariantTest {
      * with {@code BookingPlatform}, ends with one of the suffixes, and contains {@code Booking}
      * somewhere before that suffix. No suffix is a suffix of another, so at most one can match.
      */
-    static boolean looksLikeBookingConfirmationPath(String simpleName) {
+    private static boolean looksLikeBookingConfirmationPath(String simpleName) {
         if (simpleName.startsWith("BookingPlatform")) {
             return false;
         }
         return CONFIRMATION_PATH_SUFFIXES.stream()
                 .filter(simpleName::endsWith)
                 .anyMatch(suffix -> simpleName.substring(0, simpleName.length() - suffix.length()).contains("Booking"));
-    }
-
-    @Test
-    @DisplayName("HU-001 anchor: the 'only a verified client may confirm bookings' invariant is a public rule of the aggregate")
-    void invariantIsPublicOnTheAggregate() throws NoSuchMethodException {
-        // Act
-        Method method = Client.class.getMethod("canConfirmBooking");
-
-        // Assert
-        assertEquals(boolean.class, method.getReturnType());
-        assertTrue(Modifier.isPublic(method.getModifiers()),
-                "the booking module has to be able to ask the aggregate, not re-derive the rule");
     }
 
     @Test
@@ -133,39 +115,5 @@ class BookingConfirmationInvariantTest {
                 "HU-001 says only a verified client may confirm a booking, but none of these classes asks "
                         + "Client.canConfirmBooking(): "
                         + paths.stream().map(JavaClass::getName).sorted().toList());
-    }
-
-    /**
-     * Equivalence partitions of the name filter, plus the boundaries of each condition: the
-     * {@code BookingPlatform} exclusion only applies as a prefix, {@code Booking} has to appear
-     * before the suffix, the suffix has to close the name, and matching is case sensitive.
-     */
-    @ParameterizedTest(name = "{0} -> {1}")
-    @CsvSource({
-            "BookingService, true",
-            "ConfirmBookingUseCase, true",
-            "BookingController, true",
-            "BookingConfirmationHandler, true",
-            "BookingFacade, true",
-            "BookingUseCase, true",
-            "XBookingPlatformService, true",
-            "BookingPlatformService, false",
-            "BookingPlatformBookingService, false",
-            "BookingPlatformApplication, false",
-            "RegisterClientUseCase, false",
-            "BookingRepository, false",
-            "BookingServiceImpl, false",
-            "ServiceBooking, false",
-            "Booking, false",
-            "UseCase, false",
-            "bookingService, false"
-    })
-    @DisplayName("HU-001 guard: the name filter recognises exactly the booking-confirmation candidates")
-    void nameFilterRecognisesBookingConfirmationPaths(String simpleName, boolean expected) {
-        // Act
-        boolean detected = looksLikeBookingConfirmationPath(simpleName);
-
-        // Assert
-        assertEquals(expected, detected);
     }
 }

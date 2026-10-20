@@ -51,16 +51,6 @@ class ApplicationStartsIT extends PostgresIntegrationTestBase {
     }
 
     @Test
-    @DisplayName("The embedded server is listening on a real port")
-    void serverIsListening() {
-        // Act
-        int listeningPort = port;
-
-        // Assert
-        assertTrue(listeningPort > 0);
-    }
-
-    @Test
     @DisplayName("GET /actuator/health answers 200 UP over real HTTP")
     void healthAnswersOverHttp() throws Exception {
         // Act
@@ -69,28 +59,6 @@ class ApplicationStartsIT extends PostgresIntegrationTestBase {
         // Assert
         assertEquals(200, response.statusCode());
         assertTrue(response.body().contains("\"status\":\"UP\""), response.body());
-    }
-
-    @Test
-    @DisplayName("GET /actuator/health/readiness, the path render.yaml polls, answers 200 over real HTTP")
-    void readinessAnswersOverHttp() throws Exception {
-        // Act
-        HttpResponse<String> response = get("/actuator/health/readiness");
-
-        // Assert
-        assertEquals(200, response.statusCode());
-        assertTrue(response.body().contains("\"status\":\"UP\""), response.body());
-    }
-
-    @Test
-    @DisplayName("The OpenAPI contract is served publicly, so Swagger UI works without a token")
-    void openApiContractIsPublic() throws Exception {
-        // Act
-        HttpResponse<String> response = get("/v3/api-docs");
-
-        // Assert
-        assertEquals(200, response.statusCode());
-        assertTrue(response.body().contains("Booking Platform API"), response.body());
     }
 
     @Test

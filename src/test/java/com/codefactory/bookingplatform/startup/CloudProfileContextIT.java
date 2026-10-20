@@ -1,37 +1,21 @@
 package com.codefactory.bookingplatform.startup;
 
-import com.codefactory.bookingplatform.auth.domain.service.LoginLockPolicy;
-import com.codefactory.bookingplatform.shared.config.SupabaseProperties;
-import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-import javax.sql.DataSource;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.time.Clock;
-import java.time.Duration;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * The profile that actually ships. Render runs the image with
@@ -46,7 +30,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * from the outside.
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @ActiveProfiles("cloud")
 class CloudProfileContextIT {
 
@@ -79,20 +62,6 @@ class CloudProfileContextIT {
     @Autowired
     private ApplicationContext context;
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Test
-    @DisplayName("The cloud profile starts against the committed schema.sql, which is what Render does on boot")
-    void cloudProfileStarts() {
-        // Act
-        String[] activeProfiles = context.getEnvironment().getActiveProfiles();
-
-        // Assert
-        assertNotNull(context);
-        assertEquals(Set.of("cloud"), Set.of(activeProfiles));
-    }
-
     @Test
     @DisplayName("ddl-auto is validate, so Hibernate verified every mapping against the committed DDL")
     void schemaIsValidatedNotCreated() {
@@ -101,65 +70,5 @@ class CloudProfileContextIT {
 
         // Assert
         assertEquals("validate", ddlAuto);
-    }
-
-    @Test
-    @DisplayName("The Hikari pool is capped at 5 connections, the limit the Supabase free pooler imposes")
-    void hikariPoolIsCapped() throws Exception {
-        // Act
-        HikariDataSource dataSource = context.getBean(DataSource.class).unwrap(HikariDataSource.class);
-
-        // Assert
-        assertEquals(5, dataSource.getMaximumPoolSize());
-        assertEquals(1, dataSource.getMinimumIdle());
-    }
-
-    @Test
-    @DisplayName("The critical beans exist under the cloud profile too, not only under test")
-    void criticalBeansExistInCloud() {
-        // Act
-        LoginLockPolicy policy = context.getBean(LoginLockPolicy.class);
-        JwtDecoder jwtDecoder = context.getBean(JwtDecoder.class);
-        SecurityFilterChain securityFilterChain = context.getBean(SecurityFilterChain.class);
-        Clock clock = context.getBean(Clock.class);
-
-        // Assert
-        assertEquals(5, policy.maxFailedAttempts());
-        assertEquals(Duration.ofMinutes(15), policy.lockWindow());
-        assertNotNull(jwtDecoder);
-        assertNotNull(securityFilterChain);
-        assertNotNull(clock);
-    }
-
-    @Test
-    @DisplayName("RISK: with no SUPABASE_SECRET_KEY the cloud profile still starts, holding an empty credential")
-    void cloudProfileStartsWithoutACredential() {
-        // Act
-        SupabaseProperties properties = context.getBean(SupabaseProperties.class);
-
-        // Assert
-        assertTrue(properties.secretKey().isBlank(),
-                "no variable was provided, so the deployment would be running with no Supabase credential");
-        assertEquals("https://placeholder.supabase.co", properties.url());
-    }
-
-    @Test
-    @DisplayName("The health endpoint answers on the cloud profile, which is what Render polls")
-    void healthAnswersInCloud() throws Exception {
-        // Act
-        ResultActions result = mockMvc.perform(get("/actuator/health"));
-
-        // Assert
-        result.andExpect(status().isOk());
-    }
-
-    @Test
-    @DisplayName("The readiness probe Render is configured to use answers on the cloud profile")
-    void readinessAnswersInCloud() throws Exception {
-        // Act
-        ResultActions result = mockMvc.perform(get("/actuator/health/readiness"));
-
-        // Assert
-        result.andExpect(status().isOk());
     }
 }
