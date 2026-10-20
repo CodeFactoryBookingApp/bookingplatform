@@ -60,22 +60,30 @@ class AuthControllerTest {
     @Test
     @DisplayName("Login forwards the submitted credentials to the login use case")
     void loginForwardsCredentials() {
+        // Arrange
         when(loginUseCase.login(anyString(), anyString()))
                 .thenReturn(new AuthTokens("access", "refresh", "bearer", 3600L));
+        LoginRequest request = new LoginRequest("ana.perez@example.com", "Str0ng!Pass");
 
-        controller.login(new LoginRequest("ana.perez@example.com", "Str0ng!Pass"));
+        // Act
+        controller.login(request);
 
+        // Assert
         verify(loginUseCase).login("ana.perez@example.com", "Str0ng!Pass");
     }
 
     @Test
     @DisplayName("Login answers with the tokens the provider issued, not with a placeholder")
     void loginReturnsTheIssuedTokens() {
+        // Arrange
         when(loginUseCase.login(anyString(), anyString()))
                 .thenReturn(new AuthTokens("access", "refresh", "bearer", 3600L));
+        LoginRequest request = new LoginRequest("ana.perez@example.com", "Str0ng!Pass");
 
-        LoginResponse response = controller.login(new LoginRequest("ana.perez@example.com", "Str0ng!Pass"));
+        // Act
+        LoginResponse response = controller.login(request);
 
+        // Assert
         assertEquals("access", response.accessToken());
         assertEquals("refresh", response.refreshToken());
         assertEquals("bearer", response.tokenType());
@@ -85,32 +93,52 @@ class AuthControllerTest {
     @Test
     @DisplayName("Logout invalidates the raw bearer token of the caller, not the subject id")
     void logoutForwardsTheBearerToken() {
-        controller.logout(authentication("the-access-token"));
+        // Arrange
+        JwtAuthenticationToken authentication = authentication("the-access-token");
 
+        // Act
+        controller.logout(authentication);
+
+        // Assert
         verify(logoutUseCase).logout("the-access-token");
     }
 
     @Test
     @DisplayName("A password recovery request reaches the recovery use case with the submitted email")
     void recoveryForwardsTheEmail() {
-        controller.requestPasswordRecovery(new PasswordRecoveryRequest("ana.perez@example.com"));
+        // Arrange
+        PasswordRecoveryRequest request = new PasswordRecoveryRequest("ana.perez@example.com");
 
+        // Act
+        controller.requestPasswordRecovery(request);
+
+        // Assert
         verify(passwordRecoveryUseCase).requestRecovery("ana.perez@example.com");
     }
 
     @Test
     @DisplayName("A password reset forwards both the one-time token hash and the new password")
     void resetForwardsTokenAndPassword() {
-        controller.resetPassword(new PasswordResetRequest("token-hash", "NewSecret123!"));
+        // Arrange
+        PasswordResetRequest request = new PasswordResetRequest("token-hash", "NewSecret123!");
 
+        // Act
+        controller.resetPassword(request);
+
+        // Assert
         verify(passwordResetUseCase).resetPassword("token-hash", "NewSecret123!");
     }
 
     @Test
     @DisplayName("The profile endpoint reads id and email from the token claims")
     void meReadsTheTokenClaims() {
-        MeResponse response = controller.me(authentication("token", "ROLE_CLIENT"));
+        // Arrange
+        JwtAuthenticationToken authentication = authentication("token", "ROLE_CLIENT");
 
+        // Act
+        MeResponse response = controller.me(authentication);
+
+        // Assert
         assertEquals(SUBJECT, response.id());
         assertEquals("ana.perez@example.com", response.email());
     }
@@ -118,12 +146,26 @@ class AuthControllerTest {
     @Test
     @DisplayName("The profile endpoint publishes the role without its ROLE_ prefix")
     void meStripsTheRolePrefix() {
-        assertEquals("CLIENT", controller.me(authentication("token", "ROLE_CLIENT")).role());
+        // Arrange
+        JwtAuthenticationToken authentication = authentication("token", "ROLE_CLIENT");
+
+        // Act
+        MeResponse response = controller.me(authentication);
+
+        // Assert
+        assertEquals("CLIENT", response.role());
     }
 
     @Test
     @DisplayName("A token that grants no ROLE_ authority yields no role at all")
     void meReportsNoRoleWhenNoneIsGranted() {
-        assertNull(controller.me(authentication("token", "SCOPE_openid")).role());
+        // Arrange
+        JwtAuthenticationToken authentication = authentication("token", "SCOPE_openid");
+
+        // Act
+        MeResponse response = controller.me(authentication);
+
+        // Assert
+        assertNull(response.role());
     }
 }
