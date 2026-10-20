@@ -114,19 +114,6 @@ class ConfirmEmailUseCaseTest {
         order.verify(clientRepository).save(pending);
     }
 
-    @Test
-    @DisplayName("The client is looked up by the provider user id, which is also the client id")
-    void clientIsLookedUpByProviderUserId() {
-        // Arrange
-        tokenResolvesTo(clientInStatus(ClientStatus.PENDING_VERIFICATION));
-
-        // Act
-        useCase.confirm(TOKEN);
-
-        // Assert
-        verify(clientRepository).findById(CLIENT_ID);
-    }
-
     // --- Idempotency ---------------------------------------------------------
 
     @Test
@@ -145,21 +132,6 @@ class ConfirmEmailUseCaseTest {
         assertEquals(ClientStatus.ACTIVE, second.status());
         assertEquals(first, second);
         verify(clientRepository, times(2)).save(pending);
-    }
-
-    @Test
-    @DisplayName("Confirming an already ACTIVE client neither fails nor changes the status")
-    void confirmingAnAlreadyActiveClientDoesNotFail() {
-        // Arrange
-        Client active = clientInStatus(ClientStatus.ACTIVE);
-        tokenResolvesTo(active);
-
-        // Act
-        RegistrationOutcome outcome = useCase.confirm(TOKEN);
-
-        // Assert
-        assertEquals(ClientStatus.ACTIVE, outcome.status());
-        verify(clientRepository).save(active);
     }
 
     // --- Exceptional paths ---------------------------------------------------

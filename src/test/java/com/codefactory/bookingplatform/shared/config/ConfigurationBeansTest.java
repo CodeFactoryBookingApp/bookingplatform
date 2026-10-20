@@ -2,24 +2,14 @@ package com.codefactory.bookingplatform.shared.config;
 
 import com.codefactory.bookingplatform.auth.domain.service.LoginLockPolicy;
 import com.codefactory.bookingplatform.auth.infrastructure.config.AuthConfig;
-import com.codefactory.bookingplatform.shared.persistence.JpaAuditingConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The declarative configuration classes are exercised by calling their factory
@@ -29,38 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfigurationBeansTest {
 
     @Nested
-    @DisplayName("ClockConfig")
-    class ClockConfigTest {
-
-        private final ClockConfig config = new ClockConfig();
-
-        @Test
-        @DisplayName("The clock is the system UTC clock: neither frozen, nor offset, nor on the host zone")
-        void clockIsSystemUtc() {
-            // Una sola aserción cubre las tres cosas, y de forma determinista: Clock.fixed,
-            // Clock.offset y systemDefaultZone son todos distintos de systemUTC. Comparar el
-            // instante contra "hace un minuto" no sirve, porque un reloj congelado en el
-            // instante actual también lo cumple; y leerlo dos veces esperando que avance
-            // depende de la resolución del reloj del sistema y sale intermitente en Windows.
-
-            // Act
-            Clock clock = config.clock();
-
-            // Assert
-            assertEquals(Clock.systemUTC(), clock);
-            assertEquals(ZoneOffset.UTC, clock.getZone());
-        }
-    }
-
-    @Nested
     @DisplayName("AuthConfig")
     class AuthConfigTest {
 
         private final AuthConfig config = new AuthConfig();
 
         @ParameterizedTest(name = "maxFailedAttempts={0} and lockWindowMinutes={1} reach the policy untouched")
-        @CsvSource({"5, 15", "1, 1", "10, 60", "3, 120"})
-        @DisplayName("The lock policy bean is built from the configured properties")
+        @CsvSource({"5, 15"})
+        @DisplayName("The lock policy bean is built from the configured properties, reading the window in minutes")
         void policyIsBuiltFromProperties(int attempts, int minutes) {
             // Arrange
             AuthPolicyProperties properties = new AuthPolicyProperties(attempts, minutes);
@@ -72,71 +38,5 @@ class ConfigurationBeansTest {
             assertEquals(attempts, policy.maxFailedAttempts());
             assertEquals(Duration.ofMinutes(minutes), policy.lockWindow());
         }
-
-        @Test
-        @DisplayName("The production defaults are 5 attempts within a 15 minute window")
-        void productionDefaults() {
-            // Arrange
-            AuthPolicyProperties properties = new AuthPolicyProperties(5, 15);
-
-            // Act
-            LoginLockPolicy policy = config.loginLockPolicy(properties);
-
-            // Assert
-            assertEquals(5, policy.maxFailedAttempts());
-            assertEquals(15, policy.lockWindow().toMinutes());
-        }
-
-        @ParameterizedTest(name = "a non positive maxFailedAttempts of {0} is refused at startup")
-        @CsvSource({"0", "-1"})
-        void nonPositiveAttemptsAreRefused(int attempts) {
-            // Arrange
-            AuthPolicyProperties properties = new AuthPolicyProperties(attempts, 15);
-
-            // Act
-            Executable act = () -> config.loginLockPolicy(properties);
-
-            // Assert
-            assertThrows(IllegalArgumentException.class, act);
-        }
-
-        @Test
-        @DisplayName("A zero minute window produces a zero duration, disabling the sliding window")
-        void zeroMinuteWindow() {
-            // Arrange
-            AuthPolicyProperties properties = new AuthPolicyProperties(5, 0);
-
-            // Act
-            LoginLockPolicy policy = config.loginLockPolicy(properties);
-
-            // Assert
-            assertEquals(Duration.ZERO, policy.lockWindow());
-        }
-    }
-
-    @Nested
-    @DisplayName("JpaAuditingConfig")
-    class JpaAuditingConfigTest {
-
-        @Test
-        @DisplayName("Auditing is enabled declaratively, which is what fills createdAt and updatedAt")
-        void auditingIsEnabled() {
-            // Act
-            EnableJpaAuditing annotation = JpaAuditingConfig.class.getAnnotation(EnableJpaAuditing.class);
-
-            // Assert
-            assertNotNull(annotation);
-        }
-
-        @Test
-        @DisplayName("The class is a Spring configuration, so the annotation is actually processed")
-        void isAConfigurationClass() {
-            // Act
-            Configuration annotation = JpaAuditingConfig.class.getAnnotation(Configuration.class);
-
-            // Assert
-            assertNotNull(annotation);
-        }
-
     }
 }

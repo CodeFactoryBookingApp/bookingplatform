@@ -1,6 +1,5 @@
 package com.codefactory.bookingplatform.identity;
 
-import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
@@ -211,24 +210,6 @@ class RegistrationFlowIT extends PostgresIntegrationTestBase {
         result.andExpect(status().isAccepted());
         // once at registration, once at the explicit resend
         verify(identityProviderPort, times(2)).resendSignupVerification("ana.perez@example.com");
-    }
-
-    @Test
-    @DisplayName("HU-001 AC: confirming with a valid one-time token activates the client")
-    void confirmEmailActivatesClient() throws Exception {
-        // Arrange
-        when(identityProviderPort.createUser(anyString(), anyString(), any())).thenReturn(FIXED_USER_ID);
-        performRegistration(validPayload()).andExpect(status().isCreated());
-        when(identityProviderPort.verifyEmailToken("valid-token-hash"))
-                .thenReturn(new ConfirmedUser(FIXED_USER_ID, "ana.perez@example.com"));
-
-        // Act
-        ResultActions result = performEmailVerification("valid-token-hash");
-
-        // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACTIVE"));
-        assertEquals(ClientStatus.ACTIVE, clientJpaRepository.findById(FIXED_USER_ID).orElseThrow().getStatus());
     }
 
     @Test

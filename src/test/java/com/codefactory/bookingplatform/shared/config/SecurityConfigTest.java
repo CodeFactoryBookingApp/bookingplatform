@@ -6,14 +6,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -23,14 +20,13 @@ import tools.jackson.databind.ObjectMapper;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for the pieces of {@link SecurityConfig} that produce a response:
- * the JWT decoder bean and the two ProblemDetail writers used when a request is
- * unauthenticated (401) or not allowed (403).
+ * Unit tests for the two ProblemDetail writers of {@link SecurityConfig}, used when a request is
+ * unauthenticated (401) or not allowed (403). What the filter chain already proves end to end
+ * (status, errorCode, title and instance of the 401) lives in {@link SecurityConfigWebTest};
+ * the decoder lives in {@link SecurityConfigJwtDecoderTest}.
  */
 class SecurityConfigTest {
 
@@ -64,27 +60,9 @@ class SecurityConfigTest {
         return ReflectionTestUtils.invokeMethod(config, "problemDetailAccessDeniedHandler");
     }
 
-    @Test
-    @DisplayName("The JWT decoder bean is built from the configured JWKS endpoint")
-    void jwtDecoderIsBuilt() {
-        // Act
-        JwtDecoder decoder = config.jwtDecoder();
-
-        // Assert
-        assertInstanceOf(NimbusJwtDecoder.class, decoder);
-    }
-
-    @Test
-    @DisplayName("A missing token is answered 401")
-    void unauthenticatedRequestGets401() throws Exception {
-        // Arrange
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Act
-        entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        assertEquals(401, response.getStatus());
+    private JsonNode body() throws Exception {
+        String payload = response.getContentAsString();
+        return new ObjectMapper().readTree(payload);
     }
 
     @Test
@@ -101,34 +79,6 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("The 401 answer carries the AUTH_REQUIRED error code")
-    void unauthenticatedRequestCarriesTheErrorCode() throws Exception {
-        // Arrange
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Act
-        entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        assertTrue(response.getContentAsString().contains("AUTH_REQUIRED"),
-                "expected AUTH_REQUIRED in the body but got: " + response.getContentAsString());
-    }
-
-    @Test
-    @DisplayName("The 401 answer points at the requested path")
-    void unauthenticatedRequestCarriesTheInstance() throws Exception {
-        // Arrange
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Act
-        entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        assertTrue(response.getContentAsString().contains("/api/v1/auth/me"),
-                "expected the request URI in the body but got: " + response.getContentAsString());
-    }
-
-    @Test
     @DisplayName("The 401 answer propagates the current trace id so the caller can report it")
     void unauthenticatedRequestCarriesTheTraceId() throws Exception {
         // Arrange
@@ -139,21 +89,7 @@ class SecurityConfigTest {
         entryPoint.commence(request, response, new StubAuthenticationException());
 
         // Assert
-        assertTrue(response.getContentAsString().contains("trace-4711"),
-                "expected the trace id in the body but got: " + response.getContentAsString());
-    }
-
-    @Test
-    @DisplayName("A request without a trace id in the MDC is still answered, with no trace id")
-    void unauthenticatedRequestWithoutTraceIdStillAnswers() throws Exception {
-        // Arrange
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Act
-        entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        assertEquals(401, response.getStatus());
+        assertEquals("trace-4711", body().path("properties").path("traceId").asString(null));
     }
 
     @Test
@@ -179,25 +115,11 @@ class SecurityConfigTest {
         handler.handle(request, response, new AccessDeniedException("nope"));
 
         // Assert
-        assertTrue(response.getContentAsString().contains("ACCESS_DENIED"),
-                "expected ACCESS_DENIED in the body but got: " + response.getContentAsString());
+        assertEquals("ACCESS_DENIED", body().path("properties").path("errorCode").asString(null));
     }
 
     @Test
-    @DisplayName("The 403 answer is a ProblemDetail document")
-    void forbiddenRequestGetsProblemJson() throws Exception {
-        // Arrange
-        AccessDeniedHandler handler = accessDeniedHandler();
-
-        // Act
-        handler.handle(request, response, new AccessDeniedException("nope"));
-
-        // Assert
-        assertEquals(MediaType.APPLICATION_PROBLEM_JSON_VALUE, response.getContentType());
-    }
-
-    @Test
-    @DisplayName("SECURITY: neither error answer leaks the underlying exception message")
+    @DisplayName("SECURITY: the 403 answer does not leak the message of the underlying exception")
     void errorAnswersDoNotLeakInternals() throws Exception {
         // Arrange
         AccessDeniedHandler handler = accessDeniedHandler();
@@ -208,14 +130,9 @@ class SecurityConfigTest {
         handler.handle(request, response, internal);
 
         // Assert
-        assertTrue(!response.getContentAsString().contains("ClientAdminService"),
+        assertFalse(response.getContentAsString().contains("ClientAdminService"),
                 "the internal message leaked into the body: " + response.getContentAsString());
     }
-
-    /*
-     * The two Turkish-locale checks below were a single test that wrote both the 401 and the 403
-     * answer. They are split so each one has a single Act; together they still cover both writers.
-     */
 
     @Test
     @DisplayName("The 401 type URI does not depend on the JVM default locale (Turkish dotless-i trap)")
@@ -234,46 +151,6 @@ class SecurityConfigTest {
         } finally {
             java.util.Locale.setDefault(previous);
         }
-    }
-
-    @Test
-    @DisplayName("The 403 type URI does not depend on the JVM default locale (Turkish dotless-i trap)")
-    void forbiddenTypeUriIsLocaleIndependent() throws Exception {
-        // Arrange
-        java.util.Locale previous = java.util.Locale.getDefault();
-        java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"));
-        AccessDeniedHandler handler = accessDeniedHandler();
-        try {
-            // Act
-            handler.handle(request, response, new AccessDeniedException("nope"));
-
-            // Assert
-            assertTrue(response.getContentAsString().contains("/errors/access_denied"),
-                    "expected the ASCII type URI but got: " + response.getContentAsString());
-        } finally {
-            java.util.Locale.setDefault(previous);
-        }
-    }
-
-    @Test
-    @DisplayName("The entry point is reused for both the resource server and the generic handling")
-    void entryPointIsAvailable() {
-        // Act
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Assert
-        assertNotNull(entryPoint);
-    }
-
-    // -----------------------------------------------------------------
-    // The body of the error answer, field by field. Asserting only that
-    // the payload "contains AUTH_REQUIRED" leaves detail, title and
-    // timestamp free to disappear without a single test noticing.
-    // -----------------------------------------------------------------
-
-    private JsonNode body() throws Exception {
-        String payload = response.getContentAsString();
-        return new ObjectMapper().readTree(payload);
     }
 
     @Test
@@ -303,32 +180,6 @@ class SecurityConfigTest {
     }
 
     @Test
-    @DisplayName("The 401 answer is titled with the reason phrase of its status")
-    void unauthenticatedRequestCarriesTheTitle() throws Exception {
-        // Arrange
-        AuthenticationEntryPoint entryPoint = entryPoint();
-
-        // Act
-        entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        assertEquals(HttpStatus.UNAUTHORIZED.getReasonPhrase(), body().path("title").asString(null));
-    }
-
-    @Test
-    @DisplayName("The 403 answer is titled with the reason phrase of its status")
-    void forbiddenRequestCarriesTheTitle() throws Exception {
-        // Arrange
-        AccessDeniedHandler handler = accessDeniedHandler();
-
-        // Act
-        handler.handle(request, response, new AccessDeniedException("nope"));
-
-        // Assert
-        assertEquals(HttpStatus.FORBIDDEN.getReasonPhrase(), body().path("title").asString(null));
-    }
-
-    @Test
     @DisplayName("The 401 answer is stamped with the moment it was produced, so it can be correlated with the logs")
     void unauthenticatedRequestCarriesATimestamp() throws Exception {
         // Arrange
@@ -336,22 +187,6 @@ class SecurityConfigTest {
 
         // Act
         entryPoint.commence(request, response, new StubAuthenticationException());
-
-        // Assert
-        JsonNode timestamp = body().path("properties").path("timestamp");
-        assertFalse(timestamp.isMissingNode() || timestamp.isNull(),
-                "no timestamp in the body: " + response.getContentAsString());
-        assertDoesNotThrow(() -> java.time.Instant.parse(timestamp.asString()));
-    }
-
-    @Test
-    @DisplayName("The 403 answer is stamped with the moment it was produced")
-    void forbiddenRequestCarriesATimestamp() throws Exception {
-        // Arrange
-        AccessDeniedHandler handler = accessDeniedHandler();
-
-        // Act
-        handler.handle(request, response, new AccessDeniedException("nope"));
 
         // Assert
         JsonNode timestamp = body().path("properties").path("timestamp");

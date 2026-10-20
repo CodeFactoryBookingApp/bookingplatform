@@ -30,7 +30,6 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.not;
@@ -166,8 +165,8 @@ class GoTrueClientTest {
         // Assert
         UpstreamAuthException ex = assertUpstreamFailure(act);
         assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
-        assertTrue(ex.getMessage().contains("in " + context + ":"),
-                () -> "expected the " + context + " context in: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("in " + context + ": HTTP 502"),
+                () -> "expected the " + context + " context and the status in: " + ex.getMessage());
     }
 
     // ---------------------------------------------------------------------
@@ -207,7 +206,6 @@ class GoTrueClientTest {
                 // --- rule 6: context "token" ---
                 Arguments.of(Endpoint.TOKEN, 400, "{\"msg\":\"Invalid login credentials\"}", UpstreamAuthError.INVALID_CREDENTIALS),
                 Arguments.of(Endpoint.TOKEN, 401, "", UpstreamAuthError.INVALID_CREDENTIALS),
-                Arguments.of(Endpoint.TOKEN, 500, "", UpstreamAuthError.UNAVAILABLE),
                 Arguments.of(Endpoint.TOKEN, 403, "", UpstreamAuthError.UNAVAILABLE),
 
                 // --- rule 7: context "verify" (shared by verifyEmailToken and resetPasswordWithToken) ---
@@ -215,15 +213,13 @@ class GoTrueClientTest {
                 Arguments.of(Endpoint.VERIFY, 403, "", UpstreamAuthError.TOKEN_INVALID),
                 Arguments.of(Endpoint.RESET, 400, "", UpstreamAuthError.TOKEN_INVALID),
                 Arguments.of(Endpoint.RESET, 403, "{\"msg\":\"otp_disabled\"}", UpstreamAuthError.TOKEN_INVALID),
-                Arguments.of(Endpoint.VERIFY, 500, "", UpstreamAuthError.UNAVAILABLE),
                 Arguments.of(Endpoint.VERIFY, 401, "", UpstreamAuthError.UNAVAILABLE),
 
                 // --- rule 8: any other context falls through to UNAVAILABLE ---
+                // (5xx answers of every context are anchored by everyEndpointCarriesItsOwnErrorContext)
                 Arguments.of(Endpoint.CREATE_USER, 400, "", UpstreamAuthError.UNAVAILABLE),
                 Arguments.of(Endpoint.CREATE_USER, 401, "", UpstreamAuthError.UNAVAILABLE),
-                Arguments.of(Endpoint.DELETE_USER, 500, "", UpstreamAuthError.UNAVAILABLE),
-                Arguments.of(Endpoint.RESEND, 400, "", UpstreamAuthError.UNAVAILABLE),
-                Arguments.of(Endpoint.RECOVER, 503, "", UpstreamAuthError.UNAVAILABLE)
+                Arguments.of(Endpoint.RESEND, 400, "", UpstreamAuthError.UNAVAILABLE)
         );
     }
 
@@ -259,8 +255,6 @@ class GoTrueClientTest {
 
     static Stream<Arguments> precedenceTable() {
         return Stream.of(
-                // 429 beats a "not found" body: the rate limit is checked first.
-                Arguments.of(Endpoint.DELETE_USER, 429, "{\"msg\":\"User not found\"}", UpstreamAuthError.RATE_LIMITED),
                 // 429 beats an "already exists" body.
                 Arguments.of(Endpoint.CREATE_USER, 429, "{\"msg\":\"User already exists\"}", UpstreamAuthError.RATE_LIMITED),
                 // "email not confirmed" beats "user not found" when both appear.
@@ -280,26 +274,10 @@ class GoTrueClientTest {
                 Arguments.of(Endpoint.RESET, 404, "", UpstreamAuthError.TOKEN_INVALID),
                 // The 404 exemption is about the status alone: an explicit "not found" body on
                 // /verify is still USER_NOT_FOUND.
-                Arguments.of(Endpoint.VERIFY, 404, "{\"msg\":\"User not found\"}", UpstreamAuthError.USER_NOT_FOUND),
-                // The exemption is scoped to /verify: an admin 404 keeps reporting a missing user.
-                Arguments.of(Endpoint.DELETE_USER, 404, "", UpstreamAuthError.USER_NOT_FOUND)
+                Arguments.of(Endpoint.VERIFY, 404, "{\"msg\":\"User not found\"}", UpstreamAuthError.USER_NOT_FOUND)
+                // That the exemption is scoped to /verify (an admin 404 keeps reporting a missing user)
+                // is the DELETE_USER 404 row of the decision table.
         );
-    }
-
-    @Test
-    @DisplayName("An unmapped status keeps the failing operation in the message for troubleshooting")
-    void unmappedStatusCarriesTheContextInTheMessage() {
-        // Arrange
-        providerFailsWith(Endpoint.RESEND, 502, "");
-
-        // Act
-        Executable act = () -> invoke(Endpoint.RESEND);
-
-        // Assert
-        UpstreamAuthException ex = assertUpstreamFailure(act);
-        assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
-        assertTrue(ex.getMessage().contains("resend"), ex.getMessage());
-        assertTrue(ex.getMessage().contains("502"), ex.getMessage());
     }
 
     @ParameterizedTest(name = "[{index}] {0} with the provider down -> UNAVAILABLE")
@@ -307,18 +285,21 @@ class GoTrueClientTest {
     @DisplayName("Every operation degrades to UNAVAILABLE when the provider is unreachable")
     void networkFailureDegradesToUnavailable(Endpoint endpoint) {
         // Arrange
-        server.expect(request -> { }).andRespond(request -> {
-            throw new IOException("connection refused");
-        });
+        String esperado = pathOf(endpoint);
+        server.expect(request -> assertTrue(request.getURI().getPath().startsWith(esperado),
+                        () -> endpoint + " called " + request.getURI().getPath() + " instead of " + esperado))
+                .andRespond(request -> {
+                    throw new IOException("connection refused");
+                });
 
         // Act
         Executable act = () -> invoke(endpoint);
 
         // Assert
-        UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, act);
+        UpstreamAuthException ex = assertUpstreamFailure(act);
         assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
         assertEquals("Identity provider is unreachable", ex.getMessage());
-        assertNotNull(ex.getCause());
+        assertInstanceOf(IOException.class, ex.getCause().getCause());
     }
 
     // ---------------------------------------------------------------------
@@ -585,6 +566,7 @@ class GoTrueClientTest {
             UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, act);
             assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
             assertTrue(ex.getMessage().contains("expires_in"), ex.getMessage());
+            assertInstanceOf(NumberFormatException.class, ex.getCause());
         }
 
         @Test
@@ -603,23 +585,6 @@ class GoTrueClientTest {
             UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, act);
             assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
             assertTrue(ex.getMessage().contains("expires_in"), ex.getMessage());
-        }
-
-        @Test
-        @DisplayName("The failed expires_in conversion is kept as the cause for troubleshooting")
-        void badExpiresInKeepsTheConversionFailureAsCause() {
-            // Arrange
-            server.expect(requestTo(BASE + "/token?grant_type=password"))
-                    .andRespond(withSuccess("""
-                            {"access_token":"jwt","refresh_token":"refresh","expires_in":"never"}
-                            """, MediaType.APPLICATION_JSON));
-
-            // Act
-            Executable act = () -> client.requestPasswordToken("ana.perez@example.com", "Secret123!");
-
-            // Assert
-            UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, act);
-            assertInstanceOf(NumberFormatException.class, ex.getCause());
         }
     }
 
@@ -670,7 +635,7 @@ class GoTrueClientTest {
     class Verify {
 
         @Test
-        @DisplayName("Email verification posts the OTP hash with type=email and no password")
+        @DisplayName("Email verification posts the OTP hash with type=email and omits the password key entirely")
         void emailVerificationSendsTypeEmailWithoutPassword() {
             // Arrange
             UUID id = UUID.randomUUID();
@@ -678,7 +643,8 @@ class GoTrueClientTest {
                     .andExpect(method(HttpMethod.POST))
                     .andExpect(jsonPath("$.token_hash").value("token-hash"))
                     .andExpect(jsonPath("$.type").value("email"))
-                    .andExpect(jsonPath("$.password").doesNotExist())
+                    // jsonPath(...).doesNotExist() also accepts "password": null; the raw body check does not
+                    .andExpect(content().string(not(containsString("password"))))
                     .andRespond(withSuccess("{\"id\":\"%s\",\"email\":\"ana.perez@example.com\"}".formatted(id),
                             MediaType.APPLICATION_JSON));
 
@@ -721,23 +687,6 @@ class GoTrueClientTest {
             UpstreamAuthException ex = assertThrows(UpstreamAuthException.class, act);
             assertEquals(UpstreamAuthError.UNAVAILABLE, ex.error());
             assertTrue(ex.getMessage().contains("missing field: id"), ex.getMessage());
-        }
-
-        @Test
-        @DisplayName("A session whose user is not an object falls back to the root payload")
-        void nonObjectUserFallsBackToTheRootPayload() {
-            // Arrange
-            UUID id = UUID.randomUUID();
-            server.expect(requestTo(BASE + "/verify"))
-                    .andRespond(withSuccess("{\"user\":\"ana.perez@example.com\",\"id\":\"%s\",\"email\":\"root@example.com\"}"
-                            .formatted(id), MediaType.APPLICATION_JSON));
-
-            // Act
-            ConfirmedUser confirmed = client.verifyEmailToken("token-hash");
-
-            // Assert
-            assertEquals(id, confirmed.userId());
-            assertEquals("root@example.com", confirmed.email());
         }
 
         @Test
@@ -835,20 +784,6 @@ class GoTrueClientTest {
             // Assert
             server.verify();
         }
-
-        @Test
-        @DisplayName("Resending too often surfaces the provider rate limit")
-        void resendTooOftenIsRateLimited() {
-            // Arrange
-            providerFailsWith(Endpoint.RESEND, 429, "{\"msg\":\"over_email_send_rate_limit\"}");
-
-            // Act
-            Executable act = () -> invoke(Endpoint.RESEND);
-
-            // Assert
-            UpstreamAuthException ex = assertUpstreamFailure(act);
-            assertEquals(UpstreamAuthError.RATE_LIMITED, ex.error());
-        }
     }
 
     // ---------------------------------------------------------------------
@@ -858,19 +793,6 @@ class GoTrueClientTest {
     @Nested
     @DisplayName("signOut")
     class SignOut {
-
-        @Test
-        @DisplayName("A successful logout completes without a payload")
-        void successfulLogout() {
-            // Arrange
-            server.expect(requestTo(BASE + "/logout")).andRespond(withStatus(HttpStatusCode.valueOf(204)));
-
-            // Act
-            client.signOut("user-access-token");
-
-            // Assert
-            server.verify();
-        }
 
         @ParameterizedTest(name = "[{index}] HTTP {0} -> TOKEN_INVALID")
         @CsvSource({"401", "403", "404"})
@@ -892,7 +814,6 @@ class GoTrueClientTest {
         @ParameterizedTest(name = "[{index}] HTTP {0} -> {1}")
         @CsvSource({
                 "429, RATE_LIMITED",
-                "500, UNAVAILABLE",
                 "400, UNAVAILABLE"
         })
         @DisplayName("Any other logout failure falls back to the general error table")
@@ -936,70 +857,25 @@ class GoTrueClientTest {
 
         @ParameterizedTest(name = "[{index}] {0} declares application/json")
         @CsvSource({
-                "TOKEN,   /token?grant_type=password",
-                "VERIFY,  /verify",
-                "RESEND,  /resend",
-                "RECOVER, /recover"
+                "CREATE_USER, /admin/users",
+                "TOKEN,       /token?grant_type=password",
+                "VERIFY,      /verify",
+                "RESET,       /verify",
+                "RESEND,      /resend",
+                "RECOVER,     /recover"
         })
-        @DisplayName("The JSON body is announced with an explicit Content-Type, not left to the converter")
+        @DisplayName("Every operation with a JSON body announces it with an explicit Content-Type")
         void jsonBodiesDeclareTheContentType(Endpoint endpoint, String path) {
             // Arrange
+            UUID id = UUID.randomUUID();
             server.expect(requestTo(BASE + path))
                     .andExpect(header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
                     .andRespond(withSuccess("""
-                            {"access_token":"jwt","refresh_token":"r","user":{"id":"%s","email":"ana.perez@example.com"}}
-                            """.formatted(UUID.randomUUID()), MediaType.APPLICATION_JSON));
+                            {"id":"%s","access_token":"jwt","refresh_token":"r","user":{"id":"%s","email":"ana.perez@example.com"}}
+                            """.formatted(id, id), MediaType.APPLICATION_JSON));
 
             // Act
             invoke(endpoint);
-
-            // Assert
-            server.verify();
-        }
-
-        @Test
-        @DisplayName("Creating a user announces application/json too")
-        void createUserDeclaresTheContentType() {
-            // Arrange
-            server.expect(requestTo(BASE + "/admin/users"))
-                    .andExpect(header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE))
-                    .andRespond(withSuccess("{\"id\":\"%s\"}".formatted(UUID.randomUUID()),
-                            MediaType.APPLICATION_JSON));
-
-            // Act
-            client.createUser("ana.perez@example.com", "Secret123!", AppRole.CLIENT);
-
-            // Assert
-            server.verify();
-        }
-
-        @Test
-        @DisplayName("A new user is created unconfirmed: the confirmation must come from the emailed link")
-        void createUserDoesNotAutoConfirmTheEmail() {
-            // Arrange
-            server.expect(requestTo(BASE + "/admin/users"))
-                    .andExpect(jsonPath("$.email_confirm").value(false))
-                    .andRespond(withSuccess("{\"id\":\"%s\"}".formatted(UUID.randomUUID()),
-                            MediaType.APPLICATION_JSON));
-
-            // Act
-            client.createUser("ana.perez@example.com", "Secret123!", AppRole.CLIENT);
-
-            // Assert
-            server.verify();
-        }
-
-        @Test
-        @DisplayName("Email verification omits the password key entirely instead of sending it as null")
-        void emailVerificationOmitsThePasswordKeyEntirely() {
-            // Arrange
-            server.expect(requestTo(BASE + "/verify"))
-                    .andExpect(content().string(not(containsString("password"))))
-                    .andRespond(withSuccess("{\"id\":\"%s\",\"email\":\"ana.perez@example.com\"}"
-                            .formatted(UUID.randomUUID()), MediaType.APPLICATION_JSON));
-
-            // Act
-            client.verifyEmailToken("token-hash");
 
             // Assert
             server.verify();

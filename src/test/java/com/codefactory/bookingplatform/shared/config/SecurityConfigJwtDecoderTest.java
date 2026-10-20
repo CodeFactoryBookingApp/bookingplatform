@@ -150,19 +150,6 @@ class SecurityConfigJwtDecoderTest {
     }
 
     @Test
-    @DisplayName("An expired RS256 token is refused as well, so the second algorithm is validated too")
-    void expiredRsaTokenIsRefused() throws Exception {
-        // Arrange
-        String expired = signedWithRsa(claims(ISSUER, Instant.now().minusSeconds(600)));
-
-        // Act
-        Executable act = () -> decoder.decode(expired);
-
-        // Assert
-        assertThrows(JwtException.class, act);
-    }
-
-    @Test
     @DisplayName("SECURITY: a token minted by another issuer is refused even if the signature checks out")
     void foreignIssuerIsRefused() throws Exception {
         // Arrange

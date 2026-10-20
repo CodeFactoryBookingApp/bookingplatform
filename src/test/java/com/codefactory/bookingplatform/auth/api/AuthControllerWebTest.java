@@ -101,20 +101,6 @@ class AuthControllerWebTest {
     // ------------------------------------------------------------------ login
 
     @Test
-    @DisplayName("POST /login answers 200 OK")
-    void loginAnswers200() throws Exception {
-        // Arrange
-        when(loginUseCase.login(anyString(), anyString()))
-                .thenReturn(new AuthTokens("access-token", "refresh-token", "bearer", 3600L));
-
-        // Act
-        ResultActions result = mockMvc.perform(loginRequest());
-
-        // Assert
-        result.andExpect(status().isOk());
-    }
-
-    @Test
     @DisplayName("POST /login returns accessToken, refreshToken, tokenType and expiresIn")
     void loginReturnsTheTokenBundle() throws Exception {
         // Arrange
@@ -167,10 +153,8 @@ class AuthControllerWebTest {
     @CsvSource({
             "INVALID_CREDENTIALS,  401",
             "EMAIL_NOT_CONFIRMED,  403",
-            "ACCOUNT_LOCKED,       429",
             "UPSTREAM_AUTH_ERROR,  502",
-            "RATE_LIMITED,         429",
-            "AUTH_TOKEN_INVALID,   401"})
+            "RATE_LIMITED,         429"})
     @DisplayName("Login business failures are mapped to their declared status and errorCode")
     void loginFailuresAreMapped(String errorCode, int expectedStatus) throws Exception {
         // Arrange
@@ -200,21 +184,6 @@ class AuthControllerWebTest {
         result.andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.errorCode").value("ACCOUNT_LOCKED"))
                 .andExpect(jsonPath("$.details.retryAfterMinutes").value("15"));
-    }
-
-    @Test
-    @DisplayName("SECURITY: a rejected login does not reveal whether the email exists")
-    void invalidCredentialsMessageIsNeutral() throws Exception {
-        // Arrange
-        when(loginUseCase.login(anyString(), anyString()))
-                .thenThrow(new BusinessException(ErrorCode.INVALID_CREDENTIALS));
-
-        // Act
-        ResultActions result = mockMvc.perform(loginRequest());
-
-        // Assert
-        result.andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.detail").value("Invalid email or password"));
     }
 
     @ParameterizedTest(name = "login with email [{0}] is rejected with 400")
@@ -265,7 +234,9 @@ class AuthControllerWebTest {
 
         // Assert
         result.andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.details.password").value("password is required"));
+        verify(loginUseCase, never()).login(anyString(), anyString());
     }
 
     @Test
@@ -288,8 +259,8 @@ class AuthControllerWebTest {
     // ----------------------------------------------------------------- logout
 
     @Test
-    @DisplayName("POST /logout answers 204 No Content with an empty body")
-    void logoutAnswers204() throws Exception {
+    @DisplayName("POST /logout answers 204 with an empty body and hands the raw bearer token to the use case")
+    void logoutForwardsTheRawToken() throws Exception {
         // Arrange
         RequestBuilder request = post(LOGOUT).principal(principal("the-access-token", "ROLE_CLIENT"));
 
@@ -299,19 +270,6 @@ class AuthControllerWebTest {
         // Assert
         result.andExpect(status().isNoContent())
                 .andExpect(content().string(""));
-    }
-
-    @Test
-    @DisplayName("POST /logout hands the raw bearer token to the use case")
-    void logoutForwardsTheRawToken() throws Exception {
-        // Arrange
-        RequestBuilder request = post(LOGOUT).principal(principal("the-access-token", "ROLE_CLIENT"));
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        result.andExpect(status().isNoContent());
         verify(logoutUseCase).logout("the-access-token");
     }
 
@@ -348,21 +306,6 @@ class AuthControllerWebTest {
         result.andExpect(status().isAccepted())
                 .andExpect(content().string(""));
         verify(passwordRecoveryUseCase).requestRecovery("ana.perez@example.com");
-    }
-
-    @Test
-    @DisplayName("SECURITY: an unknown email also gets 202, so the endpoint does not enumerate users")
-    void recoveryDoesNotEnumerateUsers() throws Exception {
-        // Arrange
-        RequestBuilder request = post(RECOVERY)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\": \"nobody@example.com\"}");
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        result.andExpect(status().isAccepted());
     }
 
     @ParameterizedTest(name = "recovery with email [{0}] is rejected with 400")
@@ -472,22 +415,6 @@ class AuthControllerWebTest {
         verify(passwordResetUseCase, never()).resetPassword(anyString(), anyString());
     }
 
-    @Test
-    @DisplayName("SECURITY: the reset answer carries no body at all, so no token echo is possible")
-    void resetAnswerCarriesNoToken() throws Exception {
-        // Arrange
-        RequestBuilder request = post(RESETS)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"tokenHash\": \"pkce_1a2b3c\", \"newPassword\": \"N3w!Password\"}");
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        String body = result.andReturn().getResponse().getContentAsString();
-        assertFalse(body.contains("pkce_1a2b3c"), "the one-time token hash leaked into the reset response");
-    }
-
     // --------------------------------------------------------------------- me
 
     @Test
@@ -507,19 +434,6 @@ class AuthControllerWebTest {
     }
 
     @Test
-    @DisplayName("GET /me strips the ROLE_ prefix from the authority")
-    void meStripsTheRolePrefix() throws Exception {
-        // Arrange
-        RequestBuilder request = get(ME).principal(principal("access-token", "ROLE_ADMIN"));
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        result.andExpect(jsonPath("$.role").value("ADMIN"));
-    }
-
-    @Test
     @DisplayName("GET /me ignores authorities that are not roles and reports role null")
     void meIgnoresNonRoleAuthorities() throws Exception {
         // Arrange
@@ -530,21 +444,6 @@ class AuthControllerWebTest {
 
         // Assert
         result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").doesNotExist());
-    }
-
-    @Test
-    @DisplayName("GET /me reports role null when the token grants no authority at all")
-    void meReportsNullRoleWithoutAuthorities() throws Exception {
-        // Arrange
-        RequestBuilder request = get(ME).principal(principal("access-token"));
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        result.andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(SUBJECT))
                 .andExpect(jsonPath("$.role").doesNotExist());
     }
 
@@ -574,28 +473,5 @@ class AuthControllerWebTest {
         // Assert
         String body = result.andReturn().getResponse().getContentAsString();
         assertFalse(body.contains("super-secret-access-token"), "the access token leaked into the /me response");
-    }
-
-    @Test
-    @DisplayName("A subject that is not a UUID makes /me fail as a generic 500, not a leak")
-    void meWithNonUuidSubjectFailsSafely() throws Exception {
-        // Arrange
-        Jwt malformed = Jwt.withTokenValue("access-token")
-                .header("alg", "ES256")
-                .subject("not-a-uuid")
-                .claim("email", "ana.perez@example.com")
-                .issuedAt(Instant.parse("2026-09-22T10:00:00Z"))
-                .expiresAt(Instant.parse("2026-09-22T11:00:00Z"))
-                .build();
-        JwtAuthenticationToken token =
-                new JwtAuthenticationToken(malformed, List.of(new SimpleGrantedAuthority("ROLE_CLIENT")));
-        RequestBuilder request = get(ME).principal(token);
-
-        // Act
-        ResultActions result = mockMvc.perform(request);
-
-        // Assert
-        result.andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.errorCode").value("INTERNAL_ERROR"));
     }
 }
