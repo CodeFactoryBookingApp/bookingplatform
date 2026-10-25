@@ -15,6 +15,7 @@ arrancar, en orden de versión:
 | `V3__correcciones_reservas_y_servicios.sql` | Un servicio nuevo nace inactivo; las reglas de reservas ya no impiden cancelar ni cerrar las de un proveedor suspendido o un servicio desactivado; el aforo grupal resiste reservas simultáneas |
 | `V4__identificacion_del_proveedor.sql` | El proveedor se identifica con tipo (NIT, CC, CE, PASAPORTE) y número; `nit` pasa a `identification_number` y la unicidad es por la pareja |
 | `V5__datos_de_referencia.sql` | Categorías, ciudades y la moneda COP. Son datos de referencia que la aplicación necesita en toda base, no datos de prueba |
+| `V6__bandeja_de_correo.sql` | `sent_emails`: los correos de la plataforma se guardan ahí y su destinatario los lee por la API, porque Render gratis bloquea SMTP (ADR-0007) |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
@@ -91,7 +92,7 @@ toque esta carpeta, las migraciones o el mapeo JPA. Comprueba que:
 
 - las migraciones ejecuten contra una base vacía;
 - V1 y V2 sigan siendo idempotentes;
-- se creen las diecinueve tablas;
+- se creen las veinte tablas (las diecinueve de V1 y la bandeja de correo de V6);
 - los datos de prueba carguen;
 - las catorce consultas devuelvan filas;
 - las diecinueve pruebas de integridad sean rechazadas;

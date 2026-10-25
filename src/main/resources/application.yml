@@ -27,9 +27,9 @@ spring:
   mvc:
     problemdetails:
       enabled: true
-  # The SMTP server comes from SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME
-  # and SPRING_MAIL_PASSWORD. Without SPRING_MAIL_HOST there is no mail sender and the
-  # notification module logs each email instead of sending it (ADR-0007).
+  # Optional SMTP server: SPRING_MAIL_HOST, SPRING_MAIL_PORT, SPRING_MAIL_USERNAME and
+  # SPRING_MAIL_PASSWORD. Without SPRING_MAIL_HOST, which is the case on Render's free
+  # plan (it blocks SMTP), emails go to the in-app inbox (ADR-0007).
   mail:
     properties:
       "[mail.smtp.auth]": true

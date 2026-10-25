@@ -75,12 +75,12 @@ Variables requeridas: `SPRING_PROFILES_ACTIVE=cloud`, `DATABASE_URL`
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Sin Secret Files (la app lee entorno,
 no archivos). **Health Check Path:** `/actuator/health/readiness`.
 
-Correo saliente (ADR-0007), opcional: `SPRING_MAIL_HOST=smtp.gmail.com`,
-`SPRING_MAIL_PORT=587`, `SPRING_MAIL_USERNAME` y `SPRING_MAIL_PASSWORD` (una
-contraseña de aplicación de Gmail, que exige verificación en dos pasos en la
-cuenta), y `APP_MAIL_FROM` si el remitente no es el usuario. Sin
-`SPRING_MAIL_HOST` la app funciona igual y deja cada correo en el log con
-`No SMTP server configured; email not sent`.
+Correo de la plataforma (ADR-0007): no hay que configurar nada. El plan
+gratuito de Render bloquea SMTP, así que los correos (por ejemplo, la
+aprobación de un proveedor) se guardan en `sent_emails` y su destinatario los
+lee con `GET /api/v1/notifications/emails`. En el log aparece
+`Email '...' stored in the in-app inbox`. Las variables `SPRING_MAIL_*` solo
+sirven en local o en un plan de pago.
 
 Restricciones del free tier aplicadas en `application-cloud.yml`:
 `server.port=${PORT:8080}` (Render inyecta `PORT`) y pool Hikari de 5/1,

@@ -371,6 +371,7 @@
 						<param>com.codefactory.bookingplatform.organization.application.RegisterProviderCommand*</param>
 						<param>com.codefactory.bookingplatform.organization.application.ProviderRegistration</param>
 						<param>com.codefactory.bookingplatform.organization.application.ProviderApproved</param>
+						<param>com.codefactory.bookingplatform.notification.domain.model.SentEmail</param>
 					</excludedClasses>
 					<!--
 					  Los tests de integracion quedan fuera de la EJECUCION: levantan

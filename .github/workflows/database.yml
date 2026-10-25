@@ -77,11 +77,11 @@ jobs:
             $PSQL -v ON_ERROR_STOP=1 -q -f "$f"
           done
 
-      - name: Se crearon las 19 tablas
+      - name: Se crearon las 20 tablas
         run: |
           n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'")
           echo "tablas creadas: $n"
-          test "$n" -eq 19
+          test "$n" -eq 20
 
       # V1 y V2 se vuelven a aplicar sobre las bases creadas antes de Flyway
       # (línea base 0), así que tienen que seguir siendo idempotentes. Las

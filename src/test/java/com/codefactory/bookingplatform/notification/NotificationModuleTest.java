@@ -1,10 +1,13 @@
 package com.codefactory.bookingplatform.notification;
 
+import com.codefactory.bookingplatform.notification.application.EmailInbox;
 import com.codefactory.bookingplatform.notification.application.EmailNotifications;
 import com.codefactory.bookingplatform.notification.domain.model.EmailMessage;
+import com.codefactory.bookingplatform.notification.domain.model.SentEmail;
 import com.codefactory.bookingplatform.notification.domain.port.EmailSender;
+import com.codefactory.bookingplatform.notification.domain.port.SentEmailRepository;
 import com.codefactory.bookingplatform.notification.infrastructure.config.MailConfig;
-import com.codefactory.bookingplatform.notification.infrastructure.mail.LoggingEmailSender;
+import com.codefactory.bookingplatform.notification.infrastructure.mail.InboxEmailSender;
 import com.codefactory.bookingplatform.notification.infrastructure.mail.SmtpEmailSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -18,6 +21,10 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -107,13 +115,47 @@ class NotificationModuleTest {
     }
 
     @Test
-    @DisplayName("Without SMTP the email is only logged, and that never fails")
-    void loggingSenderNeverFails() {
+    @DisplayName("Without SMTP the email is stored in the in-app inbox, exactly as composed")
+    void inboxSenderStoresTheMessage() {
+        // Arrange
+        SentEmailRepository inbox = mock(SentEmailRepository.class);
+
         // Act
-        Executable act = () -> new LoggingEmailSender().send(MESSAGE);
+        new InboxEmailSender(inbox).send(MESSAGE);
 
         // Assert
-        assertDoesNotThrow(act);
+        verify(inbox).save(MESSAGE);
+    }
+
+    @ParameterizedTest(name = "[{index}] \"{0}\"")
+    @NullAndEmptySource
+    @ValueSource(strings = "  ")
+    @DisplayName("A user whose token carries no email has an empty inbox, and the store is not even asked")
+    void noEmailMeansEmptyInbox(String email) {
+        // Arrange
+        SentEmailRepository emails = mock(SentEmailRepository.class);
+
+        // Act
+        List<SentEmail> found = new EmailInbox(emails).addressedTo(email);
+
+        // Assert
+        assertEquals(List.of(), found);
+        verifyNoInteractions(emails);
+    }
+
+    @Test
+    @DisplayName("The inbox is looked up by the trimmed address of the user")
+    void inboxIsLookedUpByTheTrimmedAddress() {
+        // Arrange
+        SentEmailRepository emails = mock(SentEmailRepository.class);
+        SentEmail email = new SentEmail(UUID.randomUUID(), "ana@example.com", "Asunto", "Cuerpo", Instant.now());
+        when(emails.findByRecipient("ana@example.com")).thenReturn(List.of(email));
+
+        // Act
+        List<SentEmail> found = new EmailInbox(emails).addressedTo(" ana@example.com ");
+
+        // Assert
+        assertEquals(List.of(email), found);
     }
 
     @Nested
@@ -128,13 +170,13 @@ class NotificationModuleTest {
         }
 
         @Test
-        @DisplayName("No SMTP server configured: the log sender")
-        void withoutSmtpLogs() {
+        @DisplayName("No SMTP server configured, as on Render free: the in-app inbox")
+        void withoutSmtpUsesTheInbox() {
             // Act
-            EmailSender sender = new MailConfig().emailSender(provider(null), "", "");
+            EmailSender sender = new MailConfig().emailSender(provider(null), mock(SentEmailRepository.class), "", "");
 
             // Assert
-            assertInstanceOf(LoggingEmailSender.class, sender);
+            assertInstanceOf(InboxEmailSender.class, sender);
         }
 
         @Test
@@ -144,7 +186,7 @@ class NotificationModuleTest {
             JavaMailSender mailSender = mock(JavaMailSender.class);
 
             // Act
-            new MailConfig().emailSender(provider(mailSender), "", "cuenta@gmail.com").send(MESSAGE);
+            new MailConfig().emailSender(provider(mailSender), mock(SentEmailRepository.class), "", "cuenta@gmail.com").send(MESSAGE);
 
             // Assert
             ArgumentCaptor<SimpleMailMessage> mail = ArgumentCaptor.forClass(SimpleMailMessage.class);
@@ -159,7 +201,8 @@ class NotificationModuleTest {
             JavaMailSender mailSender = mock(JavaMailSender.class);
 
             // Act
-            new MailConfig().emailSender(provider(mailSender), "reservas@example.com", "cuenta@gmail.com")
+            new MailConfig().emailSender(provider(mailSender), mock(SentEmailRepository.class), "reservas@example.com",
+                    "cuenta@gmail.com")
                     .send(MESSAGE);
 
             // Assert

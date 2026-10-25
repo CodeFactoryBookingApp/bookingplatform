@@ -3,7 +3,7 @@ package com.codefactory.bookingplatform.notification.domain.port;
 import com.codefactory.bookingplatform.notification.domain.model.EmailMessage;
 
 /**
- * Port to whatever delivers email: an SMTP server, or the log when none is configured (ADR-0007).
+ * Port to whatever delivers email: an SMTP server, or the in-app inbox when none is configured (ADR-0007).
  */
 public interface EmailSender {
 

@@ -1,8 +1,6 @@
 package com.codefactory.bookingplatform.organization;
 
 import com.codefactory.bookingplatform.auth.domain.model.AppRole;
-import com.codefactory.bookingplatform.notification.domain.model.EmailMessage;
-import com.codefactory.bookingplatform.notification.domain.port.EmailSender;
 import com.codefactory.bookingplatform.support.JwtIntegrationTestBase;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.List;
@@ -27,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -46,9 +42,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 class ProviderOnboardingIT extends JwtIntegrationTestBase {
 
     private static final String PASSWORD = "Str0ng!Pass";
-
-    @MockitoBean
-    private EmailSender emailSender;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -131,6 +124,14 @@ class ProviderOnboardingIT extends JwtIntegrationTestBase {
                 .header("Authorization", token).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"bookingNoticeMinutesMin\": %d, \"bookingNoticeMinutesMax\": %d, \"freeCancellationWindowMinutes\": 720}"
                         .formatted(min, max)));
+    }
+
+    /** The subjects in the in-app inbox of the provider owner (ADR-0007). */
+    private List<String> inboxSubjects(Provider provider) throws Exception {
+        MockHttpServletResponse inbox = call(get("/api/v1/notifications/emails")
+                .header("Authorization", ownerToken(provider)));
+        assertEquals(200, inbox.getStatus(), inbox.getContentAsString());
+        return JsonPath.read(inbox.getContentAsString(), "$[*].subject");
     }
 
     private static String errorCodeOf(MockHttpServletResponse response) throws Exception {
@@ -239,7 +240,7 @@ class ProviderOnboardingIT extends JwtIntegrationTestBase {
     class Approval {
 
         @Test
-        @DisplayName("HU-002: an administrator approves; the provider is ACTIVE, the reason is stored and the email goes out")
+        @DisplayName("HU-002: an administrator approves; the provider is ACTIVE, the reason is stored and the email reaches its inbox")
         void adminApprovesAndTheProviderIsTold() throws Exception {
             // Arrange
             Provider provider = registered();
@@ -254,8 +255,7 @@ class ProviderOnboardingIT extends JwtIntegrationTestBase {
             assertEquals("RUT y cámara de comercio verificados", jdbc.queryForObject(
                     "select reason from account_status_changes where organization_id = ?::uuid and to_status = 'ACTIVE'",
                     String.class, provider.organizationId()));
-            verify(emailSender, timeout(2000)).send(org.mockito.ArgumentMatchers.argThat(
-                    (EmailMessage email) -> email.to().equals(provider.email())));
+            assertEquals(List.of("Tu negocio fue aprobado en la plataforma de reservas"), inboxSubjects(provider));
         }
 
         @Test
@@ -286,7 +286,7 @@ class ProviderOnboardingIT extends JwtIntegrationTestBase {
             // Assert
             assertEquals(409, response.getStatus());
             assertEquals("INVALID_STATUS_TRANSITION", errorCodeOf(response));
-            verify(emailSender, timeout(2000).times(1)).send(any(EmailMessage.class));
+            assertEquals(1, inboxSubjects(provider).size());
         }
     }
 
