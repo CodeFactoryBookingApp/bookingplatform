@@ -12,11 +12,12 @@ arrancar, en orden de versión:
 |---|---|
 | `V1__esquema_inicial.sql` | Las diecinueve tablas del Sprint 1 con sus restricciones, triggers e índices. Es el antiguo `schema.sql` (ADR-0005) |
 | `V2__rls.sql` | Habilita Row Level Security en las diecinueve tablas. Es el antiguo `rls.sql` |
+| `V3__correcciones_reservas_y_servicios.sql` | Un servicio nuevo nace inactivo; las reglas de reservas ya no impiden cancelar ni cerrar las de un proveedor suspendido o un servicio desactivado; el aforo grupal resiste reservas simultáneas |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
-V1 y V2 no se modifican nunca: Flyway guarda su checksum y no arranca si
-cambian. Un cambio de esquema es una migración nueva, `V3__<descripcion>.sql`
-y siguientes. Si crea tablas, habilita RLS en ellas en la misma migración;
+Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
+arranca si cambia. Un cambio de esquema es una migración nueva, con la versión
+siguiente. Si crea tablas, habilita RLS en ellas en la misma migración;
 `DatabaseMigrationsIT` y el workflow de base de datos fallan si alguna tabla de
 `public` queda sin RLS.
 
@@ -26,7 +27,7 @@ y siguientes. Si crea tablas, habilita RLS en ellas en la misma migración;
 |---|---|---|
 | `seed.sql` | Datos de prueba. Tres organizaciones, cinco servicios, ocho reservas | Sí, después de las migraciones |
 | `consultas-clave.sql` | Las catorce preguntas de negocio, ejecutables de corrido | Sí, para ver resultados |
-| `pruebas-integridad.sql` | Dieciocho instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
+| `pruebas-integridad.sql` | Diecinueve instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
 | `modelo-logico.md` | Diagrama entidad-relación, decisiones de modelado y normalización | No, se lee |
 | `consultas-clave.md` | Las mismas catorce preguntas con su explicación | No, se lee |
 | `diagrama-er.drawio` | Diagrama editable. La primera página, **Modelo completo**, tiene las diecinueve entidades, las notas y las historias de usuario en una sola hoja; las cuatro siguientes son las tres vistas por dominio y la hoja de historias de usuario | No |
@@ -91,7 +92,7 @@ toque esta carpeta, las migraciones o el mapeo JPA. Comprueba que:
 - se creen las diecinueve tablas;
 - los datos de prueba carguen;
 - las catorce consultas devuelvan filas;
-- las dieciocho pruebas de integridad sean rechazadas;
+- las diecinueve pruebas de integridad sean rechazadas;
 - ninguna tabla quede sin RLS.
 
 Las pruebas de integración del build corren sobre el esquema que crea Flyway,

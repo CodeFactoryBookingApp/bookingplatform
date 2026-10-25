@@ -114,7 +114,7 @@ jobs:
           rechazos=$(echo "$salida" | grep -cE '(^|: )ERROR:'          || true)
           coladas=$(echo "$salida"  | grep -cE '^(INSERT|UPDATE|DELETE) ' || true)
           echo "rechazos: $rechazos · instrucciones que pasaron: $coladas"
-          test "$rechazos" -eq 18
+          test "$rechazos" -eq 19
           test "$coladas" -eq 0
 
       # Ninguna tabla de public sin RLS, sean cuantas sean: una migración

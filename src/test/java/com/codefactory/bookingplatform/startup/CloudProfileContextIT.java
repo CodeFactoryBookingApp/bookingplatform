@@ -18,6 +18,7 @@ import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The profile that actually ships, started on the database it will find on its first deploy with
@@ -86,7 +87,8 @@ class CloudProfileContextIT {
                 "select version || ':' || type || ':' || success from flyway_schema_history order by installed_rank",
                 String.class);
 
-        // Assert
-        assertEquals(List.of("0:BASELINE:true", "1:SQL:true", "2:SQL:true"), history);
+        // Assert: then every later migration, whatever their number, on top
+        assertEquals(List.of("0:BASELINE:true", "1:SQL:true", "2:SQL:true"), history.subList(0, 3));
+        assertTrue(history.stream().skip(3).allMatch(row -> row.endsWith(":SQL:true")), history.toString());
     }
 }

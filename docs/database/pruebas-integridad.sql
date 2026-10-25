@@ -8,7 +8,7 @@
 --
 --  Uso:  con las migraciones de src/main/resources/db/migration ya aplicadas,
 --        psql -f seed.sql -f pruebas-integridad.sql
---  Se ejecuta SIN ON_ERROR_STOP para que se vean los dieciocho rechazos.
+--  Se ejecuta SIN ON_ERROR_STOP para que se vean los diecinueve rechazos.
 --  Usa metacomandos de psql, así que se ejecuta con `psql -f`.
 -- =====================================================================
 
@@ -149,8 +149,18 @@ insert into clients values (gen_random_uuid(), 'Menor de Edad', '7777', current_
 
 
 \echo ''
+\echo '--- 19. Reserva nueva de un servicio desactivado (HU-004) ---'
+insert into bookings (client_id, organization_id, service_id, location_id, policy_id, session_id,
+                      starts_at, ends_at, total_price)
+values ('44444444-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000002',
+        'aaaa0000-0000-0000-0000-000000000005', '88888888-0000-0000-0000-000000000003',
+        '77777777-0000-0000-0000-000000000003', gen_random_uuid(),
+        now() + interval '9 days', now() + interval '9 days' + interval '60 minutes', 250000);
+
+
+\echo ''
 \echo '====================================================================='
-\echo ' Las dieciocho instrucciones anteriores debieron ser rechazadas.'
+\echo ' Las diecinueve instrucciones anteriores debieron ser rechazadas.'
 \echo ' Si alguna dice INSERT, UPDATE o DELETE en vez de ERROR, hay una'
 \echo ' regla de negocio que la base no está garantizando.'
 \echo '====================================================================='
