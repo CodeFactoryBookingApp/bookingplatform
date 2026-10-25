@@ -13,6 +13,8 @@ arrancar, en orden de versión:
 | `V1__esquema_inicial.sql` | Las diecinueve tablas del Sprint 1 con sus restricciones, triggers e índices. Es el antiguo `schema.sql` (ADR-0005) |
 | `V2__rls.sql` | Habilita Row Level Security en las diecinueve tablas. Es el antiguo `rls.sql` |
 | `V3__correcciones_reservas_y_servicios.sql` | Un servicio nuevo nace inactivo; las reglas de reservas ya no impiden cancelar ni cerrar las de un proveedor suspendido o un servicio desactivado; el aforo grupal resiste reservas simultáneas |
+| `V4__identificacion_del_proveedor.sql` | El proveedor se identifica con tipo (NIT, CC, CE, PASAPORTE) y número; `nit` pasa a `identification_number` y la unicidad es por la pareja |
+| `V5__datos_de_referencia.sql` | Categorías, ciudades y la moneda COP. Son datos de referencia que la aplicación necesita en toda base, no datos de prueba |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no

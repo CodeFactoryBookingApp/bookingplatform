@@ -22,6 +22,8 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | ADR-0004 API versionada, ProblemDetail, traceId | `docs/adr/ADR-0004-*.md` |
 | ADR-0005 Modelo físico escrito a mano + CI de BD | `docs/adr/ADR-0005-*.md` |
 | ADR-0006 Migraciones de esquema con Flyway | `docs/adr/ADR-0006-*.md` |
+| ADR-0007 Correo saliente por SMTP | `docs/adr/ADR-0007-*.md` |
+| ADR-0008 Autorización: rol de plataforma y rol en el proveedor | `docs/adr/ADR-0008-*.md` |
 | Guía de la carpeta de base de datos | `docs/database/README.md` |
 | Modelo lógico completo (ER) | `docs/database/modelo-logico.md` |
 | Modelo físico: migraciones de Flyway (V1 = las 19 tablas del Sprint 1) | `src/main/resources/db/migration/` |
@@ -42,9 +44,13 @@ com.codefactory.bookingplatform
 │                   (security, OpenAPI, properties), observability, persistence
 ├── identity/       HU-001: domain (Client puro + ports) → application (use cases)
 │                   → infrastructure (JPA + MapStruct) → api (REST /registrations)
-└── auth/           HU-021: domain (policies + ports) → application (fachada
-                    UserProvisioning + use cases) → infrastructure (GoTrueClient,
-                    login_attempts) → api (REST /auth)
+├── auth/           HU-021: domain (policies + ports) → application (fachada
+│                   UserProvisioning + use cases) → infrastructure (GoTrueClient,
+│                   login_attempts) → api (REST /auth)
+├── organization/   HU-002: domain (Organization + política versionada) → application
+│                   (registro, aprobación, OrganizationAccess) → infrastructure (JPA)
+│                   → api (REST /provider-registrations, /organizations, /admin)
+└── notification/   correo saliente: fachada EmailNotifications → SMTP o log (ADR-0007)
 ```
 
 Reglas de dependencia verificadas con ArchUnit en `src/test/.../architecture/ArchitectureTest.java`.
@@ -73,6 +79,11 @@ Notas:
 | `DATABASE_URL` | `jdbc:postgresql://aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require` | JDBC por session pooler, puerto **5432** (nunca 6543) |
 | `DATABASE_USER` | `postgres.<ref>` | Usuario del pooler (con sufijo del proyecto) |
 | `DATABASE_PASSWORD` | `...` | Contraseña de la BD (Dashboard → Settings → Database) |
+| `SPRING_MAIL_HOST` | `smtp.gmail.com` | Opcional. Sin ella el correo se registra en el log en vez de enviarse (ADR-0007) |
+| `SPRING_MAIL_PORT` | `587` | Puerto SMTP con STARTTLS |
+| `SPRING_MAIL_USERNAME` | `cuenta@gmail.com` | Usuario SMTP |
+| `SPRING_MAIL_PASSWORD` | `...` | Contraseña de aplicación de Gmail, no la de la cuenta |
+| `APP_MAIL_FROM` | `reservas@...` | Opcional. Remitente; si falta, el usuario SMTP |
 
 La app **no lee archivos `.env` por sí sola**: las variables deben existir
 en el entorno de la terminal donde corres `mvnw`. Cada terminal tiene su
@@ -184,6 +195,13 @@ Linux/macOS:
 | POST | `/api/v1/auth/password-recovery-requests` | pública | HU-021 |
 | POST | `/api/v1/auth/password-resets` | pública | HU-021 |
 | GET | `/api/v1/auth/me` | Bearer | HU-021 |
+| GET | `/api/v1/organization-categories` | pública | HU-002 |
+| GET | `/api/v1/cities` | pública | HU-002 |
+| POST | `/api/v1/provider-registrations` | pública | HU-002 |
+| GET | `/api/v1/organizations` | Bearer `PROVIDER` | HU-002 |
+| GET | `/api/v1/organizations/{id}` | Bearer `PROVIDER` miembro o `ADMIN` | HU-002, HU-022 |
+| PUT | `/api/v1/organizations/{id}/operation-policy` | Bearer `OWNER` o `MANAGER` del proveedor | HU-002 |
+| POST | `/api/v1/admin/organizations/{id}/approval` | Bearer `ADMIN` | HU-002 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
 

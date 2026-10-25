@@ -38,6 +38,9 @@ public class SecurityConfig {
             "/api/v1/auth/password-recovery-requests",
             "/api/v1/auth/password-resets",
             "/api/v1/registrations/**",
+            "/api/v1/provider-registrations",
+            "/api/v1/organization-categories",
+            "/api/v1/cities",
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
@@ -69,6 +72,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+                        // Platform roles (ADR-0008). Scope inside an organization, and the
+                        // role a user holds there, are checked by the use cases.
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/organizations/**").hasAnyRole("PROVIDER", "ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(

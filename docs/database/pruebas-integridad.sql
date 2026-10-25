@@ -17,7 +17,7 @@
 
 \echo ''
 \echo '--- 1. Clave candidata: el NIT ya está registrado (HU-002) ---'
-insert into organizations (category_id, name, nit, contact_email, contact_phone)
+insert into organizations (category_id, name, identification_number, contact_email, contact_phone)
 values ('22222222-0000-0000-0000-000000000001', 'Otra Clínica', '900123456-1', 'x@y.com', '6040000000');
 
 
@@ -37,7 +37,7 @@ values ('66666666-0000-0000-0000-000000000001', 3, 60, 1000, 60);
 
 \echo ''
 \echo '--- 4. Una organización activa sin fecha de aprobación (HU-002) ---'
-insert into organizations (category_id, name, nit, contact_email, contact_phone, status)
+insert into organizations (category_id, name, identification_number, contact_email, contact_phone, status)
 values ('22222222-0000-0000-0000-000000000001', 'Sin Aprobar', '903000000-9', 'a@b.com', '6040000001', 'ACTIVE');
 
 

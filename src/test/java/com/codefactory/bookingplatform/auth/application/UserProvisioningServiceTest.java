@@ -180,6 +180,33 @@ class UserProvisioningServiceTest {
             // Assert
             assertEquals(id, result);
         }
+
+        @Test
+        @DisplayName("HU-002: a provider account is created with the PROVIDER role, under the same password policy")
+        void providerAccountGetsTheProviderRole() {
+            // Arrange
+            UUID id = UUID.randomUUID();
+            when(identityProvider.createUser(anyString(), anyString(), any(AppRole.class))).thenReturn(id);
+
+            // Act
+            UUID result = service.provisionProviderUser("barberia@example.com", VALID_PASSWORD);
+
+            // Assert
+            assertEquals(id, result);
+            verify(identityProvider).createUser("barberia@example.com", VALID_PASSWORD, AppRole.PROVIDER);
+        }
+
+        @Test
+        @DisplayName("HU-002: a weak password is rejected for a provider account too, before anything is created")
+        void providerAccountHonoursThePasswordPolicy() {
+            // Act
+            Executable act = () -> service.provisionProviderUser("barberia@example.com", "abc");
+
+            // Assert
+            BusinessException ex = assertThrows(BusinessException.class, act);
+            assertEquals(ErrorCode.PASSWORD_TOO_WEAK, ex.errorCode());
+            verifyNoInteractions(identityProvider);
+        }
     }
 
     // ----------------------------------------------------------------- //

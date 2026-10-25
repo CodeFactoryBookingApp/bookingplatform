@@ -56,6 +56,16 @@ devolver 401 es el comportamiento esperado, no una falla.
    ```
    El backend conecta como dueño y bypasea RLS; el Data API público queda
    bloqueado.
+6. **Primer administrador (ADR-0008):** no hay endpoint para crear
+   administradores. Registrar la cuenta como cliente (o crearla en
+   Authentication → Users), confirmar el correo y, en el SQL Editor:
+   ```sql
+   update auth.users
+      set raw_app_meta_data = raw_app_meta_data || '{"role": "ADMIN"}'
+    where email = 'admin@ejemplo.com';
+   ```
+   El rol entra en el JWT en el siguiente inicio de sesión. Si la cuenta tenía
+   perfil de cliente, sigue existiendo; no estorba.
 
 ## 4. Despliegue en Render
 
@@ -64,6 +74,13 @@ Variables requeridas: `SPRING_PROFILES_ACTIVE=cloud`, `DATABASE_URL`
 (JDBC con `?sslmode=require`), `DATABASE_USER`, `DATABASE_PASSWORD`,
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Sin Secret Files (la app lee entorno,
 no archivos). **Health Check Path:** `/actuator/health/readiness`.
+
+Correo saliente (ADR-0007), opcional: `SPRING_MAIL_HOST=smtp.gmail.com`,
+`SPRING_MAIL_PORT=587`, `SPRING_MAIL_USERNAME` y `SPRING_MAIL_PASSWORD` (una
+contraseña de aplicación de Gmail, que exige verificación en dos pasos en la
+cuenta), y `APP_MAIL_FROM` si el remitente no es el usuario. Sin
+`SPRING_MAIL_HOST` la app funciona igual y deja cada correo en el log con
+`No SMTP server configured; email not sent`.
 
 Restricciones del free tier aplicadas en `application-cloud.yml`:
 `server.port=${PORT:8080}` (Render inyecta `PORT`) y pool Hikari de 5/1,

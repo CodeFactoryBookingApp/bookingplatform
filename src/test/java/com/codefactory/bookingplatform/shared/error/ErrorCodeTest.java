@@ -33,6 +33,8 @@ class ErrorCodeTest {
             "ACCESS_DENIED,               FORBIDDEN",
             "DUPLICATE_EMAIL,             CONFLICT",
             "DUPLICATE_DOCUMENT,          CONFLICT",
+            "DUPLICATE_IDENTIFICATION,    CONFLICT",
+            "INVALID_STATUS_TRANSITION,   CONFLICT",
             "RATE_LIMITED,                TOO_MANY_REQUESTS",
             "ACCOUNT_LOCKED,              TOO_MANY_REQUESTS",
             "UPSTREAM_AUTH_ERROR,         BAD_GATEWAY",

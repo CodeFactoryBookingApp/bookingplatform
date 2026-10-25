@@ -70,7 +70,8 @@ erDiagram
         uuid id PK
         uuid category_id FK
         string name
-        string nit UK "HU-002"
+        string identification_type "NIT, CC, CE o PASAPORTE (V4)"
+        string identification_number UK "HU-002, único con su tipo"
         string contact_email "CHECK de formato"
         string contact_phone
         string timezone

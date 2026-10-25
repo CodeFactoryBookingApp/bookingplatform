@@ -36,7 +36,7 @@ class BookingRulesIT {
 
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    private static final String CURRENCY_ID = UUID.randomUUID().toString();
+    private static String currencyId;
 
     static {
         POSTGRES.start();
@@ -44,7 +44,8 @@ class BookingRulesIT {
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load()
                 .migrate();
-        sql("insert into currencies (id, code, name) values ('" + CURRENCY_ID + "', 'COP', 'Peso colombiano')");
+        // V5 loads COP as reference data
+        currencyId = queryString("select id::text from currencies where code = 'COP'");
     }
 
     /** A provider, with its client, location, policy and one service, ready to take bookings. */
@@ -63,7 +64,7 @@ class BookingRulesIT {
         sql("insert into clients values ('" + world.clientId() + "', 'Cliente', 'DOC-" + suffix + "', '1990-01-01', "
                 + "'cliente-" + suffix + "@example.com', '3001112233', 'Medellín', 'EMAIL', 'ACTIVE', "
                 + "localtimestamp, localtimestamp)");
-        sql("insert into organizations (id, category_id, name, nit, contact_email, contact_phone, status, approved_at) "
+        sql("insert into organizations (id, category_id, name, identification_number, contact_email, contact_phone, status, approved_at) "
                 + "values ('" + world.organizationId() + "', '" + categoryId + "', 'Proveedor', 'NIT-" + suffix + "', "
                 + "'proveedor@example.com', '6041112233', 'ACTIVE', now())");
         sql("insert into organization_policies (id, organization_id, version, booking_notice_minutes_min, "
@@ -73,7 +74,7 @@ class BookingRulesIT {
                 + "', '" + world.organizationId() + "', 'Sede', 'Calle 1', '" + cityId + "')");
         sql("insert into services (id, organization_id, name, duration_minutes, price, currency_id, "
                 + "customer_capacity, status) values ('" + world.serviceId() + "', '" + world.organizationId()
-                + "', 'Servicio', 30, 1000, '" + CURRENCY_ID + "', " + serviceCapacity + ", 'ACTIVE')");
+                + "', 'Servicio', 30, 1000, '" + currencyId + "', " + serviceCapacity + ", 'ACTIVE')");
         sql("insert into service_locations (service_id, location_id, organization_id) values ('"
                 + world.serviceId() + "', '" + world.locationId() + "', '" + world.organizationId() + "')");
         return world;
@@ -116,7 +117,7 @@ class BookingRulesIT {
         // Act
         String status = queryString("insert into services (organization_id, name, duration_minutes, price, "
                 + "currency_id) values ('" + world.organizationId() + "', 'Sin estado', 30, 1000, '"
-                + CURRENCY_ID + "') returning status");
+                + currencyId + "') returning status");
 
         // Assert
         assertEquals("INACTIVE", status);

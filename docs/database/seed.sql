@@ -66,7 +66,7 @@ insert into login_attempts (email, success, attempted_at) values
     ('mariana@example.com', true,  now() - interval '10 minutes');
 
 -- ---------- organizaciones ----------
-insert into organizations (id, category_id, name, nit, contact_email, contact_phone, timezone, status, approved_at, created_at, updated_at) values
+insert into organizations (id, category_id, name, identification_number, contact_email, contact_phone, timezone, status, approved_at, created_at, updated_at) values
     ('66666666-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002', 'Barbería El Poblado', '900123456-1', 'contacto@barberia.com', '6041112233', 'America/Bogota', 'ACTIVE', now() - interval '60 days', now() - interval '65 days', now() - interval '10 days'),
     ('66666666-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000001', 'Clínica Dental Sur',  '901234567-2', 'citas@dentalsur.com',   '6042223344', 'America/Bogota', 'ACTIVE', now() - interval '30 days', now() - interval '35 days', now() - interval '30 days'),
     -- Pendiente hace 45 días: no es visible NI reservable (HU-002),

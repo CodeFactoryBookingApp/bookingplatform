@@ -22,3 +22,14 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      # Correo saliente (ADR-0007). Opcionales: sin SPRING_MAIL_HOST el correo va al log.
+      - key: SPRING_MAIL_HOST
+        sync: false
+      - key: SPRING_MAIL_PORT
+        sync: false
+      - key: SPRING_MAIL_USERNAME
+        sync: false
+      - key: SPRING_MAIL_PASSWORD
+        sync: false
+      - key: APP_MAIL_FROM
+        sync: false
