@@ -47,9 +47,10 @@ com.codefactory.bookingplatform
 ├── auth/           HU-021: domain (policies + ports) → application (fachada
 │                   UserProvisioning + use cases) → infrastructure (GoTrueClient,
 │                   login_attempts) → api (REST /auth)
-├── catalog/        HU-009: domain (Resource con mantenimientos y retiro) → application
-│                   (use cases, ámbito vía OrganizationAccess) → infrastructure (JPA)
-│                   → api (REST /organizations/{id}/resource-types, /resources)
+├── catalog/        HU-004, HU-009: domain (OfferedService, Resource con mantenimientos y
+│                   retiro) → application (use cases, ámbito vía OrganizationAccess) →
+│                   infrastructure (JPA + JDBC) → api (REST /organizations/{id}/services,
+│                   /resource-types, /resources)
 ├── organization/   HU-002: domain (Organization + política versionada) → application
 │                   (registro, aprobación, OrganizationAccess) → infrastructure (JPA)
 │                   → api (REST /provider-registrations, /organizations, /admin)
@@ -211,6 +212,9 @@ Linux/macOS:
 | GET, POST | `/api/v1/organizations/{id}/resources` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
 | POST | `/api/v1/organizations/{id}/resources/{resourceId}/maintenances` | Bearer `OWNER` o `MANAGER` | HU-009 |
 | POST | `/api/v1/organizations/{id}/resources/{resourceId}/retirement` | Bearer `OWNER` o `MANAGER` | HU-009 |
+| GET, POST | `/api/v1/organizations/{id}/services` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-004 |
+| GET, PUT, DELETE | `/api/v1/organizations/{id}/services/{serviceId}` | Bearer miembro (PUT, DELETE: `OWNER` o `MANAGER`) | HU-004 |
+| POST | `/api/v1/organizations/{id}/services/{serviceId}/activation`, `/deactivation` | Bearer `OWNER` o `MANAGER` | HU-004, HU-009 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
 

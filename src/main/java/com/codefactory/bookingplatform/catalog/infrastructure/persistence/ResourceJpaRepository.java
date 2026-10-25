@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.catalog.infrastructure.persistence;
 
+import com.codefactory.bookingplatform.catalog.domain.model.ResourceStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -11,4 +12,6 @@ public interface ResourceJpaRepository extends JpaRepository<ResourceEntity, UUI
     List<ResourceEntity> findByOrganizationIdOrderByName(UUID organizationId);
 
     Optional<ResourceEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
+
+    long countByLocationIdAndResourceTypeIdAndStatus(UUID locationId, UUID resourceTypeId, ResourceStatus status);
 }

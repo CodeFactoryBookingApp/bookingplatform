@@ -29,4 +29,7 @@ public interface ResourceRepository {
     void addMaintenance(UUID resourceId, MaintenanceWindow window);
 
     void saveStatus(Resource resource);
+
+    /** ACTIVE resources of a type in a location; maintenance periods do not count here (HU-004 activation). */
+    long countActive(UUID locationId, UUID resourceTypeId);
 }

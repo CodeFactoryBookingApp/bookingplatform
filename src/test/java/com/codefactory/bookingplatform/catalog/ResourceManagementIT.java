@@ -48,10 +48,7 @@ class ResourceManagementIT extends JwtIntegrationTestBase {
     /** Bookings point at clients, which the base class deletes before every test. */
     @AfterEach
     void deleteBookings() {
-        bookings.forEach(id -> {
-            jdbc.update("delete from booking_resources where booking_id = ?", id);
-            jdbc.update("delete from bookings where id = ?", id);
-        });
+        bookings.forEach(fixture::deleteBooking);
     }
 
     private String token(UUID userId) {
@@ -104,33 +101,9 @@ class ResourceManagementIT extends JwtIntegrationTestBase {
                 .header("Authorization", ownerToken()));
     }
 
-    /** A CONFIRMED booking in two days that uses the resource; no booking module yet, so plain SQL. */
+    /** A CONFIRMED booking in two days that uses the resource. */
     private UUID futureBookingOn(String resourceId) {
-        String suffix = UUID.randomUUID().toString().substring(0, 8);
-        UUID client = UUID.randomUUID();
-        UUID service = UUID.randomUUID();
-        UUID booking = UUID.randomUUID();
-        jdbc.update("""
-                insert into clients values (?, 'Cliente', ?, '1990-01-01', ?, '3001112233', 'Medellín', 'EMAIL',
-                                            'ACTIVE', localtimestamp, localtimestamp)
-                """, client, "DOC-" + suffix, "cliente-" + suffix + "@example.com");
-        jdbc.update("""
-                insert into services (id, organization_id, name, duration_minutes, price, currency_id, status)
-                values (?, ?, ?, 30, 1000, (select id from currencies where code = 'COP'), 'ACTIVE')
-                """, service, provider.organizationId(), "Servicio " + suffix);
-        jdbc.update("insert into service_locations (service_id, location_id, organization_id) values (?, ?, ?)",
-                service, provider.locationId(), provider.organizationId());
-        jdbc.update("""
-                insert into bookings (id, client_id, organization_id, service_id, location_id, policy_id, session_id,
-                                      starts_at, ends_at, total_price, status)
-                values (?, ?, ?, ?, ?, ?, ?, now() + interval '2 days', now() + interval '2 days 30 minutes', 1000,
-                        'CONFIRMED')
-                """, booking, client, provider.organizationId(), service, provider.locationId(), provider.policyId(),
-                booking);
-        jdbc.update("""
-                insert into booking_resources (booking_id, resource_id, location_id, session_id, starts_at, ends_at, status)
-                select id, ?::uuid, location_id, session_id, starts_at, ends_at, status from bookings where id = ?
-                """, resourceId, booking);
+        UUID booking = fixture.futureBooking(provider, fixture.activeService(provider), UUID.fromString(resourceId));
         bookings.add(booking);
         return booking;
     }

@@ -3,6 +3,7 @@ package com.codefactory.bookingplatform.catalog.infrastructure.persistence;
 import com.codefactory.bookingplatform.catalog.domain.model.DuplicateNameException;
 import com.codefactory.bookingplatform.catalog.domain.model.MaintenanceWindow;
 import com.codefactory.bookingplatform.catalog.domain.model.Resource;
+import com.codefactory.bookingplatform.catalog.domain.model.ResourceStatus;
 import com.codefactory.bookingplatform.catalog.domain.model.ResourceType;
 import com.codefactory.bookingplatform.catalog.domain.port.ResourceRepository;
 import org.hibernate.exception.ConstraintViolationException;
@@ -111,6 +112,11 @@ public class ResourceRepositoryAdapter implements ResourceRepository {
         ResourceEntity entity = resources.findById(resource.getId()).orElseThrow();
         entity.setStatus(resource.getStatus());
         resources.saveAndFlush(entity);
+    }
+
+    @Override
+    public long countActive(UUID locationId, UUID resourceTypeId) {
+        return resources.countByLocationIdAndResourceTypeIdAndStatus(locationId, resourceTypeId, ResourceStatus.ACTIVE);
     }
 
     private Map<UUID, List<MaintenanceWindow>> maintenancesOf(List<UUID> resourceIds) {
