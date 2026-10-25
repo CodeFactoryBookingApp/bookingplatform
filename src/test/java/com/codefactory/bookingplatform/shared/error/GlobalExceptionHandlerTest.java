@@ -9,15 +9,26 @@ import org.slf4j.MDC;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.core.MethodParameter;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BeanPropertyBindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
+import org.springframework.web.ErrorResponseException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.lang.reflect.Method;
@@ -416,6 +427,134 @@ class GlobalExceptionHandlerTest {
             // Assert
             assertEquals(ErrorCode.ACCESS_DENIED.defaultMessage(), problem.getDetail());
             assertFalse(String.valueOf(problem.getDetail()).contains("/admin/users"));
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // handleFramework - Spring MVC's own client errors keep their status (D9)
+    // ----------------------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("Spring MVC client errors")
+    class FrameworkErrors {
+
+        private String errorCodeOf(ResponseEntity<ProblemDetail> response) {
+            return String.valueOf(propertiesOf(response.getBody()).get("errorCode"));
+        }
+
+        @Test
+        @DisplayName("An unsupported method answers 405 METHOD_NOT_ALLOWED and keeps the Allow header")
+        void unsupportedMethodIs405WithAllow() {
+            // Arrange
+            Exception ex = new HttpRequestMethodNotSupportedException("GET", List.of("POST"));
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(405, response.getStatusCode().value());
+            assertEquals(405, response.getBody().getStatus());
+            assertEquals("METHOD_NOT_ALLOWED", errorCodeOf(response));
+            assertTrue(response.getHeaders().getAllow().contains(HttpMethod.POST), response.getHeaders().toString());
+        }
+
+        @Test
+        @DisplayName("An unsupported content type answers 415 UNSUPPORTED_MEDIA_TYPE and lists what is accepted")
+        void unsupportedMediaTypeIs415WithAccept() {
+            // Arrange
+            Exception ex = new HttpMediaTypeNotSupportedException(MediaType.TEXT_PLAIN, List.of(MediaType.APPLICATION_JSON));
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(415, response.getStatusCode().value());
+            assertEquals("UNSUPPORTED_MEDIA_TYPE", errorCodeOf(response));
+            assertTrue(response.getHeaders().getAccept().contains(MediaType.APPLICATION_JSON), response.getHeaders().toString());
+        }
+
+        @Test
+        @DisplayName("An unsupported Accept answers 406 NOT_ACCEPTABLE")
+        void unacceptableMediaTypeIs406() {
+            // Arrange
+            Exception ex = new HttpMediaTypeNotAcceptableException(List.of(MediaType.APPLICATION_JSON));
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(406, response.getStatusCode().value());
+            assertEquals("NOT_ACCEPTABLE", errorCodeOf(response));
+        }
+
+        @Test
+        @DisplayName("A path with no handler answers 404 RESOURCE_NOT_FOUND")
+        void unknownPathIs404() {
+            // Arrange
+            Exception ex = new NoHandlerFoundException("GET", "/api/v1/nowhere", new HttpHeaders());
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(404, response.getStatusCode().value());
+            assertEquals("RESOURCE_NOT_FOUND", errorCodeOf(response));
+        }
+
+        @Test
+        @DisplayName("Any other framework 4xx, such as a missing parameter, keeps its status under VALIDATION_ERROR")
+        void otherClientErrorIsAValidationError() {
+            // Arrange
+            Exception ex = new MissingServletRequestParameterException("page", "int");
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(400, response.getStatusCode().value());
+            assertEquals("VALIDATION_ERROR", errorCodeOf(response));
+        }
+
+        @Test
+        @DisplayName("A framework 5xx keeps its status under INTERNAL_ERROR with the generic title")
+        void frameworkServerErrorIsInternal() {
+            // Arrange
+            Exception ex = new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE);
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(503, response.getStatusCode().value());
+            assertEquals("INTERNAL_ERROR", errorCodeOf(response));
+            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(), response.getBody().getTitle());
+        }
+
+        @Test
+        @DisplayName("A non-standard status reported by the framework falls back to 500 INTERNAL_ERROR")
+        void nonStandardStatusFallsBackTo500() {
+            // Arrange
+            Exception ex = new ErrorResponseException(HttpStatusCode.valueOf(599));
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(500, response.getStatusCode().value());
+            assertEquals("INTERNAL_ERROR", errorCodeOf(response));
+        }
+
+        @Test
+        @DisplayName("The detail is the generic message of the code, not the wording of the framework")
+        void detailIsTheGenericMessage() {
+            // Arrange
+            Exception ex = new HttpRequestMethodNotSupportedException("DELETE", List.of("POST"));
+
+            // Act
+            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
+
+            // Assert
+            assertEquals(ErrorCode.METHOD_NOT_ALLOWED.defaultMessage(), response.getBody().getDetail());
         }
     }
 

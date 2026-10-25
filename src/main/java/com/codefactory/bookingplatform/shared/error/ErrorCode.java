@@ -14,6 +14,9 @@ public enum ErrorCode {
     AUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Access token is invalid"),
 
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Resource not found"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "HTTP method not supported for this resource"),
+    NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "None of the requested response media types is supported"),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Request content type is not supported"),
 
     EMAIL_NOT_CONFIRMED(HttpStatus.FORBIDDEN, "Account email is not confirmed yet"),
     ACCESS_DENIED(HttpStatus.FORBIDDEN, "Insufficient permissions"),
