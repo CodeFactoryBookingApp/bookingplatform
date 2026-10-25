@@ -21,6 +21,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -137,19 +138,19 @@ class ConfirmEmailUseCaseTest {
     // --- Exceptional paths ---------------------------------------------------
 
     @Test
-    @DisplayName("A token accepted by the provider without a client profile raises RESOURCE_NOT_FOUND")
-    void missingClientProfileRaisesResourceNotFound() {
+    @DisplayName("HU-002: an account without a client profile, such as a provider, is confirmed without touching clients")
+    void accountWithoutClientProfileIsConfirmed() {
         // Arrange
-        when(userProvisioning.confirmEmail(TOKEN)).thenReturn(new ConfirmedUser(CLIENT_ID, "ana@example.com"));
+        when(userProvisioning.confirmEmail(TOKEN)).thenReturn(new ConfirmedUser(CLIENT_ID, "barberia@example.com"));
         when(clientRepository.findById(CLIENT_ID)).thenReturn(Optional.empty());
 
         // Act
-        Executable act = () -> useCase.confirm(TOKEN);
+        RegistrationOutcome outcome = useCase.confirm(TOKEN);
 
         // Assert
-        BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
-        assertEquals("Client profile not found for the confirmed user", ex.getMessage());
+        assertEquals(CLIENT_ID, outcome.clientId());
+        assertEquals("barberia@example.com", outcome.email());
+        assertNull(outcome.status());
         verify(clientRepository, never()).save(any(Client.class));
     }
 

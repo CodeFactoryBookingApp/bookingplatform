@@ -56,6 +56,16 @@ devolver 401 es el comportamiento esperado, no una falla.
    ```
    El backend conecta como dueño y bypasea RLS; el Data API público queda
    bloqueado.
+6. **Primer administrador (ADR-0008):** no hay endpoint para crear
+   administradores. Registrar la cuenta como cliente (o crearla en
+   Authentication → Users), confirmar el correo y, en el SQL Editor:
+   ```sql
+   update auth.users
+      set raw_app_meta_data = raw_app_meta_data || '{"role": "ADMIN"}'
+    where email = 'admin@ejemplo.com';
+   ```
+   El rol entra en el JWT en el siguiente inicio de sesión. Si la cuenta tenía
+   perfil de cliente, sigue existiendo; no estorba.
 
 ## 4. Despliegue en Render
 
@@ -64,6 +74,13 @@ Variables requeridas: `SPRING_PROFILES_ACTIVE=cloud`, `DATABASE_URL`
 (JDBC con `?sslmode=require`), `DATABASE_USER`, `DATABASE_PASSWORD`,
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Sin Secret Files (la app lee entorno,
 no archivos). **Health Check Path:** `/actuator/health/readiness`.
+
+Correo de la plataforma (ADR-0007): no hay que configurar nada. El plan
+gratuito de Render bloquea SMTP, así que los correos (por ejemplo, la
+aprobación de un proveedor) se guardan en `sent_emails` y su destinatario los
+lee con `GET /api/v1/notifications/emails`. En el log aparece
+`Email '...' stored in the in-app inbox`. Las variables `SPRING_MAIL_*` solo
+sirven en local o en un plan de pago.
 
 Restricciones del free tier aplicadas en `application-cloud.yml`:
 `server.port=${PORT:8080}` (Render inyecta `PORT`) y pool Hikari de 5/1,

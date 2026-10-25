@@ -70,26 +70,29 @@ jobs:
           command -v psql || sudo apt-get update && sudo apt-get install -y postgresql-client
           psql --version
 
-      - name: Las migraciones ejecutan contra una base vacía
+      # V1 y V2 se vuelven a aplicar sobre las bases creadas antes de Flyway
+      # (línea base 0), así que tienen que seguir siendo idempotentes. En ese
+      # caso corren antes que las demás migraciones, y así se comprueba: V1 y
+      # V2 dos veces, y después el resto, que corre una sola vez.
+      - name: V1 y V2 ejecutan contra una base vacía y son idempotentes
         run: |
-          for f in $(ls $MIGRACIONES/V*__*.sql | sort -V); do
+          for vez in 1 2; do
+            $PSQL -v ON_ERROR_STOP=1 -q -f $MIGRACIONES/V1__esquema_inicial.sql
+            $PSQL -v ON_ERROR_STOP=1 -q -f $MIGRACIONES/V2__rls.sql
+          done
+
+      - name: Las migraciones siguientes ejecutan en orden
+        run: |
+          for f in $(ls $MIGRACIONES/V*__*.sql | sort -V | grep -v -e '/V1__' -e '/V2__'); do
             echo "aplicando $f"
             $PSQL -v ON_ERROR_STOP=1 -q -f "$f"
           done
 
-      - name: Se crearon las 19 tablas
+      - name: Se crearon las 23 tablas
         run: |
           n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'")
           echo "tablas creadas: $n"
-          test "$n" -eq 19
-
-      # V1 y V2 se vuelven a aplicar sobre las bases creadas antes de Flyway
-      # (línea base 0), así que tienen que seguir siendo idempotentes. Las
-      # migraciones siguientes corren una sola vez y no necesitan serlo.
-      - name: V1 y V2 son idempotentes
-        run: |
-          $PSQL -v ON_ERROR_STOP=1 -q -f $MIGRACIONES/V1__esquema_inicial.sql
-          $PSQL -v ON_ERROR_STOP=1 -q -f $MIGRACIONES/V2__rls.sql
+          test "$n" -eq 23
 
       - name: Los datos de prueba cargan
         run: $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/seed.sql
@@ -114,7 +117,7 @@ jobs:
           rechazos=$(echo "$salida" | grep -cE '(^|: )ERROR:'          || true)
           coladas=$(echo "$salida"  | grep -cE '^(INSERT|UPDATE|DELETE) ' || true)
           echo "rechazos: $rechazos · instrucciones que pasaron: $coladas"
-          test "$rechazos" -eq 19
+          test "$rechazos" -eq 24
           test "$coladas" -eq 0
 
       # Ninguna tabla de public sin RLS, sean cuantas sean: una migración

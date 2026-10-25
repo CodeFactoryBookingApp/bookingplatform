@@ -1,0 +1,228 @@
+package com.codefactory.bookingplatform.scheduling.application;
+
+import com.codefactory.bookingplatform.catalog.application.CatalogLookup;
+import com.codefactory.bookingplatform.organization.application.OrganizationAccess;
+import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
+import com.codefactory.bookingplatform.scheduling.domain.model.Agenda;
+import com.codefactory.bookingplatform.scheduling.domain.model.AgendaConflictException;
+import com.codefactory.bookingplatform.scheduling.domain.model.BookedSlot;
+import com.codefactory.bookingplatform.scheduling.domain.model.TimeBlock;
+import com.codefactory.bookingplatform.scheduling.domain.port.AgendaBookings;
+import com.codefactory.bookingplatform.scheduling.domain.port.AgendaRepository;
+import com.codefactory.bookingplatform.shared.error.BusinessException;
+import com.codefactory.bookingplatform.shared.error.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/** HU-006 use cases: access first, provider-owned references, conflicts as 409, and bookings read at the moment of the change. */
+class AgendaUseCasesTest {
+
+    private static final Instant NOW = Instant.parse("2026-10-25T15:00:00Z");
+    private static final UUID ORG = UUID.randomUUID();
+    private static final UUID USER = UUID.randomUUID();
+    private static final UUID LOCATION = UUID.randomUUID();
+    private static final UUID SERVICE = UUID.randomUUID();
+    private static final TimeBlock MONDAY_MORNING = new TimeBlock(DayOfWeek.MONDAY, LocalTime.of(8, 0), LocalTime.of(12, 0));
+
+    private AgendaRepository agendas;
+    private OrganizationAccess access;
+    private CatalogLookup catalog;
+
+    @BeforeEach
+    void setUp() {
+        agendas = mock(AgendaRepository.class);
+        access = mock(OrganizationAccess.class);
+        catalog = mock(CatalogLookup.class);
+        when(access.ownsLocation(ORG, LOCATION)).thenReturn(true);
+        when(catalog.serviceOfferedAt(ORG, SERVICE, LOCATION)).thenReturn(true);
+    }
+
+    private static CreateAgendaUseCase.Definition definition(UUID resourceId, List<UUID> services) {
+        return new CreateAgendaUseCase.Definition("  Agenda Poblado ", LOCATION, resourceId, 30,
+                LocalDate.of(2026, 11, 1), null, services, List.of(MONDAY_MORNING));
+    }
+
+    @Nested
+    @DisplayName("Creating an agenda")
+    class Create {
+
+        private CreateAgendaUseCase useCase;
+
+        @BeforeEach
+        void setUp() {
+            useCase = new CreateAgendaUseCase(agendas, access, catalog);
+        }
+
+        @Test
+        @DisplayName("HU-006: the owner or a manager creates it with the trimmed name, and it is stored")
+        void createsTheAgenda() {
+            // Act
+            Agenda agenda = useCase.create(ORG, USER, definition(null, List.of(SERVICE)));
+
+            // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
+            assertEquals("Agenda Poblado", agenda.getName());
+            verify(agendas).saveNew(agenda);
+        }
+
+        @Test
+        @DisplayName("A resource outside the location and a service not offered there are both reported")
+        void foreignResourceAndServiceAreRejected() {
+            // Arrange
+            UUID resource = UUID.randomUUID();
+            UUID otherService = UUID.randomUUID();
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.create(ORG, USER, definition(resource, List.of(SERVICE, otherService))));
+
+            // Assert
+            assertEquals("not a resource of this provider in that location", ex.details().get("resourceId"));
+            assertEquals("not a service of this provider offered in that location", ex.details().get("serviceIds[1]"));
+            verify(agendas, never()).saveNew(any());
+        }
+
+        @Test
+        @DisplayName("A location of another provider is reported alone: resource and services are not even looked up")
+        void foreignLocationIsRejected() {
+            // Arrange
+            when(access.ownsLocation(ORG, LOCATION)).thenReturn(false);
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.create(ORG, USER, definition(UUID.randomUUID(), List.of(SERVICE))));
+
+            // Assert
+            assertEquals(java.util.Map.of("locationId", "not a location of this provider"), ex.details());
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} -> {1}")
+        @CsvSource({"DUPLICATE_NAME, DUPLICATE_NAME", "OVERLAPPING_PERIOD, OVERLAPPING_PERIOD"})
+        @DisplayName("What the database refuses becomes the matching 409")
+        void conflictsBecome409(AgendaConflictException.Reason reason, ErrorCode expected) {
+            // Arrange
+            doThrow(new AgendaConflictException(reason, new IllegalStateException())).when(agendas).saveNew(any());
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.create(ORG, USER, definition(null, List.of(SERVICE))));
+
+            // Assert
+            assertEquals(expected, ex.errorCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("Changing an agenda")
+    class Manage {
+
+        private AgendaBookings bookings;
+        private ManageAgendaUseCase useCase;
+        private Agenda agenda;
+
+        @BeforeEach
+        void setUp() {
+            bookings = mock(AgendaBookings.class);
+            useCase = new ManageAgendaUseCase(agendas, bookings, access, Clock.fixed(NOW, ZoneOffset.UTC));
+            agenda = new Agenda(UUID.randomUUID(), ORG, LOCATION, null, "Agenda", 30, LocalDate.of(2026, 11, 1), null,
+                    List.of(SERVICE), List.of(MONDAY_MORNING));
+            when(agendas.findById(ORG, agenda.getId())).thenReturn(Optional.of(agenda));
+            when(access.locationZone(ORG, LOCATION)).thenReturn(ZoneId.of("America/Bogota"));
+        }
+
+        @Test
+        @DisplayName("New blocks are checked against the bookings of now, in the zone of the location, then stored")
+        void replacesTheBlocks() {
+            // Arrange
+            TimeBlock tuesday = new TimeBlock(DayOfWeek.TUESDAY, LocalTime.of(9, 0), LocalTime.of(13, 0));
+
+            // Act
+            useCase.replaceBlocks(ORG, USER, agenda.getId(), List.of(tuesday));
+
+            // Assert
+            verify(bookings).future(agenda, NOW);
+            verify(agendas).saveBlocks(agenda);
+            assertEquals(List.of(tuesday), agenda.getBlocks());
+        }
+
+        @Test
+        @DisplayName("A copy of a day is stored like any other change of the blocks")
+        void copiesADay() {
+            // Act
+            useCase.copyDay(ORG, USER, agenda.getId(), DayOfWeek.MONDAY, Set.of(DayOfWeek.FRIDAY));
+
+            // Assert
+            verify(agendas).saveBlocks(agenda);
+            assertEquals(2, agenda.getBlocks().size());
+        }
+
+        @Test
+        @DisplayName("HU-006: with a future booking the granularity is not changed and nothing is stored")
+        void granularityWithBookingsIsRefused() {
+            // Arrange
+            when(bookings.future(agenda, NOW)).thenReturn(List.of(new BookedSlot(UUID.randomUUID(), NOW, NOW)));
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.changeGranularity(ORG, USER, agenda.getId(), 15));
+
+            // Assert
+            assertEquals(ErrorCode.HAS_FUTURE_BOOKINGS, ex.errorCode());
+            verify(agendas, never()).saveGranularity(any());
+        }
+
+        @Test
+        @DisplayName("HU-022: an agenda of another provider is a 404")
+        void foreignAgendaIsNotFound() {
+            // Arrange
+            UUID foreign = UUID.randomUUID();
+            when(agendas.findById(ORG, foreign)).thenReturn(Optional.empty());
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> useCase.changeGranularity(ORG, USER, foreign, 15));
+
+            // Assert
+            assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
+        }
+    }
+
+    @Test
+    @DisplayName("Listing requires membership only: any role of the provider may read")
+    void listingRequiresMembership() {
+        // Arrange
+        ListAgendasUseCase useCase = new ListAgendasUseCase(agendas, access);
+
+        // Act
+        useCase.all(ORG, USER);
+
+        // Assert
+        verify(access).requireMember(ORG, USER);
+        verify(agendas).findAll(ORG);
+    }
+}

@@ -8,7 +8,7 @@
 --
 --  Uso:  con las migraciones de src/main/resources/db/migration ya aplicadas,
 --        psql -f seed.sql -f pruebas-integridad.sql
---  Se ejecuta SIN ON_ERROR_STOP para que se vean los diecinueve rechazos.
+--  Se ejecuta SIN ON_ERROR_STOP para que se vean los veinticuatro rechazos.
 --  Usa metacomandos de psql, así que se ejecuta con `psql -f`.
 -- =====================================================================
 
@@ -17,7 +17,7 @@
 
 \echo ''
 \echo '--- 1. Clave candidata: el NIT ya está registrado (HU-002) ---'
-insert into organizations (category_id, name, nit, contact_email, contact_phone)
+insert into organizations (category_id, name, identification_number, contact_email, contact_phone)
 values ('22222222-0000-0000-0000-000000000001', 'Otra Clínica', '900123456-1', 'x@y.com', '6040000000');
 
 
@@ -37,7 +37,7 @@ values ('66666666-0000-0000-0000-000000000001', 3, 60, 1000, 60);
 
 \echo ''
 \echo '--- 4. Una organización activa sin fecha de aprobación (HU-002) ---'
-insert into organizations (category_id, name, nit, contact_email, contact_phone, status)
+insert into organizations (category_id, name, identification_number, contact_email, contact_phone, status)
 values ('22222222-0000-0000-0000-000000000001', 'Sin Aprobar', '903000000-9', 'a@b.com', '6040000001', 'ACTIVE');
 
 
@@ -112,9 +112,9 @@ where  booking_id = 'dddd0000-0000-0000-0000-000000000001';
 
 
 \echo ''
-\echo '--- 13. Franja de agenda solapada con otra del mismo recurso ---'
-insert into schedules (location_id, resource_id, day_of_week, start_time, end_time)
-values ('88888888-0000-0000-0000-000000000001', 'cccc0000-0000-0000-0000-000000000001', 1, '07:00', '23:00');
+\echo '--- 13. Bloque solapado con otro de la misma agenda el mismo día (HU-006) ---'
+insert into schedules (agenda_id, day_of_week, start_time, end_time)
+select id, 1, '07:00', '23:00' from agendas where resource_id = 'cccc0000-0000-0000-0000-000000000001';
 
 
 \echo ''
@@ -159,8 +159,43 @@ values ('44444444-0000-0000-0000-000000000001', '66666666-0000-0000-0000-0000000
 
 
 \echo ''
+\echo '--- 20. Recurso con el tipo de un proveedor y la sede de otro (HU-009, V7) ---'
+insert into resources (organization_id, resource_type_id, location_id, name)
+values ('66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000001',
+        '88888888-0000-0000-0000-000000000001', 'Silla cruzada');
+
+
+\echo ''
+\echo '--- 21. Dos mantenimientos solapados del mismo recurso (HU-009, V7) ---'
+insert into resource_maintenances (resource_id, starts_at, ends_at)
+values ('cccc0000-0000-0000-0000-000000000001', now() + interval '1 day',  now() + interval '3 days'),
+       ('cccc0000-0000-0000-0000-000000000001', now() + interval '2 days', now() + interval '4 days');
+
+
+\echo ''
+\echo '--- 22. Agenda con una granularidad que no es 15, 30 ni 60 minutos (HU-006, V8) ---'
+insert into agendas (organization_id, location_id, name, slot_minutes, valid_from)
+values ('66666666-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000002',
+        'Agenda de 20 minutos', 20, current_date);
+
+
+\echo ''
+\echo '--- 23. Dos agendas vigentes a la vez para el mismo recurso (HU-006, V8) ---'
+insert into agendas (organization_id, location_id, resource_id, name, slot_minutes, valid_from)
+values ('66666666-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001',
+        'cccc0000-0000-0000-0000-000000000001', 'Agenda duplicada', 30, current_date);
+
+
+\echo ''
+\echo '--- 24. Servicio reservable en una agenda de una sede donde no se presta (HU-006, V8) ---'
+insert into agenda_services (agenda_id, service_id, location_id)
+select id, 'aaaa0000-0000-0000-0000-000000000002', location_id
+from agendas where resource_id = 'cccc0000-0000-0000-0000-000000000006';
+
+
+\echo ''
 \echo '====================================================================='
-\echo ' Las diecinueve instrucciones anteriores debieron ser rechazadas.'
+\echo ' Las veinticuatro instrucciones anteriores debieron ser rechazadas.'
 \echo ' Si alguna dice INSERT, UPDATE o DELETE en vez de ERROR, hay una'
 \echo ' regla de negocio que la base no está garantizando.'
 \echo '====================================================================='

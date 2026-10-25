@@ -96,7 +96,7 @@ from bookings b
     inner join services  s on s.id = b.service_id
     inner join clients   c on c.id = b.client_id
     inner join locations l on l.id = b.location_id
-where s.organization_id = (select id from organizations where nit = :nit)
+where s.organization_id = (select id from organizations where identification_type = 'NIT' and identification_number = :nit)
   and b.starts_at >= now()
   and b.status in ('RESERVED', 'CONFIRMED')
 order by b.starts_at;
@@ -110,7 +110,10 @@ El `left join` es lo que deja ver también los recursos completamente libres.
 select l.name as sede, r.name as recurso, sch.start_time as abre,
        sch.end_time as cierra, count(br.booking_id) as reservas_vivas
 from schedules sch
-    inner join resources r on r.id = sch.resource_id
+    inner join agendas   a on a.id = sch.agenda_id
+                          and (now() + interval '2 days')::date >= a.valid_from
+                          and (a.valid_until is null or (now() + interval '2 days')::date <= a.valid_until)
+    inner join resources r on r.id = a.resource_id
     inner join locations l on l.id = r.location_id
     left  join booking_resources br on br.resource_id = r.id
                                    and br.status in ('RESERVED', 'CONFIRMED')
@@ -124,7 +127,7 @@ order by l.name, r.name;
 ### 7. ¿Qué proveedores llevan más tiempo esperando aprobación? (cola del administrador)
 
 ```sql
-select o.name as organizacion, o.nit, oc.name as categoria, o.contact_email,
+select o.name as organizacion, o.identification_type, o.identification_number, oc.name as categoria, o.contact_email,
        o.created_at::date as solicitado_el,
        current_date - o.created_at::date as dias_esperando
 from organizations o
@@ -184,7 +187,8 @@ Las tres validaciones previas al registro en una sola ida a la base.
 ```sql
 select exists (select 1 from clients       where lower(email) = lower(:email)) as correo_ya_registrado,
        exists (select 1 from clients       where document     = :documento)    as documento_ya_registrado,
-       exists (select 1 from organizations where nit          = :nit)          as nit_ya_registrado;
+       exists (select 1 from organizations where identification_type = 'NIT'
+                                      and identification_number = :nit) as nit_ya_registrado;
 ```
 
 ### 12. ¿Qué clientes se registraron y nunca han reservado? (subconsulta correlacionada)

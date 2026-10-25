@@ -23,6 +23,14 @@ public enum ErrorCode {
 
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "Email is already registered"),
     DUPLICATE_DOCUMENT(HttpStatus.CONFLICT, "Document is already registered"),
+    DUPLICATE_IDENTIFICATION(HttpStatus.CONFLICT, "A provider with this identification is already registered"),
+    INVALID_STATUS_TRANSITION(HttpStatus.CONFLICT, "The resource is not in a state that allows this operation"),
+    DUPLICATE_NAME(HttpStatus.CONFLICT, "The name is already in use"),
+    OVERLAPPING_PERIOD(HttpStatus.CONFLICT, "The period overlaps an existing one"),
+    HAS_FUTURE_BOOKINGS(HttpStatus.CONFLICT, "There are future bookings that must be resolved first"),
+    HAS_BOOKINGS(HttpStatus.CONFLICT, "It has bookings, so it can only be deactivated"),
+    INSUFFICIENT_RESOURCES(HttpStatus.CONFLICT, "Not enough resources to provide the service"),
+    CONFIRMATION_REQUIRED(HttpStatus.CONFLICT, "The operation has consequences that must be confirmed"),
 
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests, try again later"),
     ACCOUNT_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "Account temporarily locked due to repeated failed logins"),

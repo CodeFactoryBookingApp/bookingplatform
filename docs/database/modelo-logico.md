@@ -27,8 +27,12 @@ erDiagram
     RESOURCE_TYPE ||--o{ SERVICE_RESOURCE_REQUIREMENT : "es exigido por"
     RESOURCE_TYPE ||--|{ RESOURCE : "se instancia en"
     LOCATION ||--o{ RESOURCE : "aloja"
-    LOCATION ||--o{ SCHEDULE : "abre en"
-    RESOURCE ||--o{ SCHEDULE : "disponible en"
+    LOCATION ||--o{ AGENDA : "abre en"
+    RESOURCE |o--o{ AGENDA : "opcional, agenda propia"
+    AGENDA ||--|{ SCHEDULE : "bloques semanales"
+    AGENDA ||--|{ AGENDA_SERVICE : "reserva"
+    SERVICE_LOCATION ||--o{ AGENDA_SERVICE : "se reserva en"
+    RESOURCE ||--o{ RESOURCE_MAINTENANCE : "se detiene en"
     CLIENT ||--o{ BOOKING : "reserva"
     ORGANIZATION ||--o{ BOOKING : "atiende"
     SERVICE ||--o{ BOOKING : "es reservado en"
@@ -70,7 +74,8 @@ erDiagram
         uuid id PK
         uuid category_id FK
         string name
-        string nit UK "HU-002"
+        string identification_type "NIT, CC, CE o PASAPORTE (V4)"
+        string identification_number UK "HU-002, único con su tipo"
         string contact_email "CHECK de formato"
         string contact_phone
         string timezone
@@ -153,17 +158,40 @@ erDiagram
     }
     RESOURCE {
         uuid id PK
+        uuid organization_id FK "V7, cuadra tipo y sede"
         uuid resource_type_id FK
         uuid location_id FK "UK con name"
         string name
-        string status "ACTIVE INACTIVE"
+        int capacity "V7, personas a la vez"
+        string status "ACTIVE RETIRED (V7)"
+    }
+    RESOURCE_MAINTENANCE {
+        uuid id PK
+        uuid resource_id FK
+        timestamptz starts_at "sin solape por recurso"
+        timestamptz ends_at
+        string reason
+    }
+    AGENDA {
+        uuid id PK
+        uuid organization_id FK
+        uuid location_id FK
+        uuid resource_id FK "nulo = toda la sede (V8)"
+        string name "UK por organización"
+        smallint slot_minutes "15, 30 o 60"
+        date valid_from "EXCLUDE: sin dos vigentes por sede o recurso"
+        date valid_until "nulo = sin fin"
+    }
+    AGENDA_SERVICE {
+        uuid agenda_id PK
+        uuid service_id PK
+        uuid location_id FK "el servicio se presta en la sede"
     }
     SCHEDULE {
         uuid id PK
-        uuid location_id FK
-        uuid resource_id FK "nulo = toda la sede"
+        uuid agenda_id FK "V8"
         smallint day_of_week "ISO 1 lunes a 7 domingo"
-        time start_time "EXCLUDE sin solapes"
+        time start_time "EXCLUDE sin solapes en la agenda"
         time end_time
         boolean active
     }

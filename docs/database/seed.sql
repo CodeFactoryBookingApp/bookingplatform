@@ -23,7 +23,7 @@ begin
 end $$;
 
 truncate table account_status_changes, booking_status_changes, booking_resources,
-               bookings, schedules, resources, service_resource_requirements,
+               bookings, schedules, agenda_services, agendas, resource_maintenances, sent_emails, resources, service_resource_requirements,
                service_locations, services, resource_types, locations,
                organization_policies, organization_members, organizations,
                login_attempts, clients,
@@ -66,7 +66,7 @@ insert into login_attempts (email, success, attempted_at) values
     ('mariana@example.com', true,  now() - interval '10 minutes');
 
 -- ---------- organizaciones ----------
-insert into organizations (id, category_id, name, nit, contact_email, contact_phone, timezone, status, approved_at, created_at, updated_at) values
+insert into organizations (id, category_id, name, identification_number, contact_email, contact_phone, timezone, status, approved_at, created_at, updated_at) values
     ('66666666-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000002', 'Barbería El Poblado', '900123456-1', 'contacto@barberia.com', '6041112233', 'America/Bogota', 'ACTIVE', now() - interval '60 days', now() - interval '65 days', now() - interval '10 days'),
     ('66666666-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000001', 'Clínica Dental Sur',  '901234567-2', 'citas@dentalsur.com',   '6042223344', 'America/Bogota', 'ACTIVE', now() - interval '30 days', now() - interval '35 days', now() - interval '30 days'),
     -- Pendiente hace 45 días: no es visible NI reservable (HU-002),
@@ -129,23 +129,36 @@ insert into service_resource_requirements (service_id, resource_type_id, organiz
     ('aaaa0000-0000-0000-0000-000000000004', 'bbbb0000-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000002', 1),
     ('aaaa0000-0000-0000-0000-000000000005', 'bbbb0000-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000002', 1);
 
-insert into resources (id, resource_type_id, location_id, name, status) values
-    ('cccc0000-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 1', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 2', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000003', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 3', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000004', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 4', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000005', 'bbbb0000-0000-0000-0000-000000000002', '88888888-0000-0000-0000-000000000001', 'Salón principal', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000006', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000002', 'Silla única', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000007', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad A', 'ACTIVE'),
-    ('cccc0000-0000-0000-0000-000000000008', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad B', 'INACTIVE');
+-- capacity: personas que el recurso atiende a la vez (V7). El salón del taller recibe al grupo.
+insert into resources (id, organization_id, resource_type_id, location_id, name, capacity, status) values
+    ('cccc0000-0000-0000-0000-000000000001', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 1', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000002', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 2', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000003', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 3', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000004', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000001', 'Silla 4', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000005', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000002', '88888888-0000-0000-0000-000000000001', 'Salón principal', 12, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000006', '66666666-0000-0000-0000-000000000001', 'bbbb0000-0000-0000-0000-000000000001', '88888888-0000-0000-0000-000000000002', 'Silla única', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000007', '66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad A', 1, 'ACTIVE'),
+    ('cccc0000-0000-0000-0000-000000000008', '66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad B', 1, 'RETIRED');
 
--- ---------- agenda: lunes a viernes 8:00-18:00, sábado 8:00-13:00 ----------
-insert into schedules (location_id, resource_id, day_of_week, start_time, end_time, active)
-select r.location_id, r.id, d.dow, time '08:00',
-       case when d.dow in (6, 7) then time '13:00' else time '18:00' end, true
+-- ---------- agendas (V8): una por recurso activo ----------
+-- Granularidad de 30 minutos, vigente desde hace un mes y sin fecha de fin,
+-- con los servicios que se prestan en su sede. Bloques de lunes a viernes
+-- 8:00-18:00 y fines de semana 8:00-13:00.
+insert into agendas (organization_id, location_id, resource_id, name, slot_minutes, valid_from)
+select r.organization_id, r.location_id, r.id, 'Agenda ' || r.name, 30, current_date - 30
 from resources r
-cross join (select generate_series(1, 7) as dow) d
 where r.status = 'ACTIVE';
+
+insert into agenda_services (agenda_id, service_id, location_id)
+select a.id, sl.service_id, a.location_id
+from agendas a
+    inner join service_locations sl on sl.location_id = a.location_id;
+
+insert into schedules (agenda_id, day_of_week, start_time, end_time, active)
+select a.id, d.dow, time '08:00',
+       case when d.dow in (6, 7) then time '13:00' else time '18:00' end, true
+from agendas a
+cross join (select generate_series(1, 7) as dow) d;
 
 -- ---------- reservas ----------
 -- session_id: en servicios individuales coincide con el id de la reserva;

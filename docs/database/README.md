@@ -13,6 +13,12 @@ arrancar, en orden de versión:
 | `V1__esquema_inicial.sql` | Las diecinueve tablas del Sprint 1 con sus restricciones, triggers e índices. Es el antiguo `schema.sql` (ADR-0005) |
 | `V2__rls.sql` | Habilita Row Level Security en las diecinueve tablas. Es el antiguo `rls.sql` |
 | `V3__correcciones_reservas_y_servicios.sql` | Un servicio nuevo nace inactivo; las reglas de reservas ya no impiden cancelar ni cerrar las de un proveedor suspendido o un servicio desactivado; el aforo grupal resiste reservas simultáneas |
+| `V4__identificacion_del_proveedor.sql` | El proveedor se identifica con tipo (NIT, CC, CE, PASAPORTE) y número; `nit` pasa a `identification_number` y la unicidad es por la pareja |
+| `V5__datos_de_referencia.sql` | Categorías, ciudades y la moneda COP. Son datos de referencia que la aplicación necesita en toda base, no datos de prueba |
+| `V6__bandeja_de_correo.sql` | `sent_emails`: los correos de la plataforma se guardan ahí y su destinatario los lee por la API, porque Render gratis bloquea SMTP (ADR-0007) |
+| `V7__recursos_capacidad_y_mantenimiento.sql` | Recursos con capacidad, estado `ACTIVE`/`RETIRED` y organización (que cuadra tipo y sede); tabla `resource_maintenances` de periodos sin solape (HU-009) |
+| `V8__agendas.sql` | `agendas` (sede, recurso opcional, granularidad 15/30/60, vigencia, sin dos vigentes a la vez por sede o recurso), `agenda_services` y `schedules` como bloques de una agenda (HU-006) |
+| `V9__busqueda_sin_tildes.sql` | Función `f_sin_tildes`: minúsculas y sin tildes, para la búsqueda del catálogo (HU-005). Sin la extensión `unaccent`, que cambia de esquema entre Supabase y PostgreSQL |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
@@ -27,7 +33,7 @@ siguiente. Si crea tablas, habilita RLS en ellas en la misma migración;
 |---|---|---|
 | `seed.sql` | Datos de prueba. Tres organizaciones, cinco servicios, ocho reservas | Sí, después de las migraciones |
 | `consultas-clave.sql` | Las catorce preguntas de negocio, ejecutables de corrido | Sí, para ver resultados |
-| `pruebas-integridad.sql` | Diecinueve instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
+| `pruebas-integridad.sql` | Veinticuatro instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
 | `modelo-logico.md` | Diagrama entidad-relación, decisiones de modelado y normalización | No, se lee |
 | `consultas-clave.md` | Las mismas catorce preguntas con su explicación | No, se lee |
 | `diagrama-er.drawio` | Diagrama editable. La primera página, **Modelo completo**, tiene las diecinueve entidades, las notas y las historias de usuario en una sola hoja; las cuatro siguientes son las tres vistas por dominio y la hoja de historias de usuario | No |
@@ -87,12 +93,11 @@ No ejecutes `seed.sql` ni `pruebas-integridad.sql` contra Supabase.
 El workflow `.github/workflows/database.yml` corre en cada pull request que
 toque esta carpeta, las migraciones o el mapeo JPA. Comprueba que:
 
-- las migraciones ejecuten contra una base vacía;
-- V1 y V2 sigan siendo idempotentes;
-- se creen las diecinueve tablas;
+- V1 y V2 ejecuten dos veces seguidas, como sobre una base anterior a Flyway, y después las demás migraciones en orden;
+- se creen las veintitrés tablas (las diecinueve de V1, la bandeja de V6, los mantenimientos de V7 y las dos de agendas de V8);
 - los datos de prueba carguen;
 - las catorce consultas devuelvan filas;
-- las diecinueve pruebas de integridad sean rechazadas;
+- las veinticuatro pruebas de integridad sean rechazadas;
 - ninguna tabla quede sin RLS.
 
 Las pruebas de integración del build corren sobre el esquema que crea Flyway,

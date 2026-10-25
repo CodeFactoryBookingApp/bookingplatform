@@ -28,6 +28,15 @@ public class UserProvisioningService implements UserProvisioning {
 
     @Override
     public UUID provisionClientUser(String email, String password) {
+        return provision(email, password, AppRole.CLIENT);
+    }
+
+    @Override
+    public UUID provisionProviderUser(String email, String password) {
+        return provision(email, password, AppRole.PROVIDER);
+    }
+
+    private UUID provision(String email, String password, AppRole role) {
         List<String> violations = PasswordPolicy.violations(password);
         if (!violations.isEmpty()) {
             throw new BusinessException(ErrorCode.PASSWORD_TOO_WEAK,
@@ -35,7 +44,7 @@ public class UserProvisioningService implements UserProvisioning {
                     java.util.Map.of("violations", String.join("; ", violations)));
         }
         try {
-            return identityProvider.createUser(email, password, AppRole.CLIENT);
+            return identityProvider.createUser(email, password, role);
         } catch (UpstreamAuthException ex) {
             throw mapUpstream(ex);
         }

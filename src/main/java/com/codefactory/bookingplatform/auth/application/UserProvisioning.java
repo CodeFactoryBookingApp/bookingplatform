@@ -12,6 +12,9 @@ public interface UserProvisioning {
 
     UUID provisionClientUser(String email, String password);
 
+    /** HU-002: the account of a service provider, with role PROVIDER in its token. */
+    UUID provisionProviderUser(String email, String password);
+
     void deprovisionUser(UUID userId);
 
     void resendSignupVerification(String email);
