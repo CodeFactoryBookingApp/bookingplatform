@@ -1,8 +1,11 @@
 package com.codefactory.bookingplatform.identity.infrastructure.persistence;
 
 import com.codefactory.bookingplatform.identity.domain.model.Client;
+import com.codefactory.bookingplatform.identity.domain.model.DuplicateClientException;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
 import com.codefactory.bookingplatform.identity.infrastructure.mapper.ClientMapper;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 import java.util.Locale;
@@ -43,6 +46,28 @@ public class ClientRepositoryAdapter implements ClientRepository {
     @Override
     public Client save(Client client) {
         ClientEntity entity = mapper.toEntity(client);
-        return mapper.toDomain(jpaRepository.save(entity));
+        try {
+            // The id is assigned, so a plain save() defers the INSERT to the commit, after the
+            // use case has returned and can no longer compensate the identity provider (D7).
+            return mapper.toDomain(jpaRepository.saveAndFlush(entity));
+        } catch (DataIntegrityViolationException ex) {
+            throw translate(ex);
+        }
+    }
+
+    /** uk_clients_email, ux_clients_email_lower and uk_clients_document, from V1. */
+    private static RuntimeException translate(DataIntegrityViolationException ex) {
+        String constraint = ex.getCause() instanceof ConstraintViolationException violation
+                ? violation.getConstraintName() : null;
+        if (constraint == null) {
+            return ex;
+        }
+        if (constraint.contains("email")) {
+            return new DuplicateClientException(DuplicateClientException.Field.EMAIL, ex);
+        }
+        if (constraint.contains("document")) {
+            return new DuplicateClientException(DuplicateClientException.Field.DOCUMENT, ex);
+        }
+        return ex;
     }
 }

@@ -2,20 +2,28 @@ package com.codefactory.bookingplatform.identity.infrastructure.persistence;
 
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
+import com.codefactory.bookingplatform.identity.domain.model.DuplicateClientException;
 import com.codefactory.bookingplatform.identity.domain.model.NotificationChannel;
 import com.codefactory.bookingplatform.identity.infrastructure.mapper.ClientMapper;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -86,5 +94,83 @@ class ClientRepositoryAdapterTest {
         ArgumentCaptor<String> email = ArgumentCaptor.forClass(String.class);
         verify(jpaRepository).existsByEmailIgnoreCase(email.capture());
         assertEquals(expected, email.getValue());
+    }
+
+    private static DataIntegrityViolationException uniqueViolation(String constraint) {
+        return new DataIntegrityViolationException("duplicate key",
+                new ConstraintViolationException("duplicate key", new SQLException("23505"), constraint));
+    }
+
+    @Test
+    @DisplayName("save flushes, so the INSERT runs inside the caller's try and not at commit (D7)")
+    void saveFlushesImmediately() {
+        // Arrange
+        UUID id = UUID.randomUUID();
+        Client client = sampleClient(id);
+        ClientEntity entity = new ClientEntity();
+        when(mapper.toEntity(client)).thenReturn(entity);
+        when(jpaRepository.saveAndFlush(entity)).thenReturn(entity);
+        when(mapper.toDomain(entity)).thenReturn(client);
+
+        // Act
+        Client saved = adapter.save(client);
+
+        // Assert
+        assertEquals(id, saved.getId());
+        verify(jpaRepository).saveAndFlush(entity);
+    }
+
+    @ParameterizedTest(name = "[{index}] {0} -> {1}")
+    @CsvSource({
+            "uk_clients_email, EMAIL",
+            "ux_clients_email_lower, EMAIL",
+            "uk_clients_document, DOCUMENT"
+    })
+    @DisplayName("A unique violation on email or document becomes a DuplicateClientException naming the field")
+    void uniqueViolationIsTranslated(String constraint, DuplicateClientException.Field expected) {
+        // Arrange
+        Client client = sampleClient(UUID.randomUUID());
+        when(mapper.toEntity(client)).thenReturn(new ClientEntity());
+        when(jpaRepository.saveAndFlush(any(ClientEntity.class))).thenThrow(uniqueViolation(constraint));
+
+        // Act
+        DuplicateClientException thrown = assertThrows(DuplicateClientException.class, () -> adapter.save(client));
+
+        // Assert
+        assertEquals(expected, thrown.field());
+    }
+
+    @Test
+    @DisplayName("Any other integrity violation is rethrown untouched: it is not a duplicate")
+    void otherViolationIsRethrown() {
+        // Arrange
+        Client client = sampleClient(UUID.randomUUID());
+        DataIntegrityViolationException violation = uniqueViolation("ck_clients_phone_formato");
+        when(mapper.toEntity(client)).thenReturn(new ClientEntity());
+        when(jpaRepository.saveAndFlush(any(ClientEntity.class))).thenThrow(violation);
+
+        // Act
+        DataIntegrityViolationException thrown =
+                assertThrows(DataIntegrityViolationException.class, () -> adapter.save(client));
+
+        // Assert
+        assertSame(violation, thrown);
+    }
+
+    @Test
+    @DisplayName("A violation that does not name its constraint is rethrown untouched")
+    void violationWithoutConstraintNameIsRethrown() {
+        // Arrange
+        Client client = sampleClient(UUID.randomUUID());
+        DataIntegrityViolationException violation = new DataIntegrityViolationException("unknown");
+        when(mapper.toEntity(client)).thenReturn(new ClientEntity());
+        when(jpaRepository.saveAndFlush(any(ClientEntity.class))).thenThrow(violation);
+
+        // Act
+        DataIntegrityViolationException thrown =
+                assertThrows(DataIntegrityViolationException.class, () -> adapter.save(client));
+
+        // Assert
+        assertSame(violation, thrown);
     }
 }

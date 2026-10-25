@@ -3,6 +3,7 @@ package com.codefactory.bookingplatform.identity.application;
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
+import com.codefactory.bookingplatform.identity.domain.model.DuplicateClientException;
 import com.codefactory.bookingplatform.identity.domain.model.NotificationChannel;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
@@ -288,6 +291,26 @@ class RegisterClientUseCaseTest {
             // Assert
             RuntimeException thrown = assertThrows(RuntimeException.class, act);
             assertSame(boom, thrown);
+            verify(userProvisioning).deprovisionUser(PROVISIONED_ID);
+            verify(userProvisioning, never()).resendSignupVerification(anyString());
+        }
+
+        @ParameterizedTest(name = "[{index}] {0} taken by a concurrent registration -> {1}")
+        @CsvSource({"EMAIL, DUPLICATE_EMAIL", "DOCUMENT, DUPLICATE_DOCUMENT"})
+        @DisplayName("D7: a duplicate the checks missed is compensated and reported as the matching 409 code")
+        void concurrentDuplicateIsCompensatedAndTranslated(DuplicateClientException.Field field, ErrorCode expected) {
+            // Arrange
+            when(userProvisioning.provisionClientUser(anyString(), anyString())).thenReturn(PROVISIONED_ID);
+            when(clientRepository.save(any(Client.class)))
+                    .thenThrow(new DuplicateClientException(field, new IllegalStateException("unique violation")));
+            RegisterClientCommand command = command();
+
+            // Act
+            Executable act = () -> useCase.register(command);
+
+            // Assert
+            BusinessException thrown = assertThrows(BusinessException.class, act);
+            assertEquals(expected, thrown.errorCode());
             verify(userProvisioning).deprovisionUser(PROVISIONED_ID);
             verify(userProvisioning, never()).resendSignupVerification(anyString());
         }

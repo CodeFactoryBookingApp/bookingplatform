@@ -2,6 +2,7 @@ package com.codefactory.bookingplatform.identity.application;
 
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
+import com.codefactory.bookingplatform.identity.domain.model.DuplicateClientException;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
 import com.codefactory.bookingplatform.identity.domain.service.AgePolicy;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
@@ -69,6 +70,11 @@ public class RegisterClientUseCase {
             userProvisioning.resendSignupVerification(normalizedEmail);
             log.info("Client {} registered in status {}", saved.getId(), saved.getStatus());
             return new RegistrationOutcome(saved.getId(), saved.getEmail(), saved.getStatus());
+        } catch (DuplicateClientException ex) {
+            // A concurrent registration took the email or document after the checks above
+            userProvisioning.deprovisionUser(userId);
+            throw new BusinessException(ex.field() == DuplicateClientException.Field.EMAIL
+                    ? ErrorCode.DUPLICATE_EMAIL : ErrorCode.DUPLICATE_DOCUMENT);
         } catch (RuntimeException ex) {
             userProvisioning.deprovisionUser(userId);
             throw ex;

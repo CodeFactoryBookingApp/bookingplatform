@@ -9,6 +9,7 @@ import com.codefactory.bookingplatform.identity.infrastructure.persistence.Clien
 import com.codefactory.bookingplatform.support.PostgresIntegrationTestBase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -16,10 +17,14 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -34,12 +39,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class RegistrationFlowIT extends PostgresIntegrationTestBase {
 
     private static final UUID FIXED_USER_ID = UUID.fromString("11111111-2222-3333-4444-555555555555");
+    private static final UUID COMPETING_ID = UUID.fromString("99999999-8888-7777-6666-555555555555");
 
     @Autowired
     private MockMvc mockMvc;
 
     @Autowired
     private ClientJpaRepository clientJpaRepository;
+
+    @Autowired
+    private DataSource dataSource;
 
     @MockitoBean
     private IdentityProviderPort identityProviderPort;
@@ -240,6 +249,66 @@ class RegistrationFlowIT extends PostgresIntegrationTestBase {
         result.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.traceId").exists())
                 .andExpect(header().exists("X-Trace-Id"));
+    }
+
+    @Nested
+    @DisplayName("D7: two registrations racing for the same email or document")
+    class ConcurrentRegistration {
+
+        /**
+         * Stands in for the other request: it commits its client from its own connection while
+         * this registration is between the duplicate checks and the INSERT.
+         */
+        private void competingClientCommitsDuringProvisioning(String email, String document) {
+            when(identityProviderPort.createUser(anyString(), anyString(), any())).thenAnswer(invocation -> {
+                try (Connection other = dataSource.getConnection();
+                     PreparedStatement insert = other.prepareStatement("""
+                             insert into clients (id, full_name, document, birth_date, email, phone, city,
+                                                  notification_channel, status, created_at, updated_at)
+                             values (?, 'Otra Persona', ?, '1990-01-01', ?, '+573009998877', 'Bogota',
+                                     'EMAIL', 'PENDING_VERIFICATION', localtimestamp, localtimestamp)
+                             """)) {
+                    insert.setObject(1, COMPETING_ID);
+                    insert.setString(2, document);
+                    insert.setString(3, email);
+                    insert.executeUpdate();
+                }
+                return FIXED_USER_ID;
+            });
+        }
+
+        @Test
+        @DisplayName("The loser of an email race gets 409 DUPLICATE_EMAIL and its provider user is deleted")
+        void emailRaceIsAConflictAndIsCompensated() throws Exception {
+            // Arrange
+            competingClientCommitsDuringProvisioning("ana.perez@example.com", "CC-OTRO");
+
+            // Act
+            ResultActions result = performRegistration(validPayload());
+
+            // Assert
+            result.andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.errorCode").value("DUPLICATE_EMAIL"));
+            verify(identityProviderPort).deleteUser(FIXED_USER_ID);
+            assertTrue(clientJpaRepository.findById(FIXED_USER_ID).isEmpty());
+            assertTrue(clientJpaRepository.findById(COMPETING_ID).isPresent());
+        }
+
+        @Test
+        @DisplayName("The loser of a document race gets 409 DUPLICATE_DOCUMENT and its provider user is deleted")
+        void documentRaceIsAConflictAndIsCompensated() throws Exception {
+            // Arrange
+            competingClientCommitsDuringProvisioning("otra.persona@example.com", "CC-1020304050");
+
+            // Act
+            ResultActions result = performRegistration(validPayload());
+
+            // Assert
+            result.andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.errorCode").value("DUPLICATE_DOCUMENT"));
+            verify(identityProviderPort).deleteUser(FIXED_USER_ID);
+            assertTrue(clientJpaRepository.findById(FIXED_USER_ID).isEmpty());
+        }
     }
 
     private ResultActions performRegistration(String payload) throws Exception {
