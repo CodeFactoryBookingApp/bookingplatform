@@ -206,6 +206,7 @@ Linux/macOS:
 | GET | `/api/v1/organization-categories` | pública | HU-002 |
 | GET | `/api/v1/cities` | pública | HU-002 |
 | POST | `/api/v1/provider-registrations` | pública | HU-002 |
+| GET | `/api/v1/catalog/services?q=&categoryId=&cityId=&providerId=&minPrice=&maxPrice=&sort=&direction=&page=&size=` | pública | HU-005 |
 | GET | `/api/v1/organizations` | Bearer `PROVIDER` | HU-002 |
 | GET | `/api/v1/organizations/{id}` | Bearer `PROVIDER` miembro o `ADMIN` | HU-002, HU-022 |
 | PUT | `/api/v1/organizations/{id}/operation-policy` | Bearer `OWNER` o `MANAGER` del proveedor | HU-002 |

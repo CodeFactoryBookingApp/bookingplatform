@@ -18,6 +18,7 @@ arrancar, en orden de versión:
 | `V6__bandeja_de_correo.sql` | `sent_emails`: los correos de la plataforma se guardan ahí y su destinatario los lee por la API, porque Render gratis bloquea SMTP (ADR-0007) |
 | `V7__recursos_capacidad_y_mantenimiento.sql` | Recursos con capacidad, estado `ACTIVE`/`RETIRED` y organización (que cuadra tipo y sede); tabla `resource_maintenances` de periodos sin solape (HU-009) |
 | `V8__agendas.sql` | `agendas` (sede, recurso opcional, granularidad 15/30/60, vigencia, sin dos vigentes a la vez por sede o recurso), `agenda_services` y `schedules` como bloques de una agenda (HU-006) |
+| `V9__busqueda_sin_tildes.sql` | Función `f_sin_tildes`: minúsculas y sin tildes, para la búsqueda del catálogo (HU-005). Sin la extensión `unaccent`, que cambia de esquema entre Supabase y PostgreSQL |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no

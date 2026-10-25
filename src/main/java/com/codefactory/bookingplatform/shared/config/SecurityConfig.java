@@ -41,6 +41,7 @@ public class SecurityConfig {
             "/api/v1/provider-registrations",
             "/api/v1/organization-categories",
             "/api/v1/cities",
+            "/api/v1/catalog/**",
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",

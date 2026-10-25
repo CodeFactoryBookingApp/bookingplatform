@@ -28,6 +28,14 @@ public final class ProviderFixture {
     }
 
     public Provider activeProvider() {
+        return provider("Proveedor " + suffix(), "ACTIVE", null, null);
+    }
+
+    /**
+     * A provider named {@code name} in {@code status} (ACTIVE, PENDING_APPROVAL or SUSPENDED), of the
+     * category and with its location in the city given by name; null means the first of each catalog.
+     */
+    public Provider provider(String name, String status, String category, String city) {
         String suffix = suffix();
         UUID organizationId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
@@ -36,9 +44,9 @@ public final class ProviderFixture {
         jdbc.update("""
                 insert into organizations (id, category_id, name, identification_type, identification_number,
                                            contact_email, contact_phone, status, approved_at)
-                values (?, (select id from organization_categories order by name limit 1), ?, 'NIT', ?, ?,
-                        '6041112233', 'ACTIVE', now())
-                """, organizationId, "Proveedor " + suffix, "NIT-" + suffix, email);
+                values (?, (select id from organization_categories where name = coalesce(?, name) order by name limit 1),
+                        ?, 'NIT', ?, ?, '6041112233', ?, case when ? = 'PENDING_APPROVAL' then null else now() end)
+                """, organizationId, category, name, "NIT-" + suffix, email, status, status);
         jdbc.update("""
                 insert into organization_policies (id, organization_id, version, booking_notice_minutes_min,
                                                    booking_notice_minutes_max, free_cancellation_window_minutes)
@@ -46,15 +54,20 @@ public final class ProviderFixture {
                 """, policyId, organizationId);
         jdbc.update("insert into organization_members (organization_id, user_id, role) values (?, ?, 'OWNER')",
                 organizationId, ownerId);
-        return new Provider(organizationId, ownerId, email, addLocation(organizationId), policyId);
+        return new Provider(organizationId, ownerId, email, addLocation(organizationId, city), policyId);
     }
 
     public UUID addLocation(UUID organizationId) {
+        return addLocation(organizationId, null);
+    }
+
+    /** A location in the city given by name; null means the first city of the catalog. */
+    public UUID addLocation(UUID organizationId, String city) {
         UUID locationId = UUID.randomUUID();
         jdbc.update("""
                 insert into locations (id, organization_id, name, address, city_id)
-                values (?, ?, ?, 'Calle 1 # 2-3', (select id from cities order by name limit 1))
-                """, locationId, organizationId, "Sede " + suffix());
+                values (?, ?, ?, 'Calle 1 # 2-3', (select id from cities where name = coalesce(?, name) order by name limit 1))
+                """, locationId, organizationId, "Sede " + suffix(), city);
         return locationId;
     }
 
@@ -68,14 +81,24 @@ public final class ProviderFixture {
 
     /** An ACTIVE individual service of 30 minutes, offered in the provider's first location. */
     public UUID activeService(Provider provider) {
+        return service(provider, "Servicio " + suffix(), null, 1000, "ACTIVE");
+    }
+
+    /** A service of 30 minutes in {@code status} (ACTIVE or INACTIVE), offered in the provider's first location. */
+    public UUID service(Provider provider, String name, String description, int price, String status) {
         UUID serviceId = UUID.randomUUID();
         jdbc.update("""
-                insert into services (id, organization_id, name, duration_minutes, price, currency_id, status)
-                values (?, ?, ?, 30, 1000, (select id from currencies where code = 'COP'), 'ACTIVE')
-                """, serviceId, provider.organizationId(), "Servicio " + suffix());
-        jdbc.update("insert into service_locations (service_id, location_id, organization_id) values (?, ?, ?)",
-                serviceId, provider.locationId(), provider.organizationId());
+                insert into services (id, organization_id, name, description, duration_minutes, price, currency_id,
+                                      status)
+                values (?, ?, ?, ?, 30, ?, (select id from currencies where code = 'COP'), ?)
+                """, serviceId, provider.organizationId(), name, description, price, status);
+        offerAt(provider, serviceId, provider.locationId());
         return serviceId;
+    }
+
+    public void offerAt(Provider provider, UUID serviceId, UUID locationId) {
+        jdbc.update("insert into service_locations (service_id, location_id, organization_id) values (?, ?, ?)",
+                serviceId, locationId, provider.organizationId());
     }
 
     /**

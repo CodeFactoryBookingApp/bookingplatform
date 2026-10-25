@@ -376,6 +376,7 @@
 						<param>com.codefactory.bookingplatform.catalog.domain.model.ResourceCondition</param>
 						<param>com.codefactory.bookingplatform.catalog.domain.model.ResourceType</param>
 						<param>com.codefactory.bookingplatform.catalog.domain.model.ServiceStatus</param>
+						<param>com.codefactory.bookingplatform.catalog.domain.model.CatalogEntry</param>
 						<param>com.codefactory.bookingplatform.catalog.domain.model.OfferedService$Details</param>
 					</excludedClasses>
 					<!--
