@@ -17,6 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * dependency rule: api -> application -> domain <- infrastructure
  * modules talk to each other only through application/domain, never infrastructure or api.
  *
+ * <p>The layer rules match {@code ..domain..} and friends, so they already hold for every module.
+ * The module rules come from {@link ModuleRules}, which names no module: a new one is checked as
+ * soon as its package exists. {@link ModuleRulesTest} proves those rules fail on code that breaks them.
+ *
  * <p>Each rule follows Arrange-Act-Assert: the production classes are imported once by
  * {@link AnalyzeClasses} and injected as {@code classes}; the method builds the rule (Arrange),
  * evaluates it against those classes (Act) and checks that the evaluation reports no violation
@@ -25,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 @AnalyzeClasses(packages = "com.codefactory.bookingplatform", importOptions = ImportOption.DoNotIncludeTests.class)
 class ArchitectureTest {
+
+    private static final String BASE = "com.codefactory.bookingplatform";
 
     @ArchTest
     static void domainIsFreeOfFrameworks(JavaClasses classes) {
@@ -92,12 +98,9 @@ class ArchitectureTest {
     }
 
     @ArchTest
-    static void identityOnlyUsesAuthPublicApi(JavaClasses classes) {
+    static void modulesMeetOnlyThroughApplicationOrDomain(JavaClasses classes) {
         // Arrange
-        ArchRule rule = noClasses()
-                .that().resideInAPackage("..identity..")
-                .should().dependOnClassesThat().resideInAnyPackage("..auth.api..", "..auth.infrastructure..")
-                .because("cross-module calls go through the auth application facade only");
+        ArchRule rule = ModuleRules.modulesMeetOnlyThroughApplicationOrDomain(BASE);
 
         // Act
         EvaluationResult result = rule.evaluate(classes);
@@ -107,12 +110,21 @@ class ArchitectureTest {
     }
 
     @ArchTest
-    static void authDoesNotDependOnIdentity(JavaClasses classes) {
+    static void modulesAreFreeOfCycles(JavaClasses classes) {
         // Arrange
-        ArchRule rule = noClasses()
-                .that().resideInAPackage("..auth..")
-                .should().dependOnClassesThat().resideInAPackage("..identity..")
-                .because("the transversal auth module must stay independent of business modules");
+        ArchRule rule = ModuleRules.modulesAreFreeOfCycles(BASE);
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
+
+    @ArchTest
+    static void authKnowsNoBusinessModule(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = ModuleRules.authKnowsNoBusinessModule(BASE);
 
         // Act
         EvaluationResult result = rule.evaluate(classes);
@@ -124,10 +136,19 @@ class ArchitectureTest {
     @ArchTest
     static void sharedKernelIsModuleAgnostic(JavaClasses classes) {
         // Arrange
-        ArchRule rule = noClasses()
-                .that().resideInAPackage("..shared..")
-                .should().dependOnClassesThat().resideInAnyPackage("..identity..", "..auth..")
-                .because("the shared kernel must not know any business module");
+        ArchRule rule = ModuleRules.sharedKnowsNoModule(BASE);
+
+        // Act
+        EvaluationResult result = rule.evaluate(classes);
+
+        // Assert
+        assertNoViolations(result);
+    }
+
+    @ArchTest
+    static void moduleClassesLiveInALayer(JavaClasses classes) {
+        // Arrange
+        ArchRule rule = ModuleRules.moduleClassesLiveInALayer(BASE);
 
         // Act
         EvaluationResult result = rule.evaluate(classes);
