@@ -2,13 +2,14 @@
 --  Consultas clave del negocio
 --  Sprint 1
 --
---  Catorce preguntas. Todas corren sobre las tablas de schema.sql y todas
+--  Catorce preguntas. Todas corren sobre las tablas de las migraciones y todas
 --  devuelven filas con los datos de seed.sql.
 --
 --  Usa metacomandos de psql (\echo), así que se ejecuta con `psql -f`,
 --  no pegándolo en el editor SQL de Supabase.
 --
---  Uso:  psql -f schema.sql -f seed.sql -f consultas-clave.sql
+--  Uso:  con las migraciones de src/main/resources/db/migration ya aplicadas,
+--        psql -f seed.sql -f consultas-clave.sql
 -- =====================================================================
 
 

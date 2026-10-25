@@ -1,7 +1,7 @@
 # Modelo lógico — Plataforma de Reservas de Servicios
 
 Modelo entidad-relación del dominio completo del caso. Las diecinueve entidades
-existen en `schema.sql`; las marcadas con **(S1)** además tienen entidad JPA y
+existen en la migración `src/main/resources/db/migration/V1__esquema_inicial.sql`; las marcadas con **(S1)** además tienen entidad JPA y
 están en producción, el resto es modelo de datos adelantado al código.
 
 Las credenciales (correo, contraseña, confirmación) viven en `auth.users` de
@@ -273,7 +273,7 @@ aplicación. Se listan para que no se den por cubiertas:
   roles dentro de una organización, no el rol global.
 - Excepciones de agenda como festivos o mantenimientos.
 
-Ver `schema.sql` (modelo físico), `consultas-clave.md` (preguntas de negocio y
+Ver las migraciones de `src/main/resources/db/migration/` (modelo físico), `consultas-clave.md` (preguntas de negocio y
 su SQL), `seed.sql` (datos de prueba), `pruebas-integridad.sql` (las
-restricciones rechazando lo que deben rechazar) y `rls.sql` (seguridad
+restricciones rechazando lo que deben rechazar) y `V2__rls.sql` (seguridad
 Supabase). El diagrama editable está en `diagrama-er.drawio`.

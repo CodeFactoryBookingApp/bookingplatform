@@ -21,12 +21,13 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | ADR-0003 Autenticación JWT/JWKS + bloqueo propio | `docs/adr/ADR-0003-*.md` |
 | ADR-0004 API versionada, ProblemDetail, traceId | `docs/adr/ADR-0004-*.md` |
 | ADR-0005 Modelo físico escrito a mano + CI de BD | `docs/adr/ADR-0005-*.md` |
+| ADR-0006 Migraciones de esquema con Flyway | `docs/adr/ADR-0006-*.md` |
 | Guía de la carpeta de base de datos | `docs/database/README.md` |
 | Modelo lógico completo (ER) | `docs/database/modelo-logico.md` |
-| Modelo físico (DDL, 19 tablas) | `docs/database/schema.sql` |
+| Modelo físico: migraciones de Flyway (V1 = las 19 tablas del Sprint 1) | `src/main/resources/db/migration/` |
 | Datos de prueba | `docs/database/seed.sql` |
 | Restricciones de integridad en acción | `docs/database/pruebas-integridad.sql` |
-| Seguridad Supabase (RLS) | `docs/database/rls.sql` |
+| Seguridad Supabase (RLS) | `src/main/resources/db/migration/V2__rls.sql` |
 | Consultas clave del negocio | `docs/database/consultas-clave.md` |
 | Consultas clave, versión ejecutable | `docs/database/consultas-clave.sql` |
 | Diagrama ER editable | `docs/database/diagrama-er.drawio` |
@@ -145,10 +146,13 @@ Linux/macOS:
 
 Notas:
 
-- El esquema completo vive en `docs/database/schema.sql` y se aplica con
-  `psql -f` o desde el SQL Editor de Supabase (ADR-0005). `ddl-auto=update`
-  sigue creando en local las tablas que tienen entidad JPA. Después
-  ejecuta `docs/database/rls.sql`.
+- El esquema lo crea Flyway al arrancar, con las migraciones de
+  `src/main/resources/db/migration/` (ADR-0006). Hibernate ya no crea tablas:
+  solo valida que las entidades cuadren con el esquema.
+- La aplicación migra la base a la que apunta `DATABASE_URL`. Si tu `.env`
+  apunta a Supabase, al arrancar le aplicas las migraciones de tu rama a la
+  base compartida. Para desarrollar, usa el PostgreSQL de `docker compose up -d db`
+  (`DATABASE_URL=jdbc:postgresql://localhost:5432/postgres`).
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Health: http://localhost:8080/actuator/health
 
@@ -186,7 +190,8 @@ Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
 ## Despliegue en Render
 
 Producción: `https://bookingplatform-81wi.onrender.com`
-(Web Service Docker desde `main`, perfil `cloud`, `ddl-auto=validate`).
+(Web Service Docker desde `main`, perfil `cloud`. Al arrancar, Flyway aplica
+las migraciones pendientes a Supabase y Hibernate valida el esquema).
 
 ### Crear el servicio
 

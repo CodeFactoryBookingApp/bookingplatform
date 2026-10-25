@@ -1,6 +1,6 @@
 # ADR-0005: El modelo físico se escribe a mano y se verifica en integración continua
 
-- **Estado:** Aceptado; modifica la estrategia de esquema del ADR-0002
+- **Estado:** Aceptado; modifica la estrategia de esquema del ADR-0002. Reemplazado en ese punto por el ADR-0006: el esquema vive ahora en las migraciones de Flyway
 - **Fecha:** 2026-09-21
 - **Prioridad:** Alta
 - **Decisores:** Equipo de desarrollo — rol Arquitecto de Software y BD

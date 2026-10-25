@@ -2,7 +2,7 @@
 --  Datos de prueba — Plataforma de Reservas de Servicios
 --  Sprint 1
 --
---  Se ejecuta DESPUÉS de schema.sql. Carga un escenario pequeño pero
+--  Se ejecuta DESPUÉS de las migraciones de Flyway. Carga un escenario pequeño pero
 --  completo, pensado para que TODAS las consultas clave devuelvan
 --  filas: una consulta que devuelve vacío no demuestra nada.
 --

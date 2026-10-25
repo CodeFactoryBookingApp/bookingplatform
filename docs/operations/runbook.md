@@ -41,19 +41,18 @@ devolver 401 es el comportamiento esperado, no una falla.
 3. **Auth → Providers → Email:** confirmación de correo activada,
    longitud mínima 8.
 4. **Auth → Settings → JWT expiry:** `900` segundos (15 min, HU-021).
-5. **Tablas:** ejecutar `docs/database/schema.sql` en el SQL Editor. Es
-   idempotente, así que se puede aplicar sobre una base que ya tenga las tablas
-   de Hibernate: se las salta y crea las restantes (ADR-0005). Verificar:
+5. **Tablas y RLS:** no se ejecuta nada a mano. Al arrancar, la aplicación
+   aplica con Flyway las migraciones de `src/main/resources/db/migration/`
+   (ADR-0006). Sobre la base que ya tenía el esquema del Sprint 1, aplicado a
+   mano, la primera vez Flyway crea la línea base 0 y vuelve a aplicar V1 y V2,
+   que son idempotentes. Verificar después del despliegue:
    ```sql
-   select count(*) from pg_class
-   where relnamespace = 'public'::regnamespace and relkind = 'r';
-   -- deben ser 19
-   ```
-6. **RLS (después de las tablas):** ejecutar `docs/database/rls.sql` en el
-   SQL Editor y verificar con:
-   ```sql
-   select relname as tabla, relrowsecurity as rls_habilitado from pg_class
-   where relname in ('clients','login_attempts');
+   select version, type, success from flyway_schema_history order by installed_rank;
+   -- 0 BASELINE, 1 SQL, 2 SQL … todas con success = true
+
+   select relname from pg_class
+   where relnamespace = 'public'::regnamespace and relkind = 'r' and not relrowsecurity;
+   -- ninguna fila: todas las tablas, incluido el historial de Flyway, tienen RLS
    ```
    El backend conecta como dueño y bypasea RLS; el Data API público queda
    bloqueado.
