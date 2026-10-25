@@ -2,6 +2,7 @@ package com.codefactory.bookingplatform.catalog.domain.model;
 
 import com.codefactory.bookingplatform.shared.error.BusinessException;
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
+import com.codefactory.bookingplatform.shared.listing.ListingParams;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -16,8 +17,6 @@ import java.util.UUID;
 public record CatalogCriteria(String keyword, UUID categoryId, UUID cityId, UUID providerId, BigDecimal minPrice,
                               BigDecimal maxPrice, Sort sort, boolean descending, int page, int size) {
 
-    public static final int MAX_SIZE = 100;
-
     /** The columns a client may sort by. */
     public enum Sort { NAME, PRICE, DURATION, PROVIDER }
 
@@ -29,12 +28,7 @@ public record CatalogCriteria(String keyword, UUID categoryId, UUID cityId, UUID
         if (minPrice != null && maxPrice != null && minPrice.compareTo(maxPrice) > 0) {
             errors.put("maxPrice", "must not be lower than minPrice");
         }
-        if (page < 0) {
-            errors.put("page", "must not be negative");
-        }
-        if (size < 1 || size > MAX_SIZE) {
-            errors.put("size", "must be between 1 and " + MAX_SIZE);
-        }
+        ListingParams.checkWindow(page, size, errors);
         if (!errors.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Invalid search", errors);
         }

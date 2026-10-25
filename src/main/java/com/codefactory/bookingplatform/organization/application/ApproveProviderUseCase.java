@@ -41,7 +41,7 @@ public class ApproveProviderUseCase {
                 .orElseThrow(OrganizationAccess::notFound);
         OrganizationStatus from = organization.getStatus();
         organization.approve(clock.instant());
-        organizations.saveStatusChange(organization, from, reason.trim(), adminId);
+        organizations.saveStatusChange(organization, from, reason.trim(), adminId, 0);
         events.publishEvent(new ProviderApproved(organization.getId(), organization.getName(),
                 organization.getContactEmail()));
         log.info("Provider {} approved by {}", organization.getId(), adminId);

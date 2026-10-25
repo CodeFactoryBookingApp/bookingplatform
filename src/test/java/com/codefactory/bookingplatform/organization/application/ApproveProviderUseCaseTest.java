@@ -23,6 +23,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,7 +67,7 @@ class ApproveProviderUseCaseTest {
         // Assert
         assertEquals(OrganizationStatus.ACTIVE, approved.getStatus());
         assertEquals(NOW, approved.getApprovedAt());
-        verify(organizations).saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", ADMIN);
+        verify(organizations).saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", ADMIN, 0);
         verify(events).publishEvent(new ProviderApproved(organization.getId(), "Barbería", "contacto@barberia.com"));
     }
 
@@ -82,7 +83,7 @@ class ApproveProviderUseCaseTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
-        verify(organizations, never()).saveStatusChange(any(), any(), any(), any());
+        verify(organizations, never()).saveStatusChange(any(), any(), any(), any(), anyInt());
         verify(events, never()).publishEvent(any(Object.class));
     }
 

@@ -96,6 +96,40 @@ public class Organization {
     }
 
     /**
+     * HU-003 "Suspender un proveedor con reservas futuras": an administrator takes an active
+     * provider out of the catalog. With future bookings the suspension has to be confirmed first,
+     * and the refusal says how many bookings it affects. The bookings themselves are kept.
+     */
+    public void suspend(int futureBookings, boolean confirmed) {
+        requireStatus(OrganizationStatus.ACTIVE, "suspended");
+        if (futureBookings > 0 && !confirmed) {
+            throw new BusinessException(ErrorCode.CONFIRMATION_REQUIRED,
+                    "The provider has " + futureBookings + " future bookings; confirm the suspension to go ahead",
+                    Map.of("affectedBookings", String.valueOf(futureBookings)));
+        }
+        this.status = OrganizationStatus.SUSPENDED;
+    }
+
+    /** HU-003: a suspended provider is visible and reservable again. Its approval date stands. */
+    public void reactivate() {
+        requireStatus(OrganizationStatus.SUSPENDED, "reactivated");
+        this.status = OrganizationStatus.ACTIVE;
+    }
+
+    /** HU-003: an administrator turns down a provider pending approval. */
+    public void reject() {
+        requireStatus(OrganizationStatus.PENDING_APPROVAL, "rejected");
+        this.status = OrganizationStatus.REJECTED;
+    }
+
+    private void requireStatus(OrganizationStatus expected, String action) {
+        if (status != expected) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "Only a " + expected + " provider can be " + action + "; this one is " + status);
+        }
+    }
+
+    /**
      * HU-002: new operating rules for the bookings made from now on. Returns the new version;
      * existing bookings keep pointing at theirs.
      */

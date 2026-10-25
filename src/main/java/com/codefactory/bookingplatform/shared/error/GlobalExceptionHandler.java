@@ -22,6 +22,7 @@ import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -76,6 +77,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleUnreadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
         ProblemDetail problem = build(ErrorCode.VALIDATION_ERROR, "Malformed request body", request);
+        return problem;
+    }
+
+    /**
+     * A query or path parameter that does not convert to its type, such as {@code status=foo} or
+     * {@code page=x}: the client's mistake, named in the details, never a 500.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        ProblemDetail problem = build(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.defaultMessage(), request);
+        problem.setProperty("details", Map.of(ex.getName(), "has an invalid value"));
         return problem;
     }
 

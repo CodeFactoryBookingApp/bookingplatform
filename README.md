@@ -211,6 +211,10 @@ Linux/macOS:
 | GET | `/api/v1/organizations/{id}` | Bearer `PROVIDER` miembro o `ADMIN` | HU-002, HU-022 |
 | PUT | `/api/v1/organizations/{id}/operation-policy` | Bearer `OWNER` o `MANAGER` del proveedor | HU-002 |
 | POST | `/api/v1/admin/organizations/{id}/approval` | Bearer `ADMIN` | HU-002 |
+| GET | `/api/v1/admin/organizations`, `/api/v1/admin/organizations/export` (CSV) | Bearer `ADMIN` | HU-003 |
+| POST | `/api/v1/admin/organizations/{id}/suspension`, `/reactivation`, `/rejection` | Bearer `ADMIN` | HU-003 |
+| GET | `/api/v1/admin/clients`, `/api/v1/admin/clients/export` (CSV) | Bearer `ADMIN` | HU-003 |
+| POST | `/api/v1/admin/clients/{id}/suspension`, `/reactivation` | Bearer `ADMIN` | HU-003 |
 | GET | `/api/v1/notifications/emails` | Bearer | HU-002 (correo de aprobación), ADR-0007 |
 | GET, POST | `/api/v1/organizations/{id}/resource-types` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
 | GET, POST | `/api/v1/organizations/{id}/resources` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |

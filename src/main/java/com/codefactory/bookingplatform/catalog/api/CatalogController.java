@@ -5,8 +5,7 @@ import com.codefactory.bookingplatform.catalog.domain.model.CatalogEntry;
 import com.codefactory.bookingplatform.catalog.domain.model.CatalogPage;
 import com.codefactory.bookingplatform.catalog.domain.model.OfferedService;
 import com.codefactory.bookingplatform.catalog.application.SearchCatalogUseCase;
-import com.codefactory.bookingplatform.shared.error.BusinessException;
-import com.codefactory.bookingplatform.shared.error.ErrorCode;
+import com.codefactory.bookingplatform.shared.listing.ListingParams;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,8 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 /** HU-005 public catalog: browsed before signing up, so no token is needed. */
@@ -78,25 +75,7 @@ public class CatalogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         CatalogCriteria criteria = new CatalogCriteria(q, categoryId, cityId, providerId, minPrice, maxPrice,
-                sortOf(sort), descending(direction), page, size);
+                ListingParams.sort(sort, CatalogCriteria.Sort.class), ListingParams.descending(direction), page, size);
         return CatalogResponse.from(searchCatalogUseCase.search(criteria));
-    }
-
-    private static CatalogCriteria.Sort sortOf(String sort) {
-        try {
-            return CatalogCriteria.Sort.valueOf(sort.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Invalid search",
-                    Map.of("sort", "must be name, price, duration or provider"));
-        }
-    }
-
-    private static boolean descending(String direction) {
-        return switch (direction.trim().toLowerCase(Locale.ROOT)) {
-            case "asc" -> false;
-            case "desc" -> true;
-            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Invalid search",
-                    Map.of("direction", "must be asc or desc"));
-        };
     }
 }

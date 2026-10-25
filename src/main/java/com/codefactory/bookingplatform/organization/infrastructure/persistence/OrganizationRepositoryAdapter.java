@@ -102,7 +102,8 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
     }
 
     @Override
-    public void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy) {
+    public void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy,
+                                 int affectedBookings) {
         // The reason goes first: the trigger on organizations rejects a status change that has
         // no matching row in account_status_changes (HU-003).
         AccountStatusChangeEntity change = new AccountStatusChangeEntity();
@@ -113,6 +114,7 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
         change.setToStatus(organization.getStatus().name());
         change.setReason(reason);
         change.setChangedBy(changedBy);
+        change.setAffectedBookings(affectedBookings);
         statusChanges.saveAndFlush(change);
 
         OrganizationEntity entity = organizations.findById(organization.getId()).orElseThrow();

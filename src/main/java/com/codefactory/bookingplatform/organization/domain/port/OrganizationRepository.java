@@ -38,9 +38,10 @@ public interface OrganizationRepository {
 
     /**
      * Stores the new status together with the reason, which the database demands for every
-     * status change of an organization (HU-003).
+     * status change of an organization, and the number of future bookings it affected (HU-003).
      */
-    void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy);
+    void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy,
+                          int affectedBookings);
 
     /** Closes the current policy version at {@code at} and stores the organization's new one from then on. */
     void savePolicy(Organization organization, Instant at);

@@ -28,6 +28,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.mock.web.MockHttpServletRequest;
 
@@ -556,6 +557,22 @@ class GlobalExceptionHandlerTest {
             // Assert
             assertEquals(ErrorCode.METHOD_NOT_ALLOWED.defaultMessage(), response.getBody().getDetail());
         }
+    }
+
+    @Test
+    @DisplayName("A parameter that does not convert to its type answers 400 naming the parameter, not 500")
+    void typeMismatchIs400NamingTheParameter() {
+        // Arrange
+        MethodArgumentTypeMismatchException ex = new MethodArgumentTypeMismatchException("foo", Integer.class, "page",
+                null, new NumberFormatException("foo"));
+
+        // Act
+        ProblemDetail problem = handler.handleTypeMismatch(ex, request);
+
+        // Assert
+        assertEquals(400, problem.getStatus());
+        assertEquals("VALIDATION_ERROR", propertiesOf(problem).get("errorCode"));
+        assertEquals(Map.of("page", "has an invalid value"), propertiesOf(problem).get("details"));
     }
 
     // ----------------------------------------------------------------------------------------

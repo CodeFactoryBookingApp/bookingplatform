@@ -40,6 +40,7 @@ class ErrorCodeTest {
             "HAS_FUTURE_BOOKINGS,         CONFLICT",
             "HAS_BOOKINGS,                CONFLICT",
             "INSUFFICIENT_RESOURCES,      CONFLICT",
+            "CONFIRMATION_REQUIRED,       CONFLICT",
             "RATE_LIMITED,                TOO_MANY_REQUESTS",
             "ACCOUNT_LOCKED,              TOO_MANY_REQUESTS",
             "UPSTREAM_AUTH_ERROR,         BAD_GATEWAY",

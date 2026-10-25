@@ -112,7 +112,7 @@ class OrganizationRepositoryAdapterTest {
         when(organizations.findById(organization.getId())).thenReturn(Optional.of(new OrganizationEntity()));
 
         // Act
-        adapter.saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", UUID.randomUUID());
+        adapter.saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", UUID.randomUUID(), 0);
 
         // Assert
         InOrder order = inOrder(statusChanges, organizations);
