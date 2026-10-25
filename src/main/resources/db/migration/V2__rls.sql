@@ -1,6 +1,7 @@
 -- =============================================================
 -- Seguridad Supabase — Row Level Security
--- Ejecutar DESPUÉS de crear las tablas (schema.sql o ddl-auto).
+-- Migración V2. Va después de V1 porque necesita las tablas.
+-- Como V1, es idempotente: en Supabase ya se había aplicado a mano.
 --
 -- Contexto: el anon key de Supabase es público y PostgREST
 -- expone el esquema `public`. Sin RLS, cualquier persona con
@@ -12,6 +13,15 @@
 -- La política del ADR-0002 es RLS en TODAS las tablas de
 -- negocio, así que este script cubre las diecinueve. Con RLS
 -- habilitado y sin políticas, el modo por defecto es denegar.
+--
+-- El historial de Flyway (`flyway_schema_history`) no va aquí:
+-- Flyway lo tiene bloqueado mientras migra, y el ALTER TABLE se
+-- quedaría esperando para siempre. Lo cubre el callback
+-- `afterMigrate__rls_historial_flyway.sql`.
+--
+-- Las tablas que creen migraciones posteriores habilitan RLS en
+-- su propia migración; la prueba DatabaseMigrationsIT falla si
+-- alguna tabla de `public` queda sin él.
 --
 -- Los bloques DO permiten ejecutarlo también contra un
 -- PostgreSQL local, donde los roles `anon` y `authenticated`
@@ -31,10 +41,12 @@ declare
         'account_status_changes'
     ];
     hay_roles boolean := exists (select 1 from pg_roles where rolname = 'anon');
+    n integer := 0;
 begin
     foreach t in array tablas loop
         if to_regclass('public.' || t) is not null then
             execute format('alter table public.%I enable row level security', t);
+            n := n + 1;
             if hay_roles then
                 execute format('revoke all on public.%I from anon, authenticated', t);
             end if;
@@ -42,9 +54,9 @@ begin
     end loop;
 
     if hay_roles then
-        raise notice 'RLS habilitado y acceso Data API revocado en % tablas', array_length(tablas, 1);
+        raise notice 'RLS habilitado y acceso Data API revocado en % tablas', n;
     else
-        raise notice 'RLS habilitado en % tablas. Los roles anon/authenticated no existen en esta base (PostgreSQL local): se omite el REVOKE', array_length(tablas, 1);
+        raise notice 'RLS habilitado en % tablas. Los roles anon/authenticated no existen en esta base (PostgreSQL local): se omite el REVOKE', n;
     end if;
 end $$;
 

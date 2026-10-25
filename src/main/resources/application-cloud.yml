@@ -6,9 +6,6 @@ spring:
       # pool small so a single instance never exhausts it.
       maximum-pool-size: 5
       minimum-idle: 1
-  jpa:
-    hibernate:
-      ddl-auto: validate
 
 logging:
   level:

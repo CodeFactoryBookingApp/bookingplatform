@@ -1,7 +1,7 @@
 # Consultas clave — Plataforma de Reservas
 
 Preguntas de negocio del caso traducidas a SQL. Todas se ejecutan sobre las
-tablas que crea `schema.sql` y todas devuelven filas con los datos de
+tablas que crean las migraciones de Flyway y todas devuelven filas con los datos de
 `seed.sql`. La versión ejecutable de corrido, con separadores, está en
 `consultas-clave.sql`; el workflow `database.yml` la corre en cada pull request
 y falla si alguna deja de devolver resultado.
@@ -234,6 +234,6 @@ where l.status = 'ACTIVE'
 order by o.name, l.name;
 ```
 
-Ver `schema.sql` (modelo físico), `modelo-logico.md` (entidades y
+Ver las migraciones de `src/main/resources/db/migration/` (modelo físico), `modelo-logico.md` (entidades y
 normalización), `seed.sql` (los datos sobre los que corren estas consultas) y
 `consultas-clave.sql` (la versión ejecutable).

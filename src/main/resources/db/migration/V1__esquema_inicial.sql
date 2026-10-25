@@ -1,14 +1,22 @@
 -- =====================================================================
 --  Plataforma de Reservas de Servicios — modelo físico
---  Sprint 1
+--  Migración V1: el esquema del Sprint 1, tal como se aplicaba a mano
+--  antes de Flyway (ADR-0005, ADR-0006).
 --
 --  PostgreSQL 15+ (probado en 16). Compatible con Supabase.
 --  Contra una base vacía crea las 19 tablas sin errores.
 --
---  También corre contra una base que ya tenga `clients` y
---  `login_attempts` del mapeo JPA: esas dos se saltan, y sus
---  restricciones se añaden con bloques DO porque
---  `create table if not exists` no las agrega si la tabla ya existe.
+--  Es idempotente a propósito, y tiene que seguir siéndolo: las bases
+--  creadas antes de Flyway (Supabase y las locales) ya tienen este
+--  esquema pero no el historial. Flyway las marca con la línea base 0
+--  y les vuelve a aplicar V1, que se salta lo que ya existe y crea lo
+--  que falte. También corre contra una base que sólo tenga `clients` y
+--  `login_attempts` del antiguo `ddl-auto=update`: sus restricciones se
+--  añaden con bloques DO porque `create table if not exists` no las
+--  agrega si la tabla ya existe.
+--
+--  NO SE MODIFICA. Flyway guarda su checksum y rechaza arrancar si
+--  cambia. Cualquier cambio de esquema va en una migración nueva.
 --
 --  Lo que este esquema NO garantiza está al final del archivo.
 -- =====================================================================

@@ -1,6 +1,6 @@
 # ADR-0002: PostgreSQL administrado en Supabase como base de datos y proveedor de identidad
 
-- **Estado:** Aceptado; la estrategia de esquema la modifica el ADR-0005
+- **Estado:** Aceptado; la estrategia de esquema la modifica el ADR-0005 y la reemplaza el ADR-0006
 - **Fecha:** 2026-09-18
 - **Prioridad:** Alta
 - **Decisores:** Equipo de desarrollo — rol Arquitecto de Software y BD

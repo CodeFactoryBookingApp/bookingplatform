@@ -7,10 +7,19 @@ spring:
     password: ${DATABASE_PASSWORD:postgres}
     hikari:
       maximum-pool-size: 10
+  flyway:
+    # Databases created before Flyway (Supabase and local ones from Sprint 1)
+    # already hold the schema but no history table. Baseline 0 marks them as
+    # predating V1, so V1 and V2, which are idempotent, still run on them and
+    # create whatever is missing. A new empty database just migrates (ADR-0006).
+    baseline-on-migrate: true
+    baseline-version: 0
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: ${JPA_DDL_AUTO:update}
+      # Flyway owns the schema in every profile; Hibernate only checks that
+      # the entity mapping matches it.
+      ddl-auto: validate
     properties:
       hibernate:
         jdbc:
