@@ -57,6 +57,9 @@ public class CatalogSearchAdapter implements CatalogSearch {
         this.jdbc = jdbc;
     }
 
+    // Every value is a bound parameter; the only text put into the SQL is the sort column, taken
+    // from a fixed map, never from the request.
+    @SuppressWarnings("java:S2077")
     @Override
     public CatalogPage search(CatalogCriteria criteria) {
         StringBuilder where = new StringBuilder(FROM);

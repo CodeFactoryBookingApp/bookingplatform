@@ -150,7 +150,7 @@ public class Agenda {
      * bookings are checked the same way.
      */
     public void copyDay(DayOfWeek from, Set<DayOfWeek> to, List<BookedSlot> futureBookings, ZoneId zone) {
-        List<TimeBlock> source = blocks.stream().filter(block -> block.day() == from).toList();
+        List<TimeBlock> source = blocks.stream().filter(block -> block.day().equals(from)).toList();
         if (source.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Nothing to copy",
                     Map.of("fromDay", from + " has no time blocks"));

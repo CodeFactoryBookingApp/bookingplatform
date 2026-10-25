@@ -61,6 +61,9 @@ public class ProviderListingAdapter implements ProviderListing {
         this.jdbc = jdbc;
     }
 
+    // Every value is a bound parameter; the only text put into the SQL is the sort column, taken
+    // from a fixed map, never from the request.
+    @SuppressWarnings("java:S2077")
     @Override
     public ResultPage<ProviderSummary> find(ProviderFilter filter) {
         List<Object> args = new ArrayList<>();
@@ -73,6 +76,9 @@ public class ProviderListingAdapter implements ProviderListing {
         return new ResultPage<>(rows, total == null ? 0 : total, filter.page(), filter.size());
     }
 
+    // Every value is a bound parameter; the only text put into the SQL is the sort column, taken
+    // from a fixed map, never from the request.
+    @SuppressWarnings("java:S2077")
     @Override
     public List<ProviderSummary> findAll(ProviderFilter filter) {
         List<Object> args = new ArrayList<>();

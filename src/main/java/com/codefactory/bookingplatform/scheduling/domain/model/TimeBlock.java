@@ -26,12 +26,12 @@ public record TimeBlock(DayOfWeek day, LocalTime start, LocalTime end) {
     }
 
     public boolean overlaps(TimeBlock other) {
-        return day == other.day && start.isBefore(other.end) && other.start.isBefore(end);
+        return day.equals(other.day) && start.isBefore(other.end) && other.start.isBefore(end);
     }
 
     /** Whether [from, to) on that day fits inside the block. */
     public boolean contains(DayOfWeek onDay, LocalTime from, LocalTime to) {
-        return day == onDay && !from.isBefore(start) && !to.isAfter(end);
+        return day.equals(onDay) && !from.isBefore(start) && !to.isAfter(end);
     }
 
     public TimeBlock on(DayOfWeek otherDay) {
