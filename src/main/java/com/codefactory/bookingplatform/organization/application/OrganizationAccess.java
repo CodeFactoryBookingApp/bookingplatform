@@ -41,6 +41,14 @@ public class OrganizationAccess {
         return role;
     }
 
+    /**
+     * Whether a location belongs to the organization. Other modules use it before attaching
+     * anything to a location, since the id travels in the request body.
+     */
+    public boolean ownsLocation(UUID organizationId, UUID locationId) {
+        return repository.hasLocation(organizationId, locationId);
+    }
+
     static BusinessException notFound() {
         return new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Organization not found");
     }

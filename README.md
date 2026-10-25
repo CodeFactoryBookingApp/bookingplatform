@@ -47,6 +47,9 @@ com.codefactory.bookingplatform
 ├── auth/           HU-021: domain (policies + ports) → application (fachada
 │                   UserProvisioning + use cases) → infrastructure (GoTrueClient,
 │                   login_attempts) → api (REST /auth)
+├── catalog/        HU-009: domain (Resource con mantenimientos y retiro) → application
+│                   (use cases, ámbito vía OrganizationAccess) → infrastructure (JPA)
+│                   → api (REST /organizations/{id}/resource-types, /resources)
 ├── organization/   HU-002: domain (Organization + política versionada) → application
 │                   (registro, aprobación, OrganizationAccess) → infrastructure (JPA)
 │                   → api (REST /provider-registrations, /organizations, /admin)
@@ -204,6 +207,10 @@ Linux/macOS:
 | PUT | `/api/v1/organizations/{id}/operation-policy` | Bearer `OWNER` o `MANAGER` del proveedor | HU-002 |
 | POST | `/api/v1/admin/organizations/{id}/approval` | Bearer `ADMIN` | HU-002 |
 | GET | `/api/v1/notifications/emails` | Bearer | HU-002 (correo de aprobación), ADR-0007 |
+| GET, POST | `/api/v1/organizations/{id}/resource-types` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
+| GET, POST | `/api/v1/organizations/{id}/resources` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
+| POST | `/api/v1/organizations/{id}/resources/{resourceId}/maintenances` | Bearer `OWNER` o `MANAGER` | HU-009 |
+| POST | `/api/v1/organizations/{id}/resources/{resourceId}/retirement` | Bearer `OWNER` o `MANAGER` | HU-009 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
 

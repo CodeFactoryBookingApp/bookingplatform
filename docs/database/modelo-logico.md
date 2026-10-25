@@ -29,6 +29,7 @@ erDiagram
     LOCATION ||--o{ RESOURCE : "aloja"
     LOCATION ||--o{ SCHEDULE : "abre en"
     RESOURCE ||--o{ SCHEDULE : "disponible en"
+    RESOURCE ||--o{ RESOURCE_MAINTENANCE : "se detiene en"
     CLIENT ||--o{ BOOKING : "reserva"
     ORGANIZATION ||--o{ BOOKING : "atiende"
     SERVICE ||--o{ BOOKING : "es reservado en"
@@ -154,10 +155,19 @@ erDiagram
     }
     RESOURCE {
         uuid id PK
+        uuid organization_id FK "V7, cuadra tipo y sede"
         uuid resource_type_id FK
         uuid location_id FK "UK con name"
         string name
-        string status "ACTIVE INACTIVE"
+        int capacity "V7, personas a la vez"
+        string status "ACTIVE RETIRED (V7)"
+    }
+    RESOURCE_MAINTENANCE {
+        uuid id PK
+        uuid resource_id FK
+        timestamptz starts_at "sin solape por recurso"
+        timestamptz ends_at
+        string reason
     }
     SCHEDULE {
         uuid id PK

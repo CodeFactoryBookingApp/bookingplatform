@@ -16,6 +16,7 @@ arrancar, en orden de versión:
 | `V4__identificacion_del_proveedor.sql` | El proveedor se identifica con tipo (NIT, CC, CE, PASAPORTE) y número; `nit` pasa a `identification_number` y la unicidad es por la pareja |
 | `V5__datos_de_referencia.sql` | Categorías, ciudades y la moneda COP. Son datos de referencia que la aplicación necesita en toda base, no datos de prueba |
 | `V6__bandeja_de_correo.sql` | `sent_emails`: los correos de la plataforma se guardan ahí y su destinatario los lee por la API, porque Render gratis bloquea SMTP (ADR-0007) |
+| `V7__recursos_capacidad_y_mantenimiento.sql` | Recursos con capacidad, estado `ACTIVE`/`RETIRED` y organización (que cuadra tipo y sede); tabla `resource_maintenances` de periodos sin solape (HU-009) |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
@@ -30,7 +31,7 @@ siguiente. Si crea tablas, habilita RLS en ellas en la misma migración;
 |---|---|---|
 | `seed.sql` | Datos de prueba. Tres organizaciones, cinco servicios, ocho reservas | Sí, después de las migraciones |
 | `consultas-clave.sql` | Las catorce preguntas de negocio, ejecutables de corrido | Sí, para ver resultados |
-| `pruebas-integridad.sql` | Diecinueve instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
+| `pruebas-integridad.sql` | Veintiuna instrucciones que violan una regla cada una y deben ser rechazadas | Sí, para comprobar |
 | `modelo-logico.md` | Diagrama entidad-relación, decisiones de modelado y normalización | No, se lee |
 | `consultas-clave.md` | Las mismas catorce preguntas con su explicación | No, se lee |
 | `diagrama-er.drawio` | Diagrama editable. La primera página, **Modelo completo**, tiene las diecinueve entidades, las notas y las historias de usuario en una sola hoja; las cuatro siguientes son las tres vistas por dominio y la hoja de historias de usuario | No |
@@ -92,10 +93,10 @@ toque esta carpeta, las migraciones o el mapeo JPA. Comprueba que:
 
 - las migraciones ejecuten contra una base vacía;
 - V1 y V2 sigan siendo idempotentes;
-- se creen las veinte tablas (las diecinueve de V1 y la bandeja de correo de V6);
+- se creen las veintiuna tablas (las diecinueve de V1, la bandeja de V6 y los mantenimientos de V7);
 - los datos de prueba carguen;
 - las catorce consultas devuelvan filas;
-- las diecinueve pruebas de integridad sean rechazadas;
+- las veintiuna pruebas de integridad sean rechazadas;
 - ninguna tabla quede sin RLS.
 
 Las pruebas de integración del build corren sobre el esquema que crea Flyway,

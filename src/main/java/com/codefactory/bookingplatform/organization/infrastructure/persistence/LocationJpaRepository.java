@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface LocationJpaRepository extends JpaRepository<LocationEntity, UUID> {
 
     List<LocationEntity> findByOrganizationId(UUID organizationId, Sort sort);
+
+    boolean existsByIdAndOrganizationId(UUID id, UUID organizationId);
 }

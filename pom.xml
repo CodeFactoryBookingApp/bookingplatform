@@ -372,6 +372,9 @@
 						<param>com.codefactory.bookingplatform.organization.application.ProviderRegistration</param>
 						<param>com.codefactory.bookingplatform.organization.application.ProviderApproved</param>
 						<param>com.codefactory.bookingplatform.notification.domain.model.SentEmail</param>
+						<param>com.codefactory.bookingplatform.catalog.domain.model.ResourceStatus</param>
+						<param>com.codefactory.bookingplatform.catalog.domain.model.ResourceCondition</param>
+						<param>com.codefactory.bookingplatform.catalog.domain.model.ResourceType</param>
 					</excludedClasses>
 					<!--
 					  Los tests de integracion quedan fuera de la EJECUCION: levantan

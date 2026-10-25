@@ -8,7 +8,7 @@
 --
 --  Uso:  con las migraciones de src/main/resources/db/migration ya aplicadas,
 --        psql -f seed.sql -f pruebas-integridad.sql
---  Se ejecuta SIN ON_ERROR_STOP para que se vean los diecinueve rechazos.
+--  Se ejecuta SIN ON_ERROR_STOP para que se vean los veintiún rechazos.
 --  Usa metacomandos de psql, así que se ejecuta con `psql -f`.
 -- =====================================================================
 
@@ -159,8 +159,22 @@ values ('44444444-0000-0000-0000-000000000001', '66666666-0000-0000-0000-0000000
 
 
 \echo ''
+\echo '--- 20. Recurso con el tipo de un proveedor y la sede de otro (HU-009, V7) ---'
+insert into resources (organization_id, resource_type_id, location_id, name)
+values ('66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000001',
+        '88888888-0000-0000-0000-000000000001', 'Silla cruzada');
+
+
+\echo ''
+\echo '--- 21. Dos mantenimientos solapados del mismo recurso (HU-009, V7) ---'
+insert into resource_maintenances (resource_id, starts_at, ends_at)
+values ('cccc0000-0000-0000-0000-000000000001', now() + interval '1 day',  now() + interval '3 days'),
+       ('cccc0000-0000-0000-0000-000000000001', now() + interval '2 days', now() + interval '4 days');
+
+
+\echo ''
 \echo '====================================================================='
-\echo ' Las diecinueve instrucciones anteriores debieron ser rechazadas.'
+\echo ' Las veintiuna instrucciones anteriores debieron ser rechazadas.'
 \echo ' Si alguna dice INSERT, UPDATE o DELETE en vez de ERROR, hay una'
 \echo ' regla de negocio que la base no está garantizando.'
 \echo '====================================================================='

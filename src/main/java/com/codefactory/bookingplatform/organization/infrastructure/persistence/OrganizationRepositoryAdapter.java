@@ -88,6 +88,11 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
     }
 
     @Override
+    public boolean hasLocation(UUID organizationId, UUID locationId) {
+        return locationId != null && locations.existsByIdAndOrganizationId(locationId, organizationId);
+    }
+
+    @Override
     public void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy) {
         // The reason goes first: the trigger on organizations rejects a status change that has
         // no matching row in account_status_changes (HU-003).

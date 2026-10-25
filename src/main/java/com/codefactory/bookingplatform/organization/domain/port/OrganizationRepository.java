@@ -31,6 +31,8 @@ public interface OrganizationRepository {
 
     Optional<MemberRole> findMemberRole(UUID organizationId, UUID userId);
 
+    boolean hasLocation(UUID organizationId, UUID locationId);
+
     /**
      * Stores the new status together with the reason, which the database demands for every
      * status change of an organization (HU-003).

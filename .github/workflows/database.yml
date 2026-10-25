@@ -77,11 +77,11 @@ jobs:
             $PSQL -v ON_ERROR_STOP=1 -q -f "$f"
           done
 
-      - name: Se crearon las 20 tablas
+      - name: Se crearon las 21 tablas
         run: |
           n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'")
           echo "tablas creadas: $n"
-          test "$n" -eq 20
+          test "$n" -eq 21
 
       # V1 y V2 se vuelven a aplicar sobre las bases creadas antes de Flyway
       # (línea base 0), así que tienen que seguir siendo idempotentes. Las
@@ -114,7 +114,7 @@ jobs:
           rechazos=$(echo "$salida" | grep -cE '(^|: )ERROR:'          || true)
           coladas=$(echo "$salida"  | grep -cE '^(INSERT|UPDATE|DELETE) ' || true)
           echo "rechazos: $rechazos · instrucciones que pasaron: $coladas"
-          test "$rechazos" -eq 19
+          test "$rechazos" -eq 21
           test "$coladas" -eq 0
 
       # Ninguna tabla de public sin RLS, sean cuantas sean: una migración
