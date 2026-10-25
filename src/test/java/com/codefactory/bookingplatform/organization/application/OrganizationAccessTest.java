@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -91,5 +92,47 @@ class OrganizationAccessTest {
 
         // Assert
         assertEquals(MemberRole.STAFF, role);
+    }
+
+    @Test
+    @DisplayName("The zone of a location is the one the repository resolves (its own, or the organization's)")
+    void locationZoneIsResolved() {
+        // Arrange
+        UUID location = UUID.randomUUID();
+        when(repository.locationTimezone(ORGANIZATION, location)).thenReturn(Optional.of("America/Bogota"));
+
+        // Act
+        ZoneId zone = access.locationZone(ORGANIZATION, location);
+
+        // Assert
+        assertEquals(ZoneId.of("America/Bogota"), zone);
+    }
+
+    @Test
+    @DisplayName("A location that is not the organization's has no zone: 404")
+    void locationZoneOfAForeignLocationIsNotFound() {
+        // Arrange
+        UUID location = UUID.randomUUID();
+        when(repository.locationTimezone(ORGANIZATION, location)).thenReturn(Optional.empty());
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> access.locationZone(ORGANIZATION, location));
+
+        // Assert
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
+    }
+
+    @Test
+    @DisplayName("Whether a location is the organization's is what the repository says")
+    void ownsLocationAsksTheRepository() {
+        // Arrange
+        UUID location = UUID.randomUUID();
+        when(repository.hasLocation(ORGANIZATION, location)).thenReturn(true);
+
+        // Act
+        boolean owns = access.ownsLocation(ORGANIZATION, location);
+
+        // Assert
+        assertTrue(owns);
     }
 }

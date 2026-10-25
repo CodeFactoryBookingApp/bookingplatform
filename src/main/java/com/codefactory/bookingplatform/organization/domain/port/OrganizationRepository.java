@@ -33,6 +33,9 @@ public interface OrganizationRepository {
 
     boolean hasLocation(UUID organizationId, UUID locationId);
 
+    /** The time zone of a location of the organization: its own, or else the one of the organization. */
+    Optional<String> locationTimezone(UUID organizationId, UUID locationId);
+
     /**
      * Stores the new status together with the reason, which the database demands for every
      * status change of an organization (HU-003).

@@ -6,6 +6,7 @@ import com.codefactory.bookingplatform.shared.error.BusinessException;
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.springframework.stereotype.Service;
 
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.UUID;
 
@@ -47,6 +48,16 @@ public class OrganizationAccess {
      */
     public boolean ownsLocation(UUID organizationId, UUID locationId) {
         return repository.hasLocation(organizationId, locationId);
+    }
+
+    /**
+     * The zone in which the opening hours of a location are written (its own, or the
+     * organization's), so that a booking stored as an instant can be compared with them.
+     */
+    public ZoneId locationZone(UUID organizationId, UUID locationId) {
+        return repository.locationTimezone(organizationId, locationId)
+                .map(ZoneId::of)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "Location not found"));
     }
 
     static BusinessException notFound() {

@@ -93,6 +93,15 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
     }
 
     @Override
+    public Optional<String> locationTimezone(UUID organizationId, UUID locationId) {
+        return locations.findById(locationId)
+                .filter(location -> location.getOrganizationId().equals(organizationId))
+                .flatMap(location -> location.getTimezone() != null
+                        ? Optional.of(location.getTimezone())
+                        : organizations.findById(organizationId).map(OrganizationEntity::getTimezone));
+    }
+
+    @Override
     public void saveStatusChange(Organization organization, OrganizationStatus from, String reason, UUID changedBy) {
         // The reason goes first: the trigger on organizations rejects a status change that has
         // no matching row in account_status_changes (HU-003).

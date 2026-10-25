@@ -27,8 +27,11 @@ erDiagram
     RESOURCE_TYPE ||--o{ SERVICE_RESOURCE_REQUIREMENT : "es exigido por"
     RESOURCE_TYPE ||--|{ RESOURCE : "se instancia en"
     LOCATION ||--o{ RESOURCE : "aloja"
-    LOCATION ||--o{ SCHEDULE : "abre en"
-    RESOURCE ||--o{ SCHEDULE : "disponible en"
+    LOCATION ||--o{ AGENDA : "abre en"
+    RESOURCE |o--o{ AGENDA : "opcional, agenda propia"
+    AGENDA ||--|{ SCHEDULE : "bloques semanales"
+    AGENDA ||--|{ AGENDA_SERVICE : "reserva"
+    SERVICE_LOCATION ||--o{ AGENDA_SERVICE : "se reserva en"
     RESOURCE ||--o{ RESOURCE_MAINTENANCE : "se detiene en"
     CLIENT ||--o{ BOOKING : "reserva"
     ORGANIZATION ||--o{ BOOKING : "atiende"
@@ -169,12 +172,26 @@ erDiagram
         timestamptz ends_at
         string reason
     }
+    AGENDA {
+        uuid id PK
+        uuid organization_id FK
+        uuid location_id FK
+        uuid resource_id FK "nulo = toda la sede (V8)"
+        string name "UK por organización"
+        smallint slot_minutes "15, 30 o 60"
+        date valid_from "EXCLUDE: sin dos vigentes por sede o recurso"
+        date valid_until "nulo = sin fin"
+    }
+    AGENDA_SERVICE {
+        uuid agenda_id PK
+        uuid service_id PK
+        uuid location_id FK "el servicio se presta en la sede"
+    }
     SCHEDULE {
         uuid id PK
-        uuid location_id FK
-        uuid resource_id FK "nulo = toda la sede"
+        uuid agenda_id FK "V8"
         smallint day_of_week "ISO 1 lunes a 7 domingo"
-        time start_time "EXCLUDE sin solapes"
+        time start_time "EXCLUDE sin solapes en la agenda"
         time end_time
         boolean active
     }

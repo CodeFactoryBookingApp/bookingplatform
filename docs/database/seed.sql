@@ -23,7 +23,7 @@ begin
 end $$;
 
 truncate table account_status_changes, booking_status_changes, booking_resources,
-               bookings, schedules, resources, service_resource_requirements,
+               bookings, schedules, agenda_services, agendas, resource_maintenances, sent_emails, resources, service_resource_requirements,
                service_locations, services, resource_types, locations,
                organization_policies, organization_members, organizations,
                login_attempts, clients,
@@ -140,13 +140,25 @@ insert into resources (id, organization_id, resource_type_id, location_id, name,
     ('cccc0000-0000-0000-0000-000000000007', '66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad A', 1, 'ACTIVE'),
     ('cccc0000-0000-0000-0000-000000000008', '66666666-0000-0000-0000-000000000002', 'bbbb0000-0000-0000-0000-000000000003', '88888888-0000-0000-0000-000000000003', 'Unidad B', 1, 'RETIRED');
 
--- ---------- agenda: lunes a viernes 8:00-18:00, sábado 8:00-13:00 ----------
-insert into schedules (location_id, resource_id, day_of_week, start_time, end_time, active)
-select r.location_id, r.id, d.dow, time '08:00',
-       case when d.dow in (6, 7) then time '13:00' else time '18:00' end, true
+-- ---------- agendas (V8): una por recurso activo ----------
+-- Granularidad de 30 minutos, vigente desde hace un mes y sin fecha de fin,
+-- con los servicios que se prestan en su sede. Bloques de lunes a viernes
+-- 8:00-18:00 y fines de semana 8:00-13:00.
+insert into agendas (organization_id, location_id, resource_id, name, slot_minutes, valid_from)
+select r.organization_id, r.location_id, r.id, 'Agenda ' || r.name, 30, current_date - 30
 from resources r
-cross join (select generate_series(1, 7) as dow) d
 where r.status = 'ACTIVE';
+
+insert into agenda_services (agenda_id, service_id, location_id)
+select a.id, sl.service_id, a.location_id
+from agendas a
+    inner join service_locations sl on sl.location_id = a.location_id;
+
+insert into schedules (agenda_id, day_of_week, start_time, end_time, active)
+select a.id, d.dow, time '08:00',
+       case when d.dow in (6, 7) then time '13:00' else time '18:00' end, true
+from agendas a
+cross join (select generate_series(1, 7) as dow) d;
 
 -- ---------- reservas ----------
 -- session_id: en servicios individuales coincide con el id de la reserva;

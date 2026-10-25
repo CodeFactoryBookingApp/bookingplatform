@@ -125,7 +125,10 @@ select l.name               as sede,
        sch.end_time         as cierra,
        count(br.booking_id) as reservas_vivas
 from schedules sch
-    inner join resources r on r.id = sch.resource_id
+    inner join agendas   a on a.id = sch.agenda_id
+                          and (now() + interval '2 days')::date >= a.valid_from
+                          and (a.valid_until is null or (now() + interval '2 days')::date <= a.valid_until)
+    inner join resources r on r.id = a.resource_id
     inner join locations l on l.id = r.location_id
     left  join booking_resources br on br.resource_id = r.id
                                    and br.status in ('RESERVED', 'CONFIRMED')

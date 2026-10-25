@@ -51,6 +51,9 @@ com.codefactory.bookingplatform
 │                   retiro) → application (use cases, ámbito vía OrganizationAccess) →
 │                   infrastructure (JPA + JDBC) → api (REST /organizations/{id}/services,
 │                   /resource-types, /resources)
+├── scheduling/     HU-006: domain (Agenda con bloques, vigencia y granularidad) →
+│                   application (use cases; reservas futuras vía puerto) → infrastructure
+│                   (JPA + JDBC) → api (REST /organizations/{id}/agendas)
 ├── organization/   HU-002: domain (Organization + política versionada) → application
 │                   (registro, aprobación, OrganizationAccess) → infrastructure (JPA)
 │                   → api (REST /provider-registrations, /organizations, /admin)
@@ -215,6 +218,10 @@ Linux/macOS:
 | GET, POST | `/api/v1/organizations/{id}/services` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-004 |
 | GET, PUT, DELETE | `/api/v1/organizations/{id}/services/{serviceId}` | Bearer miembro (PUT, DELETE: `OWNER` o `MANAGER`) | HU-004 |
 | POST | `/api/v1/organizations/{id}/services/{serviceId}/activation`, `/deactivation` | Bearer `OWNER` o `MANAGER` | HU-004, HU-009 |
+| GET, POST | `/api/v1/organizations/{id}/agendas` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-006 |
+| GET | `/api/v1/organizations/{id}/agendas/{agendaId}` | Bearer miembro | HU-006 |
+| PUT | `/api/v1/organizations/{id}/agendas/{agendaId}/blocks`, `/granularity` | Bearer `OWNER` o `MANAGER` | HU-006 |
+| POST | `/api/v1/organizations/{id}/agendas/{agendaId}/day-copies` | Bearer `OWNER` o `MANAGER` | HU-006 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
 
