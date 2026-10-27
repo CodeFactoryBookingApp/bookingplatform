@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
@@ -147,6 +148,75 @@ class ResourceTest {
 
             // Assert
             assertDoesNotThrow(act);
+        }
+
+        /** Equivalence partitions of a new period against an existing one [4h, 8h). */
+        @ParameterizedTest(name = "[{index}] [{0}h, {1}h) against [4h, 8h)")
+        @CsvSource({
+                "4, 8",   // the same period
+                "2, 10",  // contains the existing one
+                "5, 7",   // inside the existing one
+                "2, 5",   // overlaps its start
+                "7, 9"    // overlaps its end (boundary: one hour before it ends)
+        })
+        @DisplayName("HU-009: any period that shares time with an existing one is a 409, and is not added")
+        void everyKindOfOverlapIsRejected(int from, int to) {
+            // Arrange
+            Resource resource = resource();
+            resource.scheduleMaintenance(window(4, 8));
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> resource.scheduleMaintenance(window(from, to)));
+
+            // Assert
+            assertEquals(ErrorCode.OVERLAPPING_PERIOD, ex.errorCode());
+            assertEquals(1, resource.getMaintenances().size());
+        }
+
+        @Test
+        @DisplayName("A period that ends exactly when an existing one starts does not overlap it")
+        void periodEndingAtTheNextStartIsAccepted() {
+            // Arrange
+            Resource resource = resource();
+            resource.scheduleMaintenance(window(4, 8));
+
+            // Act
+            MaintenanceWindow earlier = resource.scheduleMaintenance(window(1, 4));
+
+            // Assert
+            assertEquals(2, resource.getMaintenances().size());
+            assertTrue(resource.getMaintenances().contains(earlier));
+        }
+
+        @ParameterizedTest(name = "[{index}] startsAt={0} endsAt={1}")
+        @CsvSource(nullValues = "NULL", value = {
+                "2026-11-03T15:00:00Z, 2026-11-03T14:59:59Z",
+                "2026-11-03T15:00:00Z, NULL"
+        })
+        @DisplayName("A period that ends before it starts, or lacks an end, is a 400 on endsAt")
+        void periodEndingBeforeItStartsIsRejected(Instant startsAt, Instant endsAt) {
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> new MaintenanceWindow(UUID.randomUUID(), startsAt, endsAt, null));
+
+            // Assert
+            assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+            assertEquals("must be after startsAt", ex.details().get("endsAt"));
+        }
+
+        @Test
+        @DisplayName("A retired resource reports RETIRED even inside a maintenance period")
+        void retirementPrevailsOverMaintenance() {
+            // Arrange
+            Resource resource = new Resource(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                    UUID.randomUUID(), "Silla 9", 1, ResourceStatus.RETIRED, List.of(window(0, 4)));
+
+            // Act
+            ResourceCondition condition = resource.conditionAt(at(1));
+
+            // Assert
+            assertEquals(ResourceCondition.RETIRED, condition);
         }
 
         @Test

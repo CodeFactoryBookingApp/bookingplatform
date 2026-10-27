@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -112,6 +113,18 @@ class OfferedServiceTest {
         }
 
         @Test
+        @DisplayName("Missing lists of locations and requirements are rejected as missing, not as a failure")
+        void nullListsAreRejectedAsMissing() {
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class, () -> service(null, null));
+
+            // Assert
+            assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+            assertEquals(Map.of("locationIds", "at least one location is required",
+                    "requirements", "at least one required resource type is needed"), ex.details());
+        }
+
+        @Test
         @DisplayName("A requirement needs at least one resource")
         void requirementQuantityIsAtLeastOne() {
             // Act
@@ -119,6 +132,80 @@ class OfferedServiceTest {
 
             // Assert
             assertTrue(ex.details().containsKey("quantity"));
+        }
+    }
+
+    /**
+     * HU-004 limits of every numeric field, by boundary values (n-1 rejected, n accepted): duration
+     * at least 1, preparation and cleanup not negative, price zero or more with at most two
+     * decimals, capacity at least 1 (1 individual, 2 the smallest group).
+     */
+    @Nested
+    @DisplayName("Boundaries of the service details (HU-004)")
+    class DetailBoundaries {
+
+        private static OfferedService.Details details(int duration, int preparation, int cleanup, String price,
+                                                      int capacity) {
+            return new OfferedService.Details("Corte clásico", null, duration, preparation, cleanup,
+                    price == null ? null : new BigDecimal(price), capacity);
+        }
+
+        private static OfferedService create(OfferedService.Details details) {
+            return OfferedService.create(UUID.randomUUID(), UUID.randomUUID(), details, List.of(LOCATION_A),
+                    List.of(new ResourceRequirement(CHAIR, 1)));
+        }
+
+        @Test
+        @DisplayName("The smallest valid values are accepted: 1 minute, no preparation or cleanup, free, individual")
+        void smallestValidValuesAreAccepted() {
+            // Act
+            OfferedService service = create(details(1, 0, 0, "0", 1));
+
+            // Assert
+            assertEquals(details(1, 0, 0, "0", 1), service.details());
+            assertFalse(service.isGroup(), "a capacity of 1 is an individual service");
+        }
+
+        @Test
+        @DisplayName("A price with exactly two decimals is accepted (boundary: scale 2)")
+        void priceWithTwoDecimalsIsAccepted() {
+            // Act
+            OfferedService service = create(details(30, 0, 0, "0.01", 1));
+
+            // Assert
+            assertEquals(new BigDecimal("0.01"), service.getPrice());
+        }
+
+        @ParameterizedTest(name = "[{index}] duration={0} preparation={1} cleanup={2} price={3} capacity={4} -> {5}")
+        @CsvSource(nullValues = "NULL", value = {
+                "0, 0, 0, 0, 1, durationMinutes, must be at least 1",
+                "1, -1, 0, 0, 1, preparationMinutes, must not be negative",
+                "1, 0, -1, 0, 1, cleanupMinutes, must not be negative",
+                "1, 0, 0, -0.01, 1, price, 'must be zero or more, with at most two decimals'",
+                "1, 0, 0, NULL, 1, price, 'must be zero or more, with at most two decimals'",
+                "1, 0, 0, 0, 0, customerCapacity, 'must be at least 1: 1 is individual, more is a group'"
+        })
+        @DisplayName("One step below each limit is rejected, and only that field is reported")
+        void oneBelowEachLimitIsRejected(int duration, int preparation, int cleanup, String price, int capacity,
+                                         String field, String message) {
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> create(details(duration, preparation, cleanup, price, capacity)));
+
+            // Assert
+            assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+            assertEquals(Map.of(field, message), ex.details());
+        }
+
+        @Test
+        @DisplayName("Every invalid field is reported at once, so the provider fixes them in one go")
+        void everyInvalidFieldIsReported() {
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class, () -> create(details(0, -1, -1, "-1", 0)));
+
+            // Assert
+            assertEquals(Set.of("durationMinutes", "preparationMinutes", "cleanupMinutes", "price",
+                    "customerCapacity"), ex.details().keySet());
         }
     }
 
@@ -166,6 +253,26 @@ class OfferedServiceTest {
 
             // Assert
             assertEquals(Map.of(LOCATION_B + "/" + CHAIR, "requires 4, has 3"), ex.details());
+        }
+
+        @Test
+        @DisplayName("Decision table location x type: every uncovered pair is reported, the covered ones are not")
+        void everyShortfallIsReported() {
+            // Arrange
+            OfferedService service = service(List.of(LOCATION_A, LOCATION_B),
+                    List.of(new ResourceRequirement(CHAIR, 2), new ResourceRequirement(ROOM, 1)));
+            Map<String, Long> active = Map.of(
+                    LOCATION_A + "/" + CHAIR, 2L, LOCATION_A + "/" + ROOM, 0L,
+                    LOCATION_B + "/" + CHAIR, 1L, LOCATION_B + "/" + ROOM, 1L);
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> service.activate((location, type) -> active.get(location + "/" + type)));
+
+            // Assert
+            assertEquals(Map.of(LOCATION_A + "/" + ROOM, "requires 1, has 0",
+                    LOCATION_B + "/" + CHAIR, "requires 2, has 1"), ex.details());
+            assertEquals(ServiceStatus.INACTIVE, service.getStatus());
         }
 
         @Test
