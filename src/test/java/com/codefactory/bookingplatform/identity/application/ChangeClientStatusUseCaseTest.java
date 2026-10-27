@@ -11,6 +11,9 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -75,6 +78,37 @@ class ChangeClientStatusUseCaseTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals("The client is already SUSPENDED", ex.getMessage());
+        verify(clients, never()).save(any());
+        verify(statusChanges, never()).record(any(), any(), any(), any(), any());
+    }
+
+    /**
+     * State transition testing of the administrative acts. The aggregate refuses these cells; the
+     * use case must leave the client as it was and record no change. The error code is not asserted:
+     * the aggregate answers VALIDATION_ERROR (400) where the use case answers 409 for "already
+     * suspended", an inconsistency reported as a defect instead of being fixed in a test.
+     */
+    @ParameterizedTest(name = "[{index}] {0} + {1}")
+    @CsvSource({
+            "PENDING_VERIFICATION, suspend",
+            "PENDING_VERIFICATION, reactivate",
+            "ACTIVE,               reactivate"
+    })
+    @DisplayName("HU-003: a client pending verification is not suspended, and only a suspended one is reactivated; nothing is recorded")
+    void refusedTransitionsRecordNothing(ClientStatus status, String act) {
+        // Arrange
+        Client client = stored(status);
+        UUID id = client.getId();
+        Executable transition = "suspend".equals(act)
+                ? () -> useCase.suspend(id, "Motivo", ADMIN)
+                : () -> useCase.reactivate(id, "Motivo", ADMIN);
+
+        // Act
+        assertThrows(BusinessException.class, transition);
+
+        // Assert
+        assertEquals(status, client.getStatus());
         verify(clients, never()).save(any());
         verify(statusChanges, never()).record(any(), any(), any(), any(), any());
     }

@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -79,6 +80,39 @@ class OrganizationTest {
     }
 
     @Test
+    @DisplayName("HU-002: a registration with no list of locations at all is a 400 on locations, like an empty one")
+    void registrationWithNullLocationsIsRejected() {
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> register("America/Bogota", null));
+
+        // Assert
+        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+        assertEquals(Map.of("locations", "at least one location is required"), ex.details());
+    }
+
+    @Test
+    @DisplayName("A provider without a time zone is a 400 on timezone, not a NullPointerException")
+    void missingProviderTimezoneIsRejected() {
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> register(null, List.of(location(null))));
+
+        // Assert
+        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+        assertEquals(Map.of("timezone", "must be an IANA time zone such as America/Bogota"), ex.details());
+    }
+
+    @Test
+    @DisplayName("The first location is checked as well: a bad zone there is reported as locations[0].timezone")
+    void firstLocationTimezoneIsChecked() {
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> register("America/Bogota", List.of(location("-05:00"), location(null))));
+
+        // Assert
+        assertEquals(Map.of("locations[0].timezone", "must be an IANA time zone such as America/Bogota"), ex.details());
+    }
+
+    @Test
     @DisplayName("A location time zone is checked too, and the error names the location by position")
     void unknownLocationTimezoneIsRejected() {
         // Act
@@ -125,7 +159,45 @@ class OrganizationTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals("Only a provider pending approval can be approved; this one is " + status, ex.getMessage());
         assertEquals(status, organization.getStatus());
+    }
+
+    @Test
+    @DisplayName("HU-003: reactivating a suspended provider makes it ACTIVE and keeps its original approval date")
+    void reactivationKeepsTheApprovalDate() {
+        // Arrange
+        Organization organization = new Organization(UUID.randomUUID(), UUID.randomUUID(), "Barbería",
+                IdentificationType.NIT, "900123456-1", "contacto@barberia.com", "6041112233", "America/Bogota",
+                List.of(location(null)), OrganizationStatus.SUSPENDED, NOW, POLICY, 3);
+
+        // Act
+        organization.reactivate();
+
+        // Assert
+        assertEquals(OrganizationStatus.ACTIVE, organization.getStatus());
+        assertEquals(NOW, organization.getApprovedAt());
+    }
+
+    /**
+     * State transition testing: reject is only defined from PENDING_APPROVAL. Every other source
+     * state is a 409 that names both states and leaves the status as it was. (The same table for
+     * reactivate, plus "nothing is recorded", is in ChangeProviderStatusUseCaseTest.)
+     */
+    @ParameterizedTest(name = "[{index}] {0}")
+    @EnumSource(value = OrganizationStatus.class, names = {"ACTIVE", "SUSPENDED", "REJECTED"})
+    @DisplayName("HU-003: only a provider pending approval can be rejected; otherwise 409, status untouched")
+    void onlyPendingCanBeRejected(OrganizationStatus from) {
+        // Arrange
+        Organization organization = withStatus(from);
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, organization::reject);
+
+        // Assert
+        assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals("Only a PENDING_APPROVAL provider can be rejected; this one is " + from, ex.getMessage());
+        assertEquals(from, organization.getStatus());
     }
 
     @ParameterizedTest(name = "[{index}] {0}")
@@ -158,6 +230,7 @@ class OrganizationTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals("A " + status + " provider cannot change its operating rules", ex.getMessage());
         assertEquals(3, organization.getPolicyVersion());
     }
 }
