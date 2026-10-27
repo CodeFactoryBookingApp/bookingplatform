@@ -81,12 +81,17 @@ class AgendaUseCasesTest {
         @Test
         @DisplayName("HU-006: the owner or a manager creates it with the trimmed name, and it is stored")
         void createsTheAgenda() {
+            // Arrange
+            UUID resource = UUID.randomUUID();
+            when(catalog.resourceAt(ORG, resource, LOCATION)).thenReturn(true);
+
             // Act
-            Agenda agenda = useCase.create(ORG, USER, definition(null, List.of(SERVICE)));
+            Agenda agenda = useCase.create(ORG, USER, definition(resource, List.of(SERVICE)));
 
             // Assert
             verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             assertEquals("Agenda Poblado", agenda.getName());
+            assertEquals(resource, agenda.getResourceId());
             verify(agendas).saveNew(agenda);
         }
 
@@ -99,11 +104,11 @@ class AgendaUseCasesTest {
 
             // Act
             BusinessException ex = assertThrows(BusinessException.class,
-                    () -> useCase.create(ORG, USER, definition(resource, List.of(SERVICE, otherService))));
+                    () -> useCase.create(ORG, USER, definition(resource, List.of(otherService, SERVICE))));
 
             // Assert
-            assertEquals("not a resource of this provider in that location", ex.details().get("resourceId"));
-            assertEquals("not a service of this provider offered in that location", ex.details().get("serviceIds[1]"));
+            assertEquals(java.util.Map.of("resourceId", "not a resource of this provider in that location",
+                    "serviceIds[0]", "not a service of this provider offered in that location"), ex.details());
             verify(agendas, never()).saveNew(any());
         }
 
@@ -158,27 +163,32 @@ class AgendaUseCasesTest {
         @Test
         @DisplayName("New blocks are checked against the bookings of now, in the zone of the location, then stored")
         void replacesTheBlocks() {
-            // Arrange
+            // Arrange: Tuesday 15:00 UTC is 10:00 in Bogota, inside 09:00-13:00 only in the zone of the location
             TimeBlock tuesday = new TimeBlock(DayOfWeek.TUESDAY, LocalTime.of(9, 0), LocalTime.of(13, 0));
+            Instant tuesdayTen = Instant.parse("2026-11-03T15:00:00Z");
+            when(bookings.future(agenda, NOW)).thenReturn(List.of(new BookedSlot(UUID.randomUUID(), tuesdayTen,
+                    tuesdayTen.plusSeconds(1800))));
 
             // Act
-            useCase.replaceBlocks(ORG, USER, agenda.getId(), List.of(tuesday));
+            Agenda result = useCase.replaceBlocks(ORG, USER, agenda.getId(), List.of(tuesday));
 
             // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             verify(bookings).future(agenda, NOW);
             verify(agendas).saveBlocks(agenda);
-            assertEquals(List.of(tuesday), agenda.getBlocks());
+            assertEquals(List.of(tuesday), result.getBlocks());
         }
 
         @Test
         @DisplayName("A copy of a day is stored like any other change of the blocks")
         void copiesADay() {
             // Act
-            useCase.copyDay(ORG, USER, agenda.getId(), DayOfWeek.MONDAY, Set.of(DayOfWeek.FRIDAY));
+            Agenda result = useCase.copyDay(ORG, USER, agenda.getId(), DayOfWeek.MONDAY, Set.of(DayOfWeek.FRIDAY));
 
             // Assert
+            verify(bookings).future(agenda, NOW);
             verify(agendas).saveBlocks(agenda);
-            assertEquals(2, agenda.getBlocks().size());
+            assertEquals(List.of(MONDAY_MORNING, MONDAY_MORNING.on(DayOfWeek.FRIDAY)), result.getBlocks());
         }
 
         @Test
@@ -217,12 +227,15 @@ class AgendaUseCasesTest {
     void listingRequiresMembership() {
         // Arrange
         ListAgendasUseCase useCase = new ListAgendasUseCase(agendas, access);
+        Agenda stored = new Agenda(UUID.randomUUID(), ORG, LOCATION, null, "Agenda", 30, LocalDate.of(2026, 11, 1),
+                null, List.of(SERVICE), List.of(MONDAY_MORNING));
+        when(agendas.findAll(ORG)).thenReturn(List.of(stored));
 
         // Act
-        useCase.all(ORG, USER);
+        List<Agenda> found = useCase.all(ORG, USER);
 
         // Assert
         verify(access).requireMember(ORG, USER);
-        verify(agendas).findAll(ORG);
+        assertEquals(List.of(stored), found);
     }
 }

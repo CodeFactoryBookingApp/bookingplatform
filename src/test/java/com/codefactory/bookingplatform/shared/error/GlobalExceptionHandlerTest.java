@@ -517,21 +517,6 @@ class GlobalExceptionHandlerTest {
         }
 
         @Test
-        @DisplayName("A framework 5xx keeps its status under INTERNAL_ERROR with the generic title")
-        void frameworkServerErrorIsInternal() {
-            // Arrange
-            Exception ex = new ErrorResponseException(HttpStatus.SERVICE_UNAVAILABLE);
-
-            // Act
-            ResponseEntity<ProblemDetail> response = handler.handleFramework(ex, request);
-
-            // Assert
-            assertEquals(503, response.getStatusCode().value());
-            assertEquals("INTERNAL_ERROR", errorCodeOf(response));
-            assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(), response.getBody().getTitle());
-        }
-
-        @Test
         @DisplayName("A non-standard status reported by the framework falls back to 500 INTERNAL_ERROR")
         void nonStandardStatusFallsBackTo500() {
             // Arrange

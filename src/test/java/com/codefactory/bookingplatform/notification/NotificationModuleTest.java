@@ -7,7 +7,6 @@ import com.codefactory.bookingplatform.notification.domain.model.SentEmail;
 import com.codefactory.bookingplatform.notification.domain.port.EmailSender;
 import com.codefactory.bookingplatform.notification.domain.port.SentEmailRepository;
 import com.codefactory.bookingplatform.notification.infrastructure.config.MailConfig;
-import com.codefactory.bookingplatform.notification.infrastructure.mail.InboxEmailSender;
 import com.codefactory.bookingplatform.notification.infrastructure.mail.SmtpEmailSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,7 +27,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -114,19 +112,6 @@ class NotificationModuleTest {
         assertEquals("Cuerpo", mail.getValue().getText());
     }
 
-    @Test
-    @DisplayName("Without SMTP the email is stored in the in-app inbox, exactly as composed")
-    void inboxSenderStoresTheMessage() {
-        // Arrange
-        SentEmailRepository inbox = mock(SentEmailRepository.class);
-
-        // Act
-        new InboxEmailSender(inbox).send(MESSAGE);
-
-        // Assert
-        verify(inbox).save(MESSAGE);
-    }
-
     @ParameterizedTest(name = "[{index}] \"{0}\"")
     @NullAndEmptySource
     @ValueSource(strings = "  ")
@@ -170,13 +155,16 @@ class NotificationModuleTest {
         }
 
         @Test
-        @DisplayName("No SMTP server configured, as on Render free: the in-app inbox")
+        @DisplayName("No SMTP server configured, as on Render free: the email is stored in the in-app inbox, exactly as composed")
         void withoutSmtpUsesTheInbox() {
+            // Arrange
+            SentEmailRepository inbox = mock(SentEmailRepository.class);
+
             // Act
-            EmailSender sender = new MailConfig().emailSender(provider(null), mock(SentEmailRepository.class), "", "");
+            new MailConfig().emailSender(provider(null), inbox, "", "").send(MESSAGE);
 
             // Assert
-            assertInstanceOf(InboxEmailSender.class, sender);
+            verify(inbox).save(MESSAGE);
         }
 
         @Test
