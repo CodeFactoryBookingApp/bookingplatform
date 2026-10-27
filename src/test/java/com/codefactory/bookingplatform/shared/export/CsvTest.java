@@ -52,6 +52,16 @@ class CsvTest {
         assertEquals("\"primera\nsegunda\"", field);
     }
 
+    @Test
+    @DisplayName("A lone carriage return inside a field is quoted too: spreadsheets also break the row on it")
+    void carriageReturnIsQuoted() {
+        // Act
+        String field = Csv.field("primera\rsegunda");
+
+        // Assert
+        assertEquals("\"primera\rsegunda\"", field);
+    }
+
     static Stream<Arguments> formulas() {
         return Stream.of(
                 Arguments.of("=HYPERLINK(\"http://x\")", "\"'=HYPERLINK(\"\"http://x\"\")\""),

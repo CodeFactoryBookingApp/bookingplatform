@@ -147,6 +147,23 @@ class ChangeProviderStatusUseCaseTest {
         verify(organizations).saveStatusChange(organization, OrganizationStatus.SUSPENDED, "Corregido", ADMIN, 0);
     }
 
+    @ParameterizedTest(name = "[{index}] {0}")
+    @EnumSource(value = OrganizationStatus.class, names = {"ACTIVE", "PENDING_APPROVAL", "REJECTED"})
+    @DisplayName("HU-003: only a suspended provider can be reactivated: anything else is a 409 and no change is recorded")
+    void onlySuspendedCanBeReactivated(OrganizationStatus status) {
+        // Arrange
+        Organization organization = stored(status);
+        UUID id = organization.getId();
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.reactivate(id, "Corregido", ADMIN));
+
+        // Assert
+        assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals(status, organization.getStatus());
+        verify(organizations, never()).saveStatusChange(any(), any(), any(), any(), anyInt());
+    }
+
     @Test
     @DisplayName("A provider pending approval is rejected with its reason; an active one cannot be")
     void rejection() {

@@ -6,7 +6,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -54,6 +59,35 @@ class OperationPolicyTest {
         // Assert
         assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
         assertTrue(ex.details().containsKey(field), ex.details()::toString);
+    }
+
+    static Stream<Arguments> combinedErrors() {
+        String negative = "must not be negative";
+        String aboveMax = "must not be greater than bookingNoticeMinutesMax";
+        return Stream.of(
+                Arguments.of(-1, -1, 0, Map.of("bookingNoticeMinutesMin", negative, "bookingNoticeMinutesMax", negative)),
+                Arguments.of(-5, -1, 0, Map.of("bookingNoticeMinutesMin", negative, "bookingNoticeMinutesMax", negative)),
+                Arguments.of(0, -1, 0, Map.of("bookingNoticeMinutesMin", aboveMax, "bookingNoticeMinutesMax", negative)),
+                Arguments.of(61, 60, -1, Map.of("bookingNoticeMinutesMin", aboveMax, "freeCancellationWindowMinutes", negative)),
+                Arguments.of(-1, 60, -1, Map.of("bookingNoticeMinutesMin", negative, "freeCancellationWindowMinutes", negative)),
+                Arguments.of(-1, -1, -1, Map.of("bookingNoticeMinutesMin", negative, "bookingNoticeMinutesMax", negative,
+                        "freeCancellationWindowMinutes", negative)));
+    }
+
+    /**
+     * Decision table over the four conditions (min &lt; 0, max &lt; 0, window &lt; 0, min &gt; max): when
+     * several hold at once, every field at fault is reported in the same 400, not only the first.
+     */
+    @ParameterizedTest(name = "[{index}] ({0}, {1}, {2}) -> {3}")
+    @MethodSource("combinedErrors")
+    @DisplayName("HU-002: several wrong values at once are all reported, each on its own field")
+    void combinedErrorsAreAllReported(int min, int max, int window, Map<String, String> expected) {
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> new OperationPolicy(min, max, window));
+
+        // Assert
+        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+        assertEquals(expected, ex.details());
     }
 
     @Test
