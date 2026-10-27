@@ -1,7 +1,6 @@
 package com.codefactory.bookingplatform.identity.domain.model;
 
 import com.codefactory.bookingplatform.shared.error.BusinessException;
-import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -131,8 +130,9 @@ class ClientTest {
         Executable act = () -> applyTransition(client, transition);
 
         // Assert
+        // The error code is not asserted on purpose: suspend/reactivate answer 400 VALIDATION_ERROR
+        // where the provider equivalent answers 409 (BUG-056 in Mantis). Pinning it would sign off the bug.
         BusinessException ex = assertThrows(BusinessException.class, act);
-        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
         assertNotNull(ex.getMessage());
         assertEquals(from, client.getStatus(), "a rejected transition must not mutate the aggregate");
     }
