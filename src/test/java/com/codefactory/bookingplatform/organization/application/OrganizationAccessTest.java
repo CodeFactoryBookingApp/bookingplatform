@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -123,16 +124,18 @@ class OrganizationAccessTest {
     }
 
     @Test
-    @DisplayName("Whether a location is the organization's is what the repository says")
+    @DisplayName("Whether a location is the organization's is what the repository says, for its own and for a foreign one")
     void ownsLocationAsksTheRepository() {
         // Arrange
         UUID location = UUID.randomUUID();
+        UUID foreign = UUID.randomUUID();
         when(repository.hasLocation(ORGANIZATION, location)).thenReturn(true);
+        when(repository.hasLocation(ORGANIZATION, foreign)).thenReturn(false);
 
         // Act
-        boolean owns = access.ownsLocation(ORGANIZATION, location);
+        List<Boolean> owns = List.of(access.ownsLocation(ORGANIZATION, location), access.ownsLocation(ORGANIZATION, foreign));
 
         // Assert
-        assertTrue(owns);
+        assertEquals(List.of(true, false), owns);
     }
 }

@@ -115,13 +115,19 @@ class RegisterProviderUseCaseTest {
         @Test
         @DisplayName("Text fields are trimmed and the identification is upper-cased before storing")
         void normalisesTheInput() {
+            // Arrange
+            RegisterProviderCommand command = new RegisterProviderCommand(" Barberia@Example.com ", "Str0ng!Pass",
+                    " Barbería El Poblado ", CATEGORY, IdentificationType.PASAPORTE, " ab123456 ", null, " 6041112233 ",
+                    null, List.of(new RegisterProviderCommand.LocationData(" Sede Poblado ", " Cra 43A # 5-15 ", CITY, null)),
+                    60, 43200, 1440);
+
             // Act
-            useCase.register(command());
+            useCase.register(command);
 
             // Assert
             Organization organization = registeredOrganization();
             assertEquals("Barbería El Poblado", organization.getName());
-            assertEquals("900123456-1", organization.getIdentificationNumber());
+            assertEquals("AB123456", organization.getIdentificationNumber());
             assertEquals("6041112233", organization.getContactPhone());
             assertEquals("Sede Poblado", organization.getLocations().get(0).name());
             assertEquals("Cra 43A # 5-15", organization.getLocations().get(0).address());
@@ -141,10 +147,10 @@ class RegisterProviderUseCaseTest {
         }
 
         @Test
-        @DisplayName("Given contact email and time zone are kept; the email is lower-cased")
+        @DisplayName("Given contact email and time zone are kept, trimmed; the email is lower-cased")
         void givenOptionalFieldsAreKept() {
             // Act
-            useCase.register(command("Citas@Barberia.com", "America/Lima", 60, 43200));
+            useCase.register(command(" Citas@Barberia.com ", " America/Lima ", 60, 43200));
 
             // Assert
             Organization organization = registeredOrganization();

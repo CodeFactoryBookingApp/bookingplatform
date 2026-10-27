@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,7 +23,7 @@ class ListingParamsTest {
     private enum Column { NAME, REGISTERED }
 
     @ParameterizedTest(name = "[{index}] \"{0}\"")
-    @ValueSource(strings = {"registered", "REGISTERED", " Registered "})
+    @ValueSource(strings = {"registered", " Registered "})
     @DisplayName("The sort column is read in any case and with surrounding blanks")
     void sortIgnoresCase(String value) {
         // Act
@@ -46,7 +45,7 @@ class ListingParamsTest {
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
-    @CsvSource({"asc, false", "DESC, true", " desc , true"})
+    @CsvSource({"asc, false", "DESC, true", "' desc ', true"})
     @DisplayName("The direction is asc or desc, in any case")
     void direction(String value, boolean descending) {
         // Act
@@ -93,6 +92,6 @@ class ListingParamsTest {
 
         // Assert
         assertTrue(sameDay.isEmpty());
-        assertFalse(inverted.isEmpty());
+        assertEquals(Map.of("to", "must not be before the start of the range"), inverted);
     }
 }

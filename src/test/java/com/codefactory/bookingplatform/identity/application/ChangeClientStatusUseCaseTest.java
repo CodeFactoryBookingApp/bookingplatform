@@ -75,6 +75,7 @@ class ChangeClientStatusUseCaseTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        verify(clients, never()).save(any());
         verify(statusChanges, never()).record(any(), any(), any(), any(), any());
     }
 
