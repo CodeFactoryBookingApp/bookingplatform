@@ -81,6 +81,7 @@ class AgendaTest {
 
             // Assert
             assertFalse(overlaps);
+            assertFalse(block(MONDAY, "12:00", "14:00").overlaps(block(MONDAY, "08:00", "12:00")), "in either order");
         }
 
         @Test
@@ -201,7 +202,7 @@ class AgendaTest {
 
             // Act
             BusinessException ex = assertThrows(BusinessException.class, () -> agenda.replaceBlocks(
-                    List.of(block(MONDAY, "14:00", "18:00")), List.of(booking), BOGOTA));
+                    List.of(block(TUESDAY, "08:00", "12:00"), block(MONDAY, "14:00", "18:00")), List.of(booking), BOGOTA));
 
             // Assert
             assertEquals(ErrorCode.HAS_FUTURE_BOOKINGS, ex.errorCode());
@@ -278,7 +279,7 @@ class AgendaTest {
                     () -> agenda.copyDay(TUESDAY, Set.of(FRIDAY), List.of(), BOGOTA));
 
             // Assert
-            assertTrue(ex.details().containsKey("fromDay"));
+            assertEquals(Map.of("fromDay", "TUESDAY has no time blocks"), ex.details());
         }
     }
 

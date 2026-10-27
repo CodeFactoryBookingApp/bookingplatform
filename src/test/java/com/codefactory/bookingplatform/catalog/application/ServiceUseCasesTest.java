@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -81,15 +82,18 @@ class ServiceUseCasesTest {
         @DisplayName("HU-004: the owner or a manager creates it INACTIVE; the name is trimmed and a blank description is none")
         void createsTheService() {
             // Act
-            useCase.create(ORG, USER, DETAILS, List.of(LOCATION), List.of(new ResourceRequirement(CHAIR, 1)));
+            OfferedService created = useCase.create(ORG, USER, DETAILS, List.of(LOCATION),
+                    List.of(new ResourceRequirement(CHAIR, 1)));
 
             // Assert
             verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             ArgumentCaptor<OfferedService> saved = ArgumentCaptor.forClass(OfferedService.class);
             verify(services).saveNew(saved.capture());
-            assertEquals("Corte clásico", saved.getValue().getName());
+            assertEquals(new OfferedService.Details("Corte clásico", null, 30, 5, 5, new BigDecimal("35000"), 1),
+                    saved.getValue().details());
             assertNull(saved.getValue().getDescription());
             assertEquals(ServiceStatus.INACTIVE, saved.getValue().getStatus());
+            assertSame(saved.getValue(), created);
         }
 
         @Test
@@ -148,6 +152,7 @@ class ServiceUseCasesTest {
             OfferedService activated = useCase.activate(ORG, USER, service.getId());
 
             // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             assertEquals(ServiceStatus.ACTIVE, activated.getStatus());
             verify(services).save(service);
         }

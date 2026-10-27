@@ -126,6 +126,9 @@ class ResourceUseCasesTest {
             verify(repository).saveNew(saved.capture());
             assertEquals("Silla 1", saved.getValue().getName());
             assertEquals(ORG, saved.getValue().getOrganizationId());
+            assertEquals(TYPE, saved.getValue().getResourceTypeId());
+            assertEquals(LOCATION, saved.getValue().getLocationId());
+            assertEquals(1, saved.getValue().getCapacity());
             assertEquals(ResourceStatus.ACTIVE, resource.getStatus());
         }
 
@@ -190,12 +193,17 @@ class ResourceUseCasesTest {
             ScheduleMaintenanceUseCase useCase = new ScheduleMaintenanceUseCase(repository, access);
 
             // Act
-            useCase.schedule(ORG, USER, resource.getId(), NOW, NOW.plusSeconds(3600), " Cambio de silla ");
+            Resource updated = useCase.schedule(ORG, USER, resource.getId(), NOW, NOW.plusSeconds(3600),
+                    " Cambio de silla ");
 
             // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             ArgumentCaptor<MaintenanceWindow> window = ArgumentCaptor.forClass(MaintenanceWindow.class);
             verify(repository).addMaintenance(eq(resource.getId()), window.capture());
             assertEquals("Cambio de silla", window.getValue().reason());
+            assertEquals(NOW, window.getValue().startsAt());
+            assertEquals(NOW.plusSeconds(3600), window.getValue().endsAt());
+            assertEquals(List.of(window.getValue()), updated.getMaintenances());
         }
 
         @Test
@@ -246,6 +254,7 @@ class ResourceUseCasesTest {
             Resource retired = useCase.retire(ORG, USER, resource.getId());
 
             // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             assertEquals(ResourceStatus.RETIRED, retired.getStatus());
             verify(repository).saveStatus(resource);
         }
@@ -255,13 +264,16 @@ class ResourceUseCasesTest {
     @DisplayName("Listing requires membership only: any role of the provider may read")
     void listingRequiresMembership() {
         // Arrange
+        Resource resource = new Resource(UUID.randomUUID(), ORG, TYPE, LOCATION, "Silla 1", 1, ResourceStatus.ACTIVE,
+                List.of());
+        when(repository.findAll(ORG)).thenReturn(List.of(resource));
         ListResourcesUseCase useCase = new ListResourcesUseCase(repository, access);
 
         // Act
-        useCase.resources(ORG, USER);
+        List<Resource> listed = useCase.resources(ORG, USER);
 
         // Assert
         verify(access).requireMember(ORG, USER);
-        verify(repository).findAll(ORG);
+        assertEquals(List.of(resource), listed);
     }
 }
