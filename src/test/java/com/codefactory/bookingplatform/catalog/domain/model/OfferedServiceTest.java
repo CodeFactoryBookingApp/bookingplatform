@@ -198,9 +198,8 @@ class OfferedServiceTest {
                     new BigDecimal("50000.50"), 1));
 
             // Assert
-            assertEquals("Corte premium", service.getName());
-            assertEquals(45, service.getDurationMinutes());
-            assertEquals(new BigDecimal("50000.50"), service.getPrice());
+            assertEquals(new OfferedService.Details("Corte premium", "Con lavado", 45, 10, 10,
+                    new BigDecimal("50000.50"), 1), service.details());
             assertEquals(List.of(LOCATION_A), service.getLocationIds());
             assertEquals(ServiceStatus.INACTIVE, service.getStatus());
         }

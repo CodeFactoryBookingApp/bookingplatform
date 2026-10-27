@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -156,8 +157,10 @@ class CatalogSearchIT extends JwtIntegrationTestBase {
 
         // Assert
         assertEquals(2, total(response));
-        List<String> cities = JsonPath.read(response.getContentAsString(), "$.items[*].location.city");
-        assertEquals(2, cities.size());
+        List<String> serviceIds = JsonPath.read(response.getContentAsString(), "$.items[*].serviceId");
+        assertEquals(List.of(service.toString(), service.toString()), serviceIds);
+        List<String> locationIds = JsonPath.read(response.getContentAsString(), "$.items[*].location.id");
+        assertEquals(2, new HashSet<>(locationIds).size(), "each card is a different location");
     }
 
     @Test

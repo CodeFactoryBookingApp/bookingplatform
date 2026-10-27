@@ -245,6 +245,9 @@ class ServiceManagementIT extends JwtIntegrationTestBase {
         // Assert
         assertEquals(409, response.getStatus());
         assertEquals("HAS_BOOKINGS", field(response, "$.errorCode"));
+        assertTrue(field(response, "$.detail").contains("deactivate"), response.getContentAsString());
+        assertEquals(200, call(get("/api/v1/organizations/{org}/services/{id}", provider.organizationId(), service)
+                .header("Authorization", ownerToken())).getStatus());
     }
 
     @Test

@@ -96,11 +96,13 @@ class ResourceTest {
             Resource resource = resource();
 
             // Act
-            resource.scheduleMaintenance(window(0, 48));
+            resource.scheduleMaintenance(window(1, 48));
 
             // Assert
-            assertEquals(ResourceCondition.IN_MAINTENANCE, resource.conditionAt(at(1)));
+            assertEquals(ResourceCondition.IN_MAINTENANCE, resource.conditionAt(at(1)), "the start is included");
             assertFalse(resource.isAvailableDuring(at(10), at(11)));
+            assertEquals(ResourceCondition.AVAILABLE, resource.conditionAt(at(0)), "before the start it serves");
+            assertTrue(resource.isAvailableDuring(at(0), at(1)), "a slot that ends when the period starts is available");
         }
 
         @Test
