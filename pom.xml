@@ -401,14 +401,21 @@
 					<threads>4</threads>
 					<timeoutConstant>8000</timeoutConstant>
 					<!--
-					  Tras la auditoria de pruebas del Sprint 2 la puntuacion es 95%.
-					  Los supervivientes estan analizados: codigo redundante, adaptadores
-					  que solo cubren los ITs (excluidos aqui) y comportamientos que hoy
-					  son defectos reportados en Mantis, que a proposito no se fijan con
-					  pruebas. El umbral se deja en 90 para no forzar pruebas que asevere
-					  un bug solo por matar un mutante.
+					  Dos umbrales, porque miden cosas distintas:
+					  - testStrengthThreshold: de los mutantes que alguna prueba unitaria
+					    alcanza, cuantos detecta. Mide si las pruebas VERIFICAN. Es el
+					    exigente: 90 (hoy 95,6 %).
+					  - mutationThreshold: sobre todo el codigo. Incluye los adaptadores
+					    JPA/SQL y los controladores de los modulos del Sprint 2, que verifican
+					    las pruebas de integracion con Postgres; PIT no las ejecuta y esos
+					    mutantes cuentan como NO_COVERAGE. Por eso es un piso: 65 (hoy 69 %;
+					    dominio 99 %, aplicacion 95 %).
+					  Los supervivientes que quedan estan analizados: equivalentes, codigo
+					  redundante y defectos reportados en Mantis que a proposito no se fijan
+					  con pruebas.
 					-->
-					<mutationThreshold>90</mutationThreshold>
+					<testStrengthThreshold>90</testStrengthThreshold>
+					<mutationThreshold>65</mutationThreshold>
 				</configuration>
 			</plugin>
 		</plugins>
