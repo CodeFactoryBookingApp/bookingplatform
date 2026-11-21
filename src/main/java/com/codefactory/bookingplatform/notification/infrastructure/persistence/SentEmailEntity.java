@@ -25,6 +25,9 @@ public class SentEmailEntity {
     @Column(name = "recipient", nullable = false, length = 160, updatable = false)
     private String recipient;
 
+    @Column(name = "recipient_user_id", insertable = false, updatable = false)
+    private UUID recipientUserId;
+
     @Column(name = "subject", nullable = false, length = 200, updatable = false)
     private String subject;
 

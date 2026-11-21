@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.organization.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.organization.domain.model.IdentificationType;
 import com.codefactory.bookingplatform.organization.domain.model.Location;
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
@@ -42,7 +43,7 @@ class ChangeOperationPolicyUseCaseTest {
     @BeforeEach
     void setUp() {
         organizations = mock(OrganizationRepository.class);
-        useCase = new ChangeOperationPolicyUseCase(organizations, new OrganizationAccess(organizations),
+        useCase = new ChangeOperationPolicyUseCase(organizations, new OrganizationAccess(organizations, mock(AuditActor.class)),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         organization = new Organization(UUID.randomUUID(), UUID.randomUUID(), "Barbería", IdentificationType.NIT,
                 "900123456-1", "contacto@barberia.com", "6041112233", "America/Bogota",

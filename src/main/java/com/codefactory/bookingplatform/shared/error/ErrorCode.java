@@ -31,6 +31,9 @@ public enum ErrorCode {
     HAS_BOOKINGS(HttpStatus.CONFLICT, "It has bookings, so it can only be deactivated"),
     INSUFFICIENT_RESOURCES(HttpStatus.CONFLICT, "Not enough resources to provide the service"),
     CONFIRMATION_REQUIRED(HttpStatus.CONFLICT, "The operation has consequences that must be confirmed"),
+    LAST_ADMINISTRATOR(HttpStatus.CONFLICT, "At least one active administrator is required"),
+    ADMINISTRATOR_ACCOUNT_PROTECTED(HttpStatus.CONFLICT, "A platform administrator cannot be suspended as a client"),
+    ROLE_CHANGE_PENDING(HttpStatus.CONFLICT, "Complete the pending platform role change first"),
 
     RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests, try again later"),
     ACCOUNT_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "Account temporarily locked due to repeated failed logins"),

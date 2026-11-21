@@ -8,18 +8,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -238,6 +242,40 @@ class ProviderOnboardingIT extends JwtIntegrationTestBase {
     @Nested
     @DisplayName("Approval")
     class Approval {
+
+        @Test
+        void organizationAuditIsScopedFilteredMaskedAndImmutable() throws Exception {
+            // Arrange
+            Provider provider = registered();
+            Provider outsider = registered();
+            UUID actor = UUID.randomUUID();
+            assertEquals(200, approve(provider, bearer(actor, "admin@example.com", "ADMIN")).getStatus());
+            assertEquals(200, approve(outsider, adminToken()).getStatus());
+            String path = "/api/v1/organizations/{id}/audit-events";
+
+            // Act
+            var listing = call(get(path, provider.organizationId()).header("Authorization", ownerToken(provider))
+                    .param("action", "ACCOUNT_STATUS_ACTIVE").param("actorId", actor.toString())
+                    .param("from", "2000-01-01T00:00:00Z"));
+            var export = call(get(path + "/export", provider.organizationId())
+                    .header("Authorization", ownerToken(provider)).param("action", "ACCOUNT_STATUS_ACTIVE"));
+            var outside = call(get(path, provider.organizationId()).header("Authorization", ownerToken(outsider)));
+
+            // Assert
+            assertEquals(200, listing.getStatus(), listing.getContentAsString());
+            assertEquals(1, (int) JsonPath.read(listing.getContentAsString(), "$.total"));
+            assertEquals(provider.organizationId(), JsonPath.read(listing.getContentAsString(),
+                    "$.items[0].organizationId"));
+            assertEquals(404, outside.getStatus());
+            assertEquals(200, export.getStatus());
+            String csv = export.getContentAsString(StandardCharsets.UTF_8);
+            assertTrue(csv.contains("ACCOUNT_STATUS_ACTIVE"), csv);
+            assertTrue(csv.contains("****" + actor.toString().substring(32)), csv);
+            assertFalse(csv.contains(actor.toString()), csv);
+            assertFalse(csv.contains(outsider.organizationId()), csv);
+            assertThrows(DataAccessException.class,
+                    () -> jdbc.update("delete from audit_events where organization_id = ?::uuid", provider.organizationId()));
+        }
 
         @Test
         @DisplayName("HU-002: an administrator approves; the provider is ACTIVE, the reason is stored and the email reaches its inbox")

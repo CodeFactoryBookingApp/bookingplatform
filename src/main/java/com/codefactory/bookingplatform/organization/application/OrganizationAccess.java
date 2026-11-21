@@ -2,6 +2,7 @@ package com.codefactory.bookingplatform.organization.application;
 
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,11 @@ import java.util.UUID;
 public class OrganizationAccess {
 
     private final OrganizationRepository repository;
+    private final AuditActor audit;
 
-    public OrganizationAccess(OrganizationRepository repository) {
+    public OrganizationAccess(OrganizationRepository repository, AuditActor audit) {
         this.repository = repository;
+        this.audit = audit;
     }
 
     public MemberRole requireMember(UUID organizationId, UUID userId) {
@@ -39,6 +42,7 @@ public class OrganizationAccess {
             throw new BusinessException(ErrorCode.ACCESS_DENIED,
                     "Your role in this organization (" + role + ") does not allow this operation");
         }
+        audit.identify(userId, role.name());
         return role;
     }
 

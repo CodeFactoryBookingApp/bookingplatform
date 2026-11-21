@@ -5,12 +5,15 @@ import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaFieldAccess;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,7 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>the day a booking-confirmation path appears, it must consult the invariant.</li>
  * </ol>
  *
- * The second rule passes vacuously today and starts biting the moment the booking module lands.
+ * The second rule starts applying when the application adds a booking write path. Searches,
+ * reports and consumers of booking events can already exist without confirming any reservation.
  *
  * <p>Arrange-Act-Assert in ArchUnit terms: the production classes are imported once
  * ({@link #PRODUCTION_CLASSES}) and the relevant subset is selected (Arrange), the classes are
@@ -45,34 +49,38 @@ class BookingConfirmationInvariantTest {
     /** Simple-name suffixes of the classes that would host a booking-confirmation path. */
     private static final List<String> CONFIRMATION_PATH_SUFFIXES =
             List.of("UseCase", "Service", "Controller", "Handler", "Facade");
+    private static final List<String> BOOKING_WRITE_VERBS = List.of("create", "confirm", "reserve", "reschedule");
 
     private static final JavaClasses PRODUCTION_CLASSES = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
             .importPackages(ROOT_PACKAGE);
 
-    /** Classes that would carry a booking-confirmation path, by package or by name. */
+    /** A booking write is located by its action or by a writable transaction in the booking module. */
     private static Set<JavaClass> bookingConfirmationPaths() {
         return PRODUCTION_CLASSES.stream()
-                .filter(javaClass -> javaClass.getPackageName().startsWith(ROOT_PACKAGE + ".booking")
-                        || looksLikeBookingConfirmationPath(javaClass.getSimpleName()))
+                .filter(BookingConfirmationInvariantTest::canWriteBooking)
                 .collect(Collectors.toSet());
     }
 
-    /**
-     * Linear-time equivalent of {@code simpleName.matches("^(?!BookingPlatform).*Booking.*(UseCase|Service|Controller|Handler|Facade)$")}.
-     *
-     * <p>The regex needed two unbounded {@code .*} around {@code Booking}, which backtracks
-     * super-linearly (Sonar java:S8786). The same language, spelled out: the name does not start
-     * with {@code BookingPlatform}, ends with one of the suffixes, and contains {@code Booking}
-     * somewhere before that suffix. No suffix is a suffix of another, so at most one can match.
-     */
-    private static boolean looksLikeBookingConfirmationPath(String simpleName) {
-        if (simpleName.startsWith("BookingPlatform")) {
+    private static boolean canWriteBooking(JavaClass javaClass) {
+        String name = javaClass.getSimpleName();
+        String bookingPackage = ROOT_PACKAGE + ".booking.";
+        if (name.startsWith("BookingPlatform") || CONFIRMATION_PATH_SUFFIXES.stream().noneMatch(name::endsWith)) {
             return false;
         }
-        return CONFIRMATION_PATH_SUFFIXES.stream()
-                .filter(simpleName::endsWith)
-                .anyMatch(suffix -> simpleName.substring(0, simpleName.length() - suffix.length()).contains("Booking"));
+        boolean inBookingModule = javaClass.getPackageName().startsWith(bookingPackage);
+        if (!inBookingModule && !name.contains("Booking")) {
+            return false;
+        }
+        String lowerName = name.toLowerCase(Locale.ROOT);
+        return BOOKING_WRITE_VERBS.stream().anyMatch(lowerName::startsWith)
+                || javaClass.getMethods().stream().anyMatch(method ->
+                        BOOKING_WRITE_VERBS.stream().anyMatch(method.getName()::startsWith)
+                                || (inBookingModule && writesInTransaction(method)));
+    }
+
+    private static boolean writesInTransaction(JavaMethod method) {
+        return method.isAnnotatedWith(Transactional.class) && !method.getAnnotationOfType(Transactional.class).readOnly();
     }
 
     @Test
@@ -109,8 +117,8 @@ class BookingConfirmationInvariantTest {
                         && "canConfirmBooking".equals(call.getName()));
 
         // Assert
-        // With no path at all (Sprint 1 has no booking flow yet) the criterion stays unverifiable by
-        // behaviour and the guard passes vacuously, staying armed for the sprint that adds it.
+        // Read-side booking features do not exercise the application invariant. The database
+        // integration tests cover confirmation at the PostgreSQL boundary in the meantime.
         assertTrue(paths.isEmpty() || invariantConsulted,
                 "HU-001 says only a verified client may confirm a booking, but none of these classes asks "
                         + "Client.canConfirmBooking(): "

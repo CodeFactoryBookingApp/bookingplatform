@@ -3,6 +3,7 @@ package com.codefactory.bookingplatform.auth.infrastructure.supabase;
 import com.codefactory.bookingplatform.auth.domain.model.AppRole;
 import com.codefactory.bookingplatform.auth.domain.model.AuthTokens;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
+import com.codefactory.bookingplatform.auth.domain.model.RoleChange;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.shared.config.SupabaseProperties;
@@ -24,6 +25,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -72,6 +74,51 @@ class GoTrueClientTest {
         when(builder.baseUrl(anyString())).thenReturn(builder);
         when(builder.build()).thenReturn(realBuilder.build());
         client = new GoTrueClient(new SupabaseProperties(BASE, SECRET), builder);
+    }
+
+    @Test
+    void listsOnlyEligibleAdministratorsAsActive() {
+        // Arrange
+        UUID activeId = UUID.randomUUID();
+        UUID bannedId = UUID.randomUUID();
+        server.expect(requestTo(BASE + "/admin/users?page=2&per_page=50"))
+                .andExpect(header("apikey", SECRET))
+                .andRespond(withSuccess("""
+                        {"users":[
+                          {"id":"%s","app_metadata":{"role":"ADMIN"},"confirmed_at":"2026-11-12T09:30:00Z"},
+                          {"id":"%s","app_metadata":{"role":"ADMIN"},"confirmed_at":"2026-11-12T09:30:00Z",
+                            "banned_until":"2026-11-30T00:00:00Z"}
+                        ]}
+                        """.formatted(activeId, bannedId), MediaType.APPLICATION_JSON));
+
+        Instant now = Instant.parse("2026-11-21T09:00:00Z");
+
+        // Act
+        var users = client.listPlatformUsers(2, 50);
+
+        // Assert
+        assertEquals(java.util.List.of(activeId),
+                users.stream().filter(user -> user.isActiveAdministrator(now)).map(user -> user.id()).toList());
+        server.verify();
+    }
+
+    @Test
+    void updatesPlatformRoleAndRevisionInServerManagedMetadata() {
+        // Arrange
+        var change = new RoleChange(UUID.randomUUID(), UUID.randomUUID(), AppRole.ADMIN, null);
+        server.expect(requestTo(BASE + "/admin/users/" + change.userId()))
+                .andExpect(method(HttpMethod.PUT))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + SECRET))
+                .andExpect(jsonPath("$.app_metadata.role").value("ADMIN"))
+                .andExpect(jsonPath("$.app_metadata.booking_role_revision").value(change.revision().toString()))
+                .andExpect(jsonPath("$.user_metadata").doesNotExist())
+                .andRespond(withSuccess());
+
+        // Act
+        client.changeRole(change);
+
+        // Assert
+        server.verify();
     }
 
     // ---------------------------------------------------------------------

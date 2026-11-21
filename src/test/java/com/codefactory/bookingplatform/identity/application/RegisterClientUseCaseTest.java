@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.identity.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
@@ -65,7 +66,7 @@ class RegisterClientUseCaseTest {
     void setUp() {
         clientRepository = mock(ClientRepository.class);
         userProvisioning = mock(UserProvisioning.class);
-        useCase = new RegisterClientUseCase(clientRepository, userProvisioning, CLOCK);
+        useCase = new RegisterClientUseCase(clientRepository, userProvisioning, CLOCK, mock(AuditActor.class));
     }
 
     private RegisterClientCommand command() {
@@ -221,7 +222,7 @@ class RegisterClientUseCaseTest {
         Clock fiveYearsEarlier = Clock.fixed(
                 LocalDate.of(2021, 9, 18).atStartOfDay(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC);
         RegisterClientUseCase pastUseCase =
-                new RegisterClientUseCase(clientRepository, userProvisioning, fiveYearsEarlier);
+                new RegisterClientUseCase(clientRepository, userProvisioning, fiveYearsEarlier, mock(AuditActor.class));
         RegisterClientCommand justEighteenToday = command("ana@example.com", "cc12345678", TODAY.minusYears(18));
 
         // Act

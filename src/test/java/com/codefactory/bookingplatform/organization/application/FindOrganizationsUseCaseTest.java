@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.organization.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.organization.domain.model.Organization;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
@@ -33,7 +34,7 @@ class FindOrganizationsUseCaseTest {
     @BeforeEach
     void setUp() {
         organizations = mock(OrganizationRepository.class);
-        useCase = new FindOrganizationsUseCase(organizations, new OrganizationAccess(organizations));
+        useCase = new FindOrganizationsUseCase(organizations, new OrganizationAccess(organizations, mock(AuditActor.class)));
         when(organizations.findById(ORGANIZATION)).thenReturn(Optional.of(organization));
     }
 

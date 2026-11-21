@@ -1,9 +1,11 @@
 package com.codefactory.bookingplatform.shared.config;
 
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
+import com.codefactory.bookingplatform.shared.security.TokenSessionPolicy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -18,6 +20,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtIssuerValidator;
 import org.springframework.security.oauth2.jwt.JwtTimestampValidator;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -66,7 +69,11 @@ public class SecurityConfig {
     @SuppressWarnings("java:S4502")
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-                                                   SupabaseJwtAuthConverter supabaseJwtAuthConverter) throws Exception {
+                                                   SupabaseJwtAuthConverter supabaseJwtAuthConverter,
+                                                   ObjectProvider<TokenSessionPolicy> sessionPolicies) throws Exception {
+        TokenSessionPolicy sessions = sessionPolicies.getIfAvailable(() -> jwt -> true);
+        var authenticationConverter =
+                SupabaseJwtAuthConverter.toAuthenticationConverter(supabaseJwtAuthConverter);
         return http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
@@ -79,8 +86,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/organizations/**").hasAnyRole("PROVIDER", "ADMIN")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(
-                                SupabaseJwtAuthConverter.toAuthenticationConverter(supabaseJwtAuthConverter)))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(token -> {
+                            if (!sessions.accepts(token)) {
+                                throw new InvalidBearerTokenException("Sign in again to use the updated role");
+                            }
+                            return authenticationConverter.convert(token);
+                        }))
                         .authenticationEntryPoint(problemDetailEntryPoint())
                         .accessDeniedHandler(problemDetailAccessDeniedHandler()))
                 .exceptionHandling(handling -> handling

@@ -56,16 +56,19 @@ devolver 401 es el comportamiento esperado, no una falla.
    ```
    El backend conecta como dueño y bypasea RLS; el Data API público queda
    bloqueado.
-6. **Primer administrador (ADR-0008):** no hay endpoint para crear
-   administradores. Registrar la cuenta como cliente (o crearla en
+6. **Primer administrador (ADR-0008):** registrar la cuenta como cliente (o crearla en
    Authentication → Users), confirmar el correo y, en el SQL Editor:
    ```sql
    update auth.users
       set raw_app_meta_data = raw_app_meta_data || '{"role": "ADMIN"}'
     where email = 'admin@ejemplo.com';
    ```
-   El rol entra en el JWT en el siguiente inicio de sesión. Si la cuenta tenía
-   perfil de cliente, sigue existiendo; no estorba.
+   El rol entra en el JWT en el siguiente inicio de sesión. Para asignar o
+   quitar roles después de crear el primero, usar
+   `PATCH /api/v1/admin/users/{id}/role` con `{"role":"ADMIN"}`,
+   `PROVIDER` o `CLIENT`. La API protege al último administrador y pide
+   al usuario afectado iniciar sesión de nuevo. Si falla el proveedor y el
+   cambio queda pendiente, reintentar con el mismo usuario y rol.
 
 ## 4. Despliegue en Render
 

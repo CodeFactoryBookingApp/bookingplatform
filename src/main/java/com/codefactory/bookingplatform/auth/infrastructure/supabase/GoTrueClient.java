@@ -3,6 +3,8 @@ package com.codefactory.bookingplatform.auth.infrastructure.supabase;
 import com.codefactory.bookingplatform.auth.domain.model.AppRole;
 import com.codefactory.bookingplatform.auth.domain.model.AuthTokens;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
+import com.codefactory.bookingplatform.auth.domain.model.PlatformUser;
+import com.codefactory.bookingplatform.auth.domain.model.RoleChange;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
@@ -14,12 +16,15 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Adapter for Supabase Auth (GoTrue). The secret key never leaves the backend.
@@ -50,7 +55,7 @@ public class GoTrueClient implements IdentityProviderPort {
         body.put("password", password);
         body.put("email_confirm", false);
         body.put("app_metadata", Map.of("role", role.name()));
-        try {
+        return adminRequest("createUser", () -> {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restClient.post()
                     .uri("/admin/users")
@@ -60,24 +65,51 @@ public class GoTrueClient implements IdentityProviderPort {
                     .retrieve()
                     .body(Map.class);
             return requireUuid(response, "id");
-        } catch (RestClientResponseException ex) {
-            throw mapError(ex, "createUser");
-        } catch (ResourceAccessException ex) {
-            throw unavailable(ex);
-        }
+        });
     }
 
     @Override
     public void deleteUser(UUID userId) {
-        try {
-            restClient.delete()
+        adminRequest("deleteUser", () -> restClient.delete()
                     .uri("/admin/users/{id}", userId)
                     .headers(this::adminHeaders)
                     .retrieve()
-                    .toBodilessEntity();
+                    .toBodilessEntity());
+    }
+
+    @Override
+    public PlatformUser getPlatformUser(UUID userId) {
+        return adminRequest("getPlatformUser", () -> restClient.get()
+                .uri("/admin/users/{id}", userId)
+                .headers(this::adminHeaders)
+                .retrieve().requiredBody(GoTrueRoleResponse.class).toUser());
+    }
+
+    @Override
+    public List<PlatformUser> listPlatformUsers(int page, int perPage) {
+        return adminRequest("listPlatformUsers", () -> restClient.get()
+                .uri("/admin/users?page={page}&per_page={perPage}", page, perPage)
+                .headers(this::adminHeaders)
+                .retrieve().requiredBody(GoTrueRoleResponse.Page.class).toUsers());
+    }
+
+    @Override
+    public void changeRole(RoleChange change) {
+        adminRequest("changeRole", () -> restClient.put()
+                .uri("/admin/users/{id}", change.userId())
+                .headers(this::adminHeaders)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("app_metadata", Map.of("role", change.role().name(),
+                        RoleChange.REVISION_CLAIM, change.revision().toString())))
+                .retrieve().toBodilessEntity());
+    }
+
+    private <T> T adminRequest(String operation, Supplier<T> request) {
+        try {
+            return request.get();
         } catch (RestClientResponseException ex) {
-            throw mapError(ex, "deleteUser");
-        } catch (ResourceAccessException ex) {
+            throw mapError(ex, operation);
+        } catch (RestClientException ex) {
             throw unavailable(ex);
         }
     }

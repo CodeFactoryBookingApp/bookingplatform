@@ -197,6 +197,7 @@ erDiagram
     }
     BOOKING {
         uuid id PK "UK con starts_at ends_at status"
+        string code UK "codigo publico (V11)"
         uuid client_id FK
         uuid organization_id FK "amarra servicio sede y politica"
         uuid service_id FK
@@ -207,6 +208,7 @@ erDiagram
         timestamptz ends_at
         int attendees "trigger contra customer_capacity"
         numeric total_price "precio pactado"
+        uuid currency_id FK "moneda pactada (V11)"
         string status "RESERVED CONFIRMED CANCELLED COMPLETED NO_SHOW"
         timestamptz cancelled_at
     }
@@ -256,15 +258,27 @@ como `der-0-modelo-completo.png`, `der-1-identidad.png`, `der-2-catalogo.png`,
 | `BOOKING.organization_id` | Misma razón: amarra servicio, sede y política a la misma organización con tres claves foráneas compuestas. |
 | `BOOKING.session_id` | Distingue la sesión de la reserva. En un servicio individual coinciden; en uno grupal varias reservas comparten sesión y por tanto comparten recurso sin chocar con la restricción de solape. |
 | `BOOKING.total_price` | Precio pactado, no copia de `SERVICE.price`. Como el precio de catálogo cambia, la dependencia funcional no se cumple y no hay desnormalización. |
+| `BOOKING.code`, `BOOKING.currency_id` | Código público único para la búsqueda exacta y moneda de la reserva para conservar el significado del precio pactado. |
 | `BOOKING_RESOURCE` repite el rango y el estado | Violación deliberada de 2FN: PostgreSQL no evalúa `exclude` a través de un join. La copia la mantiene el motor con una clave foránea compuesta contra la clave alterna de `BOOKING`, con `on update cascade`. |
 | `BOOKING_STATUS_CHANGE` con `on delete restrict` | Un historial que desaparece junto con lo que traza no sirve de traza. |
 | `ACCOUNT_STATUS_CHANGE` | HU-003 exige motivo al aprobar, suspender o reactivar, e informe de reservas afectadas. Esa regla es sobre cuentas, no sobre reservas. |
 | `LOGIN_ATTEMPT` sin relación | Registra intentos con correos que pueden no corresponder a ninguna cuenta, que es justamente lo que interesa vigilar (HU-021). |
 | Estados como `varchar` con `check` | Se leen directo en las consultas y añadir un valor no obliga a alterar un tipo. |
 
+## Avisos, roles y trazabilidad
+
+| Relación | Clave y uso |
+|---|---|
+| `platform_role_changes` | Un registro por UUID de usuario con la revisión del rol. La fecha de finalización distingue una transición pendiente de una aplicada. |
+| `audit_events` | UUID del evento, fecha, actor, rol, acción, ámbito y recurso. Conserva referencias aunque el recurso se elimine y la base impide modificar o borrar el registro. |
+| `booking_notification_preferences` | Una preferencia por UUID de usuario para activar recordatorios y definir el horario de silencio y la zona horaria. |
+| `organization_booking_reminders` | Una configuración por proveedor con los minutos de anticipación. |
+| `booking_notices` | Cola ligada a reservas. Conserva fecha de la cita, clase de aviso, destinatario y fecha de procesamiento. |
+| `sent_emails.recipient_user_id` | Asocia los avisos a la cuenta autenticada. Los correos anteriores siguen consultándose por dirección. |
+
 ## Normalización
 
-Las diecinueve relaciones están en 3FN. Quince alcanzan BCNF; tres se quedan en
+En el diseño base del Sprint 1, quince relaciones alcanzan BCNF y tres se quedan en
 3FN porque conservan clave primaria sustituta junto a una clave natural
 declarada como `unique` (`ORGANIZATION_MEMBER`, `SERVICE_RESOURCE_REQUIREMENT`,
 `SCHEDULE`), lo que preserva la dependencia sin que el determinante sea la clave
