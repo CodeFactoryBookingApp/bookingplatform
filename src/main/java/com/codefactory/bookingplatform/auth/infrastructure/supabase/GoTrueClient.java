@@ -64,7 +64,7 @@ public class GoTrueClient implements IdentityProviderPort {
                     .body(body)
                     .retrieve()
                     .body(Map.class);
-            return requireUuid(response, "id");
+            return GoTrueResponses.requireUuid(response, "id");
         });
     }
 
@@ -126,10 +126,10 @@ public class GoTrueClient implements IdentityProviderPort {
                     .retrieve()
                     .body(Map.class);
             return new AuthTokens(
-                    String.valueOf(requireField(response, "access_token")),
-                    String.valueOf(requireField(response, "refresh_token")),
+                    String.valueOf(GoTrueResponses.requireField(response, "access_token")),
+                    String.valueOf(GoTrueResponses.requireField(response, "refresh_token")),
                     String.valueOf(response.getOrDefault("token_type", "bearer")),
-                    requireExpiresIn(response));
+                    GoTrueResponses.requireExpiresIn(response));
         } catch (RestClientResponseException ex) {
             throw mapError(ex, "token");
         } catch (ResourceAccessException ex) {
@@ -139,24 +139,7 @@ public class GoTrueClient implements IdentityProviderPort {
 
     @Override
     public ConfirmedUser verifyEmailToken(String tokenHash) {
-        Map<String, Object> response = verify(tokenHash, "email", null);
-        // GoTrue answers OTP verification with a session carrying the user nested
-        // ({"access_token": ..., "user": {...}}), not with the bare user object.
-        Object nestedUser = response.get("user");
-        Map<String, Object> user;
-        if (nestedUser instanceof Map<?, ?> nested) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> casted = (Map<String, Object>) nested;
-            user = casted;
-        } else {
-            user = response;
-        }
-        // El correo no lo consume nadie: ConfirmEmailUseCase resuelve el cliente por
-        // userId. Exigirlo con requireField convertiria una respuesta sin ese campo en
-        // un 502 para un valor que se descarta, asi que se deja tolerante a proposito.
-        return new ConfirmedUser(
-                requireUuid(user, "id"),
-                user.get("email") == null ? null : String.valueOf(user.get("email")));
+        return GoTrueResponses.confirmedUser(verify(tokenHash, "email", null));
     }
 
     @Override
@@ -250,43 +233,6 @@ public class GoTrueClient implements IdentityProviderPort {
 
     private void apiHeaders(HttpHeaders headers) {
         headers.set("apikey", properties.secretKey());
-    }
-
-    private Object requireField(Map<String, Object> response, String field) {
-        if (response == null || response.get(field) == null) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, missing field: " + field);
-        }
-        return response.get(field);
-    }
-
-    /**
-     * A malformed id is an unusable provider answer, exactly like a missing one:
-     * the raw {@link IllegalArgumentException} from {@code UUID.fromString} would
-     * escape the adapter and surface as a 500 instead of an upstream error.
-     */
-    private UUID requireUuid(Map<String, Object> response, String field) {
-        String raw = String.valueOf(requireField(response, field));
-        try {
-            return UUID.fromString(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, field is not a valid UUID: " + field, ex);
-        }
-    }
-
-    /**
-     * {@code expires_in} is optional (defaults to one hour), but a present value that
-     * is not a whole number — {@code "never"}, or the perfectly valid JSON number
-     * {@code 3600.0} — must not escape as a raw {@link NumberFormatException}.
-     */
-    private long requireExpiresIn(Map<String, Object> response) {
-        try {
-            return Long.parseLong(String.valueOf(response.getOrDefault("expires_in", "3600")));
-        } catch (NumberFormatException ex) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, field is not a number: expires_in", ex);
-        }
     }
 
     private UpstreamAuthException unavailable(Exception cause) {
