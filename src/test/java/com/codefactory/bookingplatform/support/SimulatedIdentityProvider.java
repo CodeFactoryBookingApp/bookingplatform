@@ -3,10 +3,12 @@ package com.codefactory.bookingplatform.support;
 import com.codefactory.bookingplatform.auth.domain.model.AppRole;
 import com.codefactory.bookingplatform.auth.domain.model.AuthTokens;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
+import com.codefactory.bookingplatform.auth.domain.model.PlatformUser;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -67,6 +69,9 @@ public final class SimulatedIdentityProvider {
 
     /** Wires every port method to this fake. Call it from {@code @BeforeEach}. */
     public void install(IdentityProviderPort mock) {
+        doAnswer(invocation -> getPlatformUser(invocation.getArgument(0)))
+                .when(mock).getPlatformUser(any(UUID.class));
+
         doAnswer(invocation -> createUser(
                 invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)))
                 .when(mock).createUser(anyString(), anyString(), any(AppRole.class));
@@ -104,6 +109,14 @@ public final class SimulatedIdentityProvider {
     }
 
     // --- provider behaviour -------------------------------------------------
+
+    private PlatformUser getPlatformUser(UUID userId) {
+        String email = userIdsByEmail.entrySet().stream().filter(entry -> entry.getValue().equals(userId))
+                .map(Map.Entry::getKey).findFirst()
+                .orElseThrow(() -> new UpstreamAuthException(UpstreamAuthError.USER_NOT_FOUND, "User not found"));
+        return new PlatformUser(userId, rolesByEmail.get(email),
+                confirmedEmails.contains(email) ? Instant.EPOCH : null, null, null);
+    }
 
     private UUID createUser(String email, String password, AppRole role) {
         String key = normalize(email);

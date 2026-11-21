@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.identity.application;
 
+import com.codefactory.bookingplatform.auth.application.PlatformAccountProtection;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
@@ -25,15 +26,21 @@ public class ChangeClientStatusUseCase {
 
     private final ClientRepository clients;
     private final ClientStatusChanges statusChanges;
+    private final PlatformAccountProtection accountProtection;
 
-    public ChangeClientStatusUseCase(ClientRepository clients, ClientStatusChanges statusChanges) {
+    public ChangeClientStatusUseCase(ClientRepository clients, ClientStatusChanges statusChanges,
+                                     PlatformAccountProtection accountProtection) {
         this.clients = clients;
         this.statusChanges = statusChanges;
+        this.accountProtection = accountProtection;
     }
 
     @Transactional
     public Client suspend(UUID clientId, String reason, UUID adminId) {
-        return change(clientId, reason, adminId, Client::suspend);
+        return change(clientId, reason, adminId, client -> {
+            accountProtection.requireClientSuspensionAllowed(clientId);
+            client.suspend();
+        });
     }
 
     @Transactional

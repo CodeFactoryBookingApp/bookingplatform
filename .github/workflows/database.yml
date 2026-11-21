@@ -88,11 +88,11 @@ jobs:
             $PSQL -v ON_ERROR_STOP=1 -q -f "$f"
           done
 
-      - name: Se crearon las 23 tablas
+      - name: Se crearon las 28 tablas
         run: |
           n=$($PSQL -tAc "select count(*) from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'")
           echo "tablas creadas: $n"
-          test "$n" -eq 23
+          test "$n" -eq 28
 
       - name: Los datos de prueba cargan
         run: $PSQL -v ON_ERROR_STOP=1 -q -f docs/database/seed.sql

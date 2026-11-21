@@ -1,5 +1,7 @@
 package com.codefactory.bookingplatform.admin;
 
+import com.codefactory.bookingplatform.auth.domain.model.AppRole;
+import com.codefactory.bookingplatform.auth.domain.model.PlatformUser;
 import com.codefactory.bookingplatform.support.JwtIntegrationTestBase;
 import com.codefactory.bookingplatform.support.ProviderFixture;
 import com.codefactory.bookingplatform.support.ProviderFixture.Provider;
@@ -16,6 +18,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 
@@ -172,6 +176,23 @@ class AdminUsersIT extends JwtIntegrationTestBase {
 
             // Assert
             assertEquals(400, response.getStatus());
+        }
+
+        @Test
+        void anAdministratorCannotBeSuspendedThroughTheirClientProfile() throws Exception {
+            // Arrange
+            UUID admin = client("Ana", "Cali", "ACTIVE");
+            doReturn(new PlatformUser(admin, AppRole.ADMIN, Instant.EPOCH, null, null))
+                    .when(identityProviderPort).getPlatformUser(admin);
+
+            // Act
+            MockHttpServletResponse response = post("/api/v1/admin/clients/{id}/suspension",
+                    "{\"reason\": \"Uso indebido\"}", admin);
+
+            // Assert
+            assertEquals(409, response.getStatus());
+            assertEquals("ADMINISTRATOR_ACCOUNT_PROTECTED", JsonPath.read(response.getContentAsString(), "$.errorCode"));
+            assertEquals("ACTIVE", jdbc.queryForObject("select status from clients where id = ?", String.class, admin));
         }
     }
 

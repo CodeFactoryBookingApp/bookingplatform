@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.organization.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.organization.domain.model.DuplicateOrganizationException;
 import com.codefactory.bookingplatform.organization.domain.model.IdentificationType;
@@ -68,7 +69,7 @@ class RegisterProviderUseCaseTest {
         referenceData = mock(ReferenceDataRepository.class);
         userProvisioning = mock(UserProvisioning.class);
         useCase = new RegisterProviderUseCase(organizations, referenceData, userProvisioning,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), mock(AuditActor.class));
         when(referenceData.categoryExists(CATEGORY)).thenReturn(true);
         when(referenceData.cityExists(CITY)).thenReturn(true);
         when(userProvisioning.provisionProviderUser(anyString(), anyString())).thenReturn(OWNER);

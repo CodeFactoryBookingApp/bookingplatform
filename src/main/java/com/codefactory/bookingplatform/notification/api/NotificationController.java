@@ -2,6 +2,7 @@ package com.codefactory.bookingplatform.notification.api;
 
 import com.codefactory.bookingplatform.notification.application.EmailInbox;
 import com.codefactory.bookingplatform.notification.domain.model.SentEmail;
+import com.codefactory.bookingplatform.shared.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -33,10 +34,11 @@ public class NotificationController {
 
     @GetMapping("/emails")
     @Operation(summary = "My emails",
-            description = "The emails the platform sent to the email of the signed-in user, newest first. "
-                    + "Without an SMTP server this is where they arrive, for example the provider approval (HU-002).")
+            description = "Booking notices for the signed-in account and platform emails to its address, newest first.")
     public List<EmailResponse> myEmails(JwtAuthenticationToken authentication) {
-        return inbox.addressedTo(authentication.getToken().getClaimAsString("email")).stream()
+        UUID accountId = AuthenticatedUser.from(authentication).id();
+        String email = authentication.getToken().getClaimAsString("email");
+        return inbox.addressedTo(accountId, email).stream()
                 .map(EmailResponse::from)
                 .toList();
     }

@@ -5,6 +5,7 @@ import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.DuplicateClientException;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
 import com.codefactory.bookingplatform.identity.domain.service.AgePolicy;
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.slf4j.Logger;
@@ -30,11 +31,14 @@ public class RegisterClientUseCase {
     private final ClientRepository clientRepository;
     private final UserProvisioning userProvisioning;
     private final Clock clock;
+    private final AuditActor audit;
 
-    public RegisterClientUseCase(ClientRepository clientRepository, UserProvisioning userProvisioning, Clock clock) {
+    public RegisterClientUseCase(ClientRepository clientRepository, UserProvisioning userProvisioning, Clock clock,
+                                 AuditActor audit) {
         this.clientRepository = clientRepository;
         this.userProvisioning = userProvisioning;
         this.clock = clock;
+        this.audit = audit;
     }
 
     @Transactional
@@ -64,6 +68,7 @@ public class RegisterClientUseCase {
                 command.city().trim(),
                 command.notificationChannel());
         try {
+            audit.identify(userId, "CLIENT");
             Client saved = clientRepository.save(client);
             // The GoTrue Admin API does not send any email on user creation,
             // so the signup verification email must be triggered explicitly.

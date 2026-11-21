@@ -57,8 +57,9 @@ com.codefactory.bookingplatform
 ├── organization/   HU-002: domain (Organization + política versionada) → application
 │                   (registro, aprobación, OrganizationAccess) → infrastructure (JPA)
 │                   → api (REST /provider-registrations, /organizations, /admin)
-└── notification/   correo de la plataforma: fachada EmailNotifications → bandeja en la
-                    app (GET /notifications/emails) o SMTP si se configura (ADR-0007)
+├── notification/   correo y bandeja de la app, avisos de reserva y recordatorios (HU-015)
+├── booking/        búsqueda de reservas y reporte de demanda (HU-018, HU-020)
+└── audit/          auditoría de operaciones, con consulta y CSV por proveedor o administrador (HU-023)
 ```
 
 Reglas de dependencia verificadas con ArchUnit en `src/test/.../architecture/ArchitectureTest.java`.
@@ -203,6 +204,9 @@ Linux/macOS:
 | POST | `/api/v1/auth/password-recovery-requests` | pública | HU-021 |
 | POST | `/api/v1/auth/password-resets` | pública | HU-021 |
 | GET | `/api/v1/auth/me` | Bearer | HU-021 |
+| PATCH | `/api/v1/admin/users/{id}/role` | Bearer `ADMIN` | HU-022 |
+| GET | `/api/v1/admin/audit-events`, `/api/v1/admin/audit-events/export` (CSV) | Bearer `ADMIN` | HU-023 |
+| GET | `/api/v1/organizations/{id}/audit-events`, `/api/v1/organizations/{id}/audit-events/export` (CSV) | Bearer `PROVIDER` miembro | HU-023 |
 | GET | `/api/v1/organization-categories` | pública | HU-002 |
 | GET | `/api/v1/cities` | pública | HU-002 |
 | POST | `/api/v1/provider-registrations` | pública | HU-002 |
@@ -216,6 +220,10 @@ Linux/macOS:
 | GET | `/api/v1/admin/clients`, `/api/v1/admin/clients/export` (CSV) | Bearer `ADMIN` | HU-003 |
 | POST | `/api/v1/admin/clients/{id}/suspension`, `/reactivation` | Bearer `ADMIN` | HU-003 |
 | GET | `/api/v1/notifications/emails` | Bearer | HU-002 (correo de aprobación), ADR-0007 |
+| GET, PUT | `/api/v1/notifications/booking-preferences` | Bearer | HU-015 |
+| GET, PUT | `/api/v1/organizations/{id}/booking-reminders` | Bearer `OWNER` o `MANAGER` | HU-015 |
+| GET | `/api/v1/organizations/{id}/bookings`, `/bookings/by-code/{code}`, `/bookings/export` (CSV) | Bearer miembro | HU-018 |
+| GET | `/api/v1/organizations/{id}/reports/service-demand`, `/reports/service-demand/export` (CSV) | Bearer `OWNER` o `MANAGER` | HU-020 |
 | GET, POST | `/api/v1/organizations/{id}/resource-types` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
 | GET, POST | `/api/v1/organizations/{id}/resources` | Bearer miembro (POST: `OWNER` o `MANAGER`) | HU-009 |
 | POST | `/api/v1/organizations/{id}/resources/{resourceId}/maintenances` | Bearer `OWNER` o `MANAGER` | HU-009 |
@@ -229,6 +237,22 @@ Linux/macOS:
 | POST | `/api/v1/organizations/{id}/agendas/{agendaId}/day-copies` | Bearer `OWNER` o `MANAGER` | HU-006 |
 
 Errores: `application/problem+json` con `errorCode`, `traceId` y `details`.
+
+La búsqueda de reservas combina `from`, `to` (instantes ISO 8601), `status`, `serviceId`,
+`locationId`, `resourceId`, `clientId` y `code`. El rango filtra por el inicio de la cita.
+El resumen y el CSV incluyen todas las coincidencias, aunque la lista se pagine.
+
+El reporte usa `from` y `to` como fechas de la organización (inicio incluido, fin excluido).
+Agrupa las reservas por fecha de creación y muestra su estado actual. La demanda por día y hora usa
+la fecha de la cita. Los ingresos estimados suman reservas confirmadas y completadas por moneda.
+La comparación usa los días inmediatamente anteriores de igual duración. Una variación sin base
+aparece como `null` en JSON y como celda vacía en CSV.
+
+Por defecto, el proveedor programa recordatorios 24 y 2 horas antes. Puede cambiar
+`leadMinutes` y usar una lista vacía para desactivarlos. Cada usuario puede cambiar
+`remindersEnabled`, `quietFrom`, `quietUntil` y `timezone`. Las horas predeterminadas son
+22:00 a 07:00 y se usa la zona de la cita cuando el destinatario no configura la suya.
+Dos horas iguales desactivan el silencio. Los avisos de reserva llegan a la bandeja de la app.
 
 ## Despliegue en Render
 

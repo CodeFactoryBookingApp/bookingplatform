@@ -2,7 +2,11 @@ package com.codefactory.bookingplatform.notification.application;
 
 import com.codefactory.bookingplatform.notification.domain.model.EmailMessage;
 import com.codefactory.bookingplatform.notification.domain.port.EmailSender;
+import com.codefactory.bookingplatform.notification.domain.port.SentEmailRepository;
 import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Public facade of the notification module: other modules send email through this class only.
@@ -15,12 +19,18 @@ import org.springframework.stereotype.Service;
 public class EmailNotifications {
 
     private final EmailSender sender;
+    private final SentEmailRepository inbox;
 
-    public EmailNotifications(EmailSender sender) {
+    public EmailNotifications(EmailSender sender, SentEmailRepository inbox) {
         this.sender = sender;
+        this.inbox = inbox;
     }
 
     public void send(String to, String subject, String body) {
         sender.send(new EmailMessage(to, subject, body));
+    }
+
+    public void storeBookingNotice(UUID id, UUID recipientId, String to, String subject, String body, Instant at) {
+        inbox.saveNotice(id, recipientId, new EmailMessage(to, subject, body), at);
     }
 }

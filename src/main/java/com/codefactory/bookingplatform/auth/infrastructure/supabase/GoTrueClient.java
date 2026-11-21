@@ -3,6 +3,8 @@ package com.codefactory.bookingplatform.auth.infrastructure.supabase;
 import com.codefactory.bookingplatform.auth.domain.model.AppRole;
 import com.codefactory.bookingplatform.auth.domain.model.AuthTokens;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
+import com.codefactory.bookingplatform.auth.domain.model.PlatformUser;
+import com.codefactory.bookingplatform.auth.domain.model.RoleChange;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthError;
 import com.codefactory.bookingplatform.auth.domain.model.UpstreamAuthException;
 import com.codefactory.bookingplatform.auth.domain.port.IdentityProviderPort;
@@ -14,12 +16,15 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Adapter for Supabase Auth (GoTrue). The secret key never leaves the backend.
@@ -50,7 +55,7 @@ public class GoTrueClient implements IdentityProviderPort {
         body.put("password", password);
         body.put("email_confirm", false);
         body.put("app_metadata", Map.of("role", role.name()));
-        try {
+        return adminRequest("createUser", () -> {
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restClient.post()
                     .uri("/admin/users")
@@ -59,25 +64,52 @@ public class GoTrueClient implements IdentityProviderPort {
                     .body(body)
                     .retrieve()
                     .body(Map.class);
-            return requireUuid(response, "id");
-        } catch (RestClientResponseException ex) {
-            throw mapError(ex, "createUser");
-        } catch (ResourceAccessException ex) {
-            throw unavailable(ex);
-        }
+            return GoTrueResponses.requireUuid(response, "id");
+        });
     }
 
     @Override
     public void deleteUser(UUID userId) {
-        try {
-            restClient.delete()
+        adminRequest("deleteUser", () -> restClient.delete()
                     .uri("/admin/users/{id}", userId)
                     .headers(this::adminHeaders)
                     .retrieve()
-                    .toBodilessEntity();
+                    .toBodilessEntity());
+    }
+
+    @Override
+    public PlatformUser getPlatformUser(UUID userId) {
+        return adminRequest("getPlatformUser", () -> restClient.get()
+                .uri("/admin/users/{id}", userId)
+                .headers(this::adminHeaders)
+                .retrieve().requiredBody(GoTrueRoleResponse.class).toUser());
+    }
+
+    @Override
+    public List<PlatformUser> listPlatformUsers(int page, int perPage) {
+        return adminRequest("listPlatformUsers", () -> restClient.get()
+                .uri("/admin/users?page={page}&per_page={perPage}", page, perPage)
+                .headers(this::adminHeaders)
+                .retrieve().requiredBody(GoTrueRoleResponse.Page.class).toUsers());
+    }
+
+    @Override
+    public void changeRole(RoleChange change) {
+        adminRequest("changeRole", () -> restClient.put()
+                .uri("/admin/users/{id}", change.userId())
+                .headers(this::adminHeaders)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("app_metadata", Map.of("role", change.role().name(),
+                        RoleChange.REVISION_CLAIM, change.revision().toString())))
+                .retrieve().toBodilessEntity());
+    }
+
+    private <T> T adminRequest(String operation, Supplier<T> request) {
+        try {
+            return request.get();
         } catch (RestClientResponseException ex) {
-            throw mapError(ex, "deleteUser");
-        } catch (ResourceAccessException ex) {
+            throw mapError(ex, operation);
+        } catch (RestClientException ex) {
             throw unavailable(ex);
         }
     }
@@ -94,10 +126,10 @@ public class GoTrueClient implements IdentityProviderPort {
                     .retrieve()
                     .body(Map.class);
             return new AuthTokens(
-                    String.valueOf(requireField(response, "access_token")),
-                    String.valueOf(requireField(response, "refresh_token")),
+                    String.valueOf(GoTrueResponses.requireField(response, "access_token")),
+                    String.valueOf(GoTrueResponses.requireField(response, "refresh_token")),
                     String.valueOf(response.getOrDefault("token_type", "bearer")),
-                    requireExpiresIn(response));
+                    GoTrueResponses.requireExpiresIn(response));
         } catch (RestClientResponseException ex) {
             throw mapError(ex, "token");
         } catch (ResourceAccessException ex) {
@@ -107,24 +139,7 @@ public class GoTrueClient implements IdentityProviderPort {
 
     @Override
     public ConfirmedUser verifyEmailToken(String tokenHash) {
-        Map<String, Object> response = verify(tokenHash, "email", null);
-        // GoTrue answers OTP verification with a session carrying the user nested
-        // ({"access_token": ..., "user": {...}}), not with the bare user object.
-        Object nestedUser = response.get("user");
-        Map<String, Object> user;
-        if (nestedUser instanceof Map<?, ?> nested) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> casted = (Map<String, Object>) nested;
-            user = casted;
-        } else {
-            user = response;
-        }
-        // El correo no lo consume nadie: ConfirmEmailUseCase resuelve el cliente por
-        // userId. Exigirlo con requireField convertiria una respuesta sin ese campo en
-        // un 502 para un valor que se descarta, asi que se deja tolerante a proposito.
-        return new ConfirmedUser(
-                requireUuid(user, "id"),
-                user.get("email") == null ? null : String.valueOf(user.get("email")));
+        return GoTrueResponses.confirmedUser(verify(tokenHash, "email", null));
     }
 
     @Override
@@ -218,43 +233,6 @@ public class GoTrueClient implements IdentityProviderPort {
 
     private void apiHeaders(HttpHeaders headers) {
         headers.set("apikey", properties.secretKey());
-    }
-
-    private Object requireField(Map<String, Object> response, String field) {
-        if (response == null || response.get(field) == null) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, missing field: " + field);
-        }
-        return response.get(field);
-    }
-
-    /**
-     * A malformed id is an unusable provider answer, exactly like a missing one:
-     * the raw {@link IllegalArgumentException} from {@code UUID.fromString} would
-     * escape the adapter and surface as a 500 instead of an upstream error.
-     */
-    private UUID requireUuid(Map<String, Object> response, String field) {
-        String raw = String.valueOf(requireField(response, field));
-        try {
-            return UUID.fromString(raw);
-        } catch (IllegalArgumentException ex) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, field is not a valid UUID: " + field, ex);
-        }
-    }
-
-    /**
-     * {@code expires_in} is optional (defaults to one hour), but a present value that
-     * is not a whole number — {@code "never"}, or the perfectly valid JSON number
-     * {@code 3600.0} — must not escape as a raw {@link NumberFormatException}.
-     */
-    private long requireExpiresIn(Map<String, Object> response) {
-        try {
-            return Long.parseLong(String.valueOf(response.getOrDefault("expires_in", "3600")));
-        } catch (NumberFormatException ex) {
-            throw new UpstreamAuthException(UpstreamAuthError.UNAVAILABLE,
-                    "Unexpected identity provider response, field is not a number: expires_in", ex);
-        }
     }
 
     private UpstreamAuthException unavailable(Exception cause) {
