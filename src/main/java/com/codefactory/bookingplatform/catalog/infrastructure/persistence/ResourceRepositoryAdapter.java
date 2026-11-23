@@ -119,6 +119,19 @@ public class ResourceRepositoryAdapter implements ResourceRepository {
         return resources.countByLocationIdAndResourceTypeIdAndStatus(locationId, resourceTypeId, ResourceStatus.ACTIVE);
     }
 
+    @Override
+    public List<Resource> findActive(UUID organizationId, UUID locationId, UUID resourceTypeId) {
+        List<ResourceEntity> owned = resources
+                .findByLocationIdAndResourceTypeIdAndStatusOrderByName(locationId, resourceTypeId, ResourceStatus.ACTIVE)
+                .stream()
+                .filter(entity -> entity.getOrganizationId().equals(organizationId))
+                .toList();
+        Map<UUID, List<MaintenanceWindow>> windows = maintenancesOf(owned.stream().map(ResourceEntity::getId).toList());
+        return owned.stream()
+                .map(entity -> toDomain(entity, windows.getOrDefault(entity.getId(), List.of())))
+                .toList();
+    }
+
     private Map<UUID, List<MaintenanceWindow>> maintenancesOf(List<UUID> resourceIds) {
         if (resourceIds.isEmpty()) {
             return Map.of();

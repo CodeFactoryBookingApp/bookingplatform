@@ -1,16 +1,24 @@
 -- Candidate starts follow the agenda grid. Generate instants across the block so both
 -- occurrences of a local time can be booked on a daylight-saving fallback day.
+-- An agenda exception on that date (HU-007, V16) wins over the weekly blocks: CLOSED leaves the
+-- day without windows, and SPECIAL_HOURS replaces them with its own single window.
 with candidates as (
     select a.id as agenda, a.resource_id as pinned, g.start, g.start + :duration * interval '1 minute' as finish
       from agenda_services link
       join agendas a on a.id = link.agenda_id
-      join schedules h on h.agenda_id = a.id and h.active
+      left join agenda_exceptions x on x.agenda_id = a.id and x.exception_date = cast(:day as date)
+      cross join lateral (
+          select w.start_time, w.end_time from schedules w
+           where x.id is null and w.agenda_id = a.id and w.active
+             and w.day_of_week = extract(isodow from cast(:day as date))
+          union all
+          select x.special_start, x.special_end where x.type = 'SPECIAL_HOURS'
+      ) h(start_time, end_time)
       cross join lateral generate_series(
           (cast(:day as date) + h.start_time) at time zone :zone,
           (cast(:day as date) + h.end_time) at time zone :zone,
           a.slot_minutes * interval '1 minute') g(start)
      where link.service_id = :service and a.location_id = :location
-       and h.day_of_week = extract(isodow from cast(:day as date))
        and cast(:day as date) between a.valid_from and coalesce(a.valid_until, cast(:day as date))
        and g.start between :earliest and :latest
        and g.start - :prep * interval '1 minute' >= (cast(:day as date) + h.start_time) at time zone :zone

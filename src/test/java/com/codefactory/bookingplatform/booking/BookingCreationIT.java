@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -236,6 +237,46 @@ class BookingCreationIT extends JwtIntegrationTestBase {
         // Assert
         result.andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("BOOKING_TERMS_CHANGED"));
         assertThat(count(offer)).isZero();
+    }
+
+    @Test
+    void closedAgendaDateOffersNoSlotsAndRejectsBooking() throws Exception {
+        // Arrange
+        var offer = offer();
+        var client = client("ACTIVE");
+        var terms = preview(offer, client);
+        jdbc.update("insert into agenda_exceptions (agenda_id,exception_date,type,reason) values (?,?,'CLOSED','Festivo')",
+                agendaOf(offer), day);
+
+        // Act
+        var result = submit(offer, client, terms);
+
+        // Assert
+        result.andExpect(status().isConflict()).andExpect(jsonPath("$.errorCode").value("SLOT_UNAVAILABLE"));
+        availability(offer, client).andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        assertThat(count(offer)).isZero();
+    }
+
+    @Test
+    void specialHoursReplaceWeeklyBlocks() throws Exception {
+        // Arrange
+        var offer = offer();
+        var client = client("ACTIVE");
+        jdbc.update("""
+                insert into agenda_exceptions (agenda_id,exception_date,type,special_start,special_end)
+                values (?,?,'SPECIAL_HOURS','14:00','14:30')
+                """, agendaOf(offer), day);
+
+        // Act
+        var result = availability(offer, client);
+
+        // Assert: the weekly 10:00 slot is gone and only the special window is offered
+        result.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].startsAt").value(startsWith(day + "T14:00")));
+    }
+
+    private UUID agendaOf(Offer offer) {
+        return jdbc.queryForObject("select agenda_id from agenda_services where service_id=?", UUID.class, offer.service());
     }
 
     private Callable<Integer> contender(CountDownLatch gate, Offer offer, UUID client, String terms) {
