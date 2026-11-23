@@ -43,6 +43,11 @@ function Header() {
       <NavLink to="/" end className={navLink} onClick={close}>
         Catálogo
       </NavLink>
+      {user?.role === 'CLIENT' && (
+        <NavLink to="/mis-reservas" className={navLink} onClick={close}>
+          Mis reservas
+        </NavLink>
+      )}
       {user?.role === 'PROVIDER' && (
         <NavLink to="/negocio" className={navLink} onClick={close}>
           Mi negocio
@@ -57,6 +62,11 @@ function Header() {
         <NavLink to="/bandeja" className={navLink} onClick={close}>
           <Envelope size={18} className="mr-1.5" aria-hidden="true" />
           Bandeja
+        </NavLink>
+      )}
+      {user && (
+        <NavLink to="/preferencias" className={navLink} onClick={close}>
+          Avisos
         </NavLink>
       )}
       {!user && (

@@ -7,7 +7,7 @@ import { organizationApi } from '@/api/endpoints'
 import type { Agenda, Block, DayOfWeek } from '@/api/types'
 import { ApiError } from '@/api/client'
 import { Alert, EmptyState, ErrorState } from '@/components/ui/Blocks'
-import { Button } from '@/components/ui/Button'
+import { Button, LinkButton } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Form'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/Spinner'
@@ -181,10 +181,13 @@ export default function AgendasPage() {
               </p>
               <p className="mt-3 text-sm">{summarize(agenda.blocks)}</p>
               <p className="mt-2 text-sm text-muted">Servicios: {agenda.serviceIds.map(serviceName).join(', ')}</p>
-              <div className="mt-auto pt-4">
+              <div className="mt-auto flex flex-wrap gap-2 pt-4">
                 <Button variant="secondary" size="sm" onClick={() => open(agenda)}>
                   Gestionar horarios
                 </Button>
+                <LinkButton variant="secondary" size="sm" to={`/negocio/${org.id}/agendas/${agenda.id}`}>
+                  Excepciones y disponibilidad
+                </LinkButton>
               </div>
             </li>
           ))}

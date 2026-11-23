@@ -5,7 +5,8 @@ import { Clock, MagnifyingGlass, MapPin, UsersThree } from '@phosphor-icons/reac
 import { catalogApi } from '@/api/endpoints'
 import { useCategories, useCities } from '@/api/hooks'
 import type { CatalogQuery, ServiceCard } from '@/api/types'
-import { Button } from '@/components/ui/Button'
+import { useAuth } from '@/auth/AuthContext'
+import { Button, LinkButton } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Form'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, ErrorState, Pagination } from '@/components/ui/Blocks'
@@ -22,6 +23,9 @@ const SORTS: { value: string; label: string; sort: NonNullable<CatalogQuery['sor
 ]
 
 function ServiceItem({ item }: { item: ServiceCard }) {
+  const { user } = useAuth()
+  // Only clients book (SecurityConfig); a visitor is sent to sign in and comes back here.
+  const canBook = !user || user.role === 'CLIENT'
   return (
     <li className="flex flex-col rounded-lg border border-line bg-surface p-5 transition-colors hover:border-line-strong">
       <div className="flex items-start justify-between gap-3">
@@ -52,7 +56,19 @@ function ServiceItem({ item }: { item: ServiceCard }) {
         </div>
       </dl>
 
-      <p className="mt-auto pt-5 font-display text-xl font-semibold tabular-nums">{formatPrice(item.price)}</p>
+      <div className="mt-auto flex items-center justify-between gap-3 pt-5">
+        <p className="font-display text-xl font-semibold tabular-nums">{formatPrice(item.price)}</p>
+        {canBook && (
+          <LinkButton
+            size="sm"
+            to={`/reservar/${item.serviceId}/${item.location.id}`}
+            state={{ card: item }}
+            aria-label={`Reservar ${item.name} en ${item.location.name}`}
+          >
+            Reservar
+          </LinkButton>
+        )}
+      </div>
     </li>
   )
 }

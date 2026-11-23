@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DownloadSimple } from '@phosphor-icons/react'
 import { toast } from 'sonner'
@@ -132,7 +133,7 @@ export default function AdminProvidersPage() {
                     {data.items.map((row) => (
                       <tr key={row.id} className="align-top">
                         <td className="px-4 py-3">
-                          <p className="font-medium">{row.name}</p>
+                          <Link to={`/negocio/${row.id}`} className="font-medium underline decoration-line-strong underline-offset-4 hover:text-accent-ink">{row.name}</Link>
                           <p className="text-xs text-muted">{row.identificationType} {row.identificationNumber}</p>
                         </td>
                         <td className="px-4 py-3">{row.category}</td>

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Input, Select, Textarea } from '@/components/ui/Form'
 import { Modal } from '@/components/ui/Modal'
 import { Skeleton } from '@/components/ui/Spinner'
-import { errorMessage } from '@/lib/errors'
+import { errorMessage, fieldErrors } from '@/lib/errors'
 import { applyServerErrors } from '@/lib/forms'
 import { formatDuration, formatPrice, SERVICE_STATUS } from '@/lib/format'
 import { serviceSchema } from '@/lib/schemas'
@@ -104,8 +104,12 @@ export default function ServicesPage() {
       setCreating(false)
     },
     onError: (error) => {
-      const placed = applyServerErrors(error, createForm.setError, (f) => f.replace(/^details\./, ''))
-      if (!placed) createForm.setError('name', { message: errorMessage(error) })
+      // locationIds[i], requirements and requirements[i].* have no form field: they belong to the
+      // locations and requirements lists, so they show in the message under them.
+      const structural = fieldErrors(error).filter(([field]) => /^(locationIds|requirements)/.test(field))
+      if (structural.length) setStructureError(structural.map(([, message]) => message).join(' '))
+      const placed = applyServerErrors(error, createForm.setError, (f) => f.replace(/^details\./, ''), (f) => !/^(locationIds|requirements)/.test(f))
+      if (!placed && !structural.length) createForm.setError('name', { message: errorMessage(error) })
     },
   })
 

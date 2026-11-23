@@ -22,9 +22,17 @@ const ResourceTypesPage = lazy(() => import('@/pages/provider/ResourceTypesPage'
 const ResourcesPage = lazy(() => import('@/pages/provider/ResourcesPage'))
 const ServicesPage = lazy(() => import('@/pages/provider/ServicesPage'))
 const AgendasPage = lazy(() => import('@/pages/provider/AgendasPage'))
+const AgendaDetailPage = lazy(() => import('@/pages/provider/AgendaDetailPage'))
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'))
 const AdminProvidersPage = lazy(() => import('@/pages/admin/AdminProvidersPage'))
 const AdminClientsPage = lazy(() => import('@/pages/admin/AdminClientsPage'))
+const AdminAuditPage = lazy(() => import('@/pages/admin/AdminAuditPage'))
+const BookingsPage = lazy(() => import('@/pages/provider/BookingsPage'))
+const ReportsPage = lazy(() => import('@/pages/provider/ReportsPage'))
+const AuditPage = lazy(() => import('@/pages/provider/AuditPage'))
+const PreferencesPage = lazy(() => import('@/pages/account/PreferencesPage'))
+const BookingPage = lazy(() => import('@/pages/client/BookingPage'))
+const MyBookingsPage = lazy(() => import('@/pages/client/MyBookingsPage'))
 
 function NotFound() {
   return (
@@ -61,16 +69,32 @@ export default function App() {
 
             <Route element={<RequireAuth />}>
               <Route path="bandeja" element={<InboxPage />} />
+              <Route path="preferencias" element={<PreferencesPage />} />
             </Route>
 
-            <Route element={<RequireAuth roles={['PROVIDER', 'ADMIN']} />}>
+            {/* Booking needs a CLIENT token even to see availability (SecurityConfig) */}
+            <Route element={<RequireAuth roles={['CLIENT']} />}>
+              <Route path="reservar/:serviceId/:locationId" element={<BookingPage />} />
+              <Route path="mis-reservas" element={<MyBookingsPage />} />
+            </Route>
+
+            <Route element={<RequireAuth roles={['PROVIDER']} />}>
               <Route path="negocio" element={<OrganizationsPage />} />
+            </Route>
+            {/* An ADMIN can open any provider's summary; the sections are for its members only (OrganizationAccess) */}
+            <Route element={<RequireAuth roles={['PROVIDER', 'ADMIN']} />}>
               <Route path="negocio/:orgId" element={<OrganizationLayout />}>
                 <Route index element={<SummaryPage />} />
-                <Route path="tipos" element={<ResourceTypesPage />} />
-                <Route path="recursos" element={<ResourcesPage />} />
-                <Route path="servicios" element={<ServicesPage />} />
-                <Route path="agendas" element={<AgendasPage />} />
+                <Route element={<RequireAuth roles={['PROVIDER']} />}>
+                  <Route path="reservas" element={<BookingsPage />} />
+                  <Route path="reportes" element={<ReportsPage />} />
+                  <Route path="tipos" element={<ResourceTypesPage />} />
+                  <Route path="recursos" element={<ResourcesPage />} />
+                  <Route path="servicios" element={<ServicesPage />} />
+                  <Route path="agendas" element={<AgendasPage />} />
+                  <Route path="agendas/:agendaId" element={<AgendaDetailPage />} />
+                  <Route path="auditoria" element={<AuditPage />} />
+                </Route>
               </Route>
             </Route>
 
@@ -79,6 +103,7 @@ export default function App() {
                 <Route index element={<Navigate to="proveedores" replace />} />
                 <Route path="proveedores" element={<AdminProvidersPage />} />
                 <Route path="clientes" element={<AdminClientsPage />} />
+                <Route path="auditoria" element={<AdminAuditPage />} />
               </Route>
             </Route>
 

@@ -10,6 +10,7 @@ import { Alert, ErrorState } from '@/components/ui/Blocks'
 import { PageLoader } from '@/components/ui/Spinner'
 import { ORGANIZATION_STATUS } from '@/lib/format'
 import { ApiError } from '@/api/client'
+import { useAuth } from '@/auth/AuthContext'
 
 const OrganizationContext = createContext<Organization | null>(null)
 
@@ -21,6 +22,9 @@ export function useOrganization(): Organization {
 
 export default function OrganizationLayout() {
   const { orgId = '' } = useParams()
+  const { user } = useAuth()
+  // An administrator may read any provider's summary, but its sections answer 404 to non-members (OrganizationAccess).
+  const adminView = user?.role === 'ADMIN'
   const org = useQuery({ queryKey: ['organization', orgId], queryFn: () => organizationApi.one(orgId) })
 
   if (org.isPending) return <PageLoader label="Cargando tu negocio…" />
@@ -43,8 +47,11 @@ export default function OrganizationLayout() {
   return (
     <OrganizationContext.Provider value={data}>
       <div className="animate-in">
-        <Link to="/negocio" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
-          <CaretLeft size={16} aria-hidden="true" /> Mis negocios
+        <Link
+          to={adminView ? '/admin/proveedores' : '/negocio'}
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+        >
+          <CaretLeft size={16} aria-hidden="true" /> {adminView ? 'Proveedores' : 'Mis negocios'}
         </Link>
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl sm:text-3xl">{data.name}</h1>
@@ -64,15 +71,26 @@ export default function OrganizationLayout() {
             </Alert>
           </div>
         )}
-        <TabNav
-          items={[
-            { to: base, label: 'Resumen', end: true },
-            { to: `${base}/tipos`, label: 'Tipos de recurso' },
-            { to: `${base}/recursos`, label: 'Recursos' },
-            { to: `${base}/servicios`, label: 'Servicios' },
-            { to: `${base}/agendas`, label: 'Agendas' },
-          ]}
-        />
+        {adminView ? (
+          <div className="mb-6">
+            <Alert tone="info" title="Vista de administrador">
+              Ves el resumen del negocio. Sus servicios, agendas y reservas solo los gestionan sus miembros.
+            </Alert>
+          </div>
+        ) : (
+          <TabNav
+            items={[
+              { to: base, label: 'Resumen', end: true },
+              { to: `${base}/reservas`, label: 'Reservas' },
+              { to: `${base}/reportes`, label: 'Reportes' },
+              { to: `${base}/servicios`, label: 'Servicios' },
+              { to: `${base}/agendas`, label: 'Agendas' },
+              { to: `${base}/recursos`, label: 'Recursos' },
+              { to: `${base}/tipos`, label: 'Tipos de recurso' },
+              { to: `${base}/auditoria`, label: 'Auditoría' },
+            ]}
+          />
+        )}
         <Outlet />
       </div>
     </OrganizationContext.Provider>

@@ -10,8 +10,10 @@ export function applyServerErrors<T extends FieldValues>(
   error: unknown,
   setError: UseFormSetError<T>,
   rename: (field: string) => string = (field) => field,
+  /** Fields the form has; the rest are left for the caller to show elsewhere. */
+  include: (field: string) => boolean = () => true,
 ): boolean {
-  const entries = fieldErrors(error)
+  const entries = fieldErrors(error).filter(([field]) => include(field))
   for (const [field, message] of entries) {
     // Spring reports "locations[0].name"; react-hook-form paths use "locations.0.name"
     const path = rename(field).replace(/\[(\d+)\]/g, '.$1')

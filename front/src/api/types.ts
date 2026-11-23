@@ -58,6 +58,7 @@ export interface CatalogQuery {
   q?: string
   categoryId?: string
   cityId?: string
+  providerId?: string
   minPrice?: string
   maxPrice?: string
   sort?: 'name' | 'price' | 'duration' | 'provider'
@@ -136,12 +137,14 @@ export interface Organization {
     bookingNoticeMinutesMin: number
     bookingNoticeMinutesMax: number
     freeCancellationWindowMinutes: number
+    manualConfirmation: boolean
   }
 }
 export interface PolicyBody {
   bookingNoticeMinutesMin: number
   bookingNoticeMinutesMax: number
   freeCancellationWindowMinutes: number
+  manualConfirmation?: boolean
 }
 
 // Resources
@@ -267,4 +270,186 @@ export interface InboxEmail {
   subject: string
   body: string
   sentAt: string
+}
+
+// Bookings: creation and cancellation (HU-012, HU-013)
+export type BookingStatus = 'RESERVED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'NO_SHOW'
+export interface TimeSlot {
+  /** OffsetDateTime in the location's zone, e.g. "2026-12-01T09:00:00-05:00" */
+  startsAt: string
+  endsAt: string
+}
+export interface BookingPreview {
+  service: string
+  organization: string
+  location: string
+  slot: TimeSlot
+  price: number
+  currency: string
+  policyVersion: number
+  freeCancellationWindowMinutes: number
+  manualConfirmation: boolean
+  termsVersion: string
+}
+export interface CreateBookingBody {
+  serviceId: string
+  locationId: string
+  startsAt: string
+  termsVersion: string
+}
+export interface BookingReceipt {
+  id: string
+  code: string
+  status: BookingStatus
+}
+export interface CancellationReceipt extends BookingReceipt {
+  lateCancellation: boolean
+}
+
+// Booking search (HU-018)
+export interface BookingRow {
+  id: string
+  code: string
+  clientId: string
+  clientName: string
+  serviceId: string
+  serviceName: string
+  locationId: string
+  locationName: string
+  startsAt: string
+  endsAt: string
+  attendees: number
+  totalPrice: number
+  currency: string
+  status: BookingStatus
+}
+export interface BookingSummary {
+  total: number
+  byStatus: Partial<Record<BookingStatus, number>>
+  amountByCurrency: Record<string, number>
+  cancellationRatePercent: number | null
+}
+export interface BookingPage {
+  items: BookingRow[]
+  summary: BookingSummary
+  page: number
+  size: number
+}
+export interface BookingQuery {
+  from?: string
+  to?: string
+  status?: BookingStatus
+  serviceId?: string
+  locationId?: string
+  resourceId?: string
+  clientId?: string
+  code?: string
+  page?: number
+  size?: number
+}
+
+// Service demand report (HU-020)
+export interface DemandMetrics {
+  created: number
+  completed: number
+  cancelled: number
+  noShow: number
+  completionRatePercent: number | null
+  cancellationRatePercent: number | null
+  noShowRatePercent: number | null
+  estimatedRevenueByCurrency: Record<string, number>
+}
+export interface DemandVariation {
+  createdPercent: number | null
+  completedPercent: number | null
+  cancelledPercent: number | null
+  noShowPercent: number | null
+  completionRatePercent: number | null
+  cancellationRatePercent: number | null
+  noShowRatePercent: number | null
+  estimatedRevenuePercent: Record<string, number | null>
+}
+export interface DemandService {
+  id: string
+  name: string
+  current: DemandMetrics
+  previous: DemandMetrics
+  variation: DemandVariation
+  highCancellation: boolean
+}
+export interface DemandBucket {
+  /** ISO day of week, 1 = Monday … 7 = Sunday */
+  dayOfWeek: number
+  hour: number
+  bookings: number
+}
+export interface DemandReport {
+  period: { from: string; to: string }
+  previousPeriod: { from: string; to: string }
+  timezone: string
+  services: DemandService[]
+  demand: DemandBucket[]
+  previousDemand: DemandBucket[]
+}
+
+// Reminders (HU-015)
+export interface LeadTimes {
+  leadMinutes: number[]
+}
+export interface ReminderPreferences {
+  remindersEnabled: boolean
+  /** "HH:mm" or "HH:mm:ss" */
+  quietFrom: string
+  quietUntil: string
+  timezone: string | null
+}
+
+// Audit (HU-023)
+export interface AuditEvent {
+  id: string
+  occurredAt: string
+  actorId: string | null
+  actorRole: string | null
+  action: string
+  resourceType: string
+  resourceId: string
+  organizationId: string | null
+  result: string
+  relatedResourceId: string | null
+}
+export interface AuditQuery {
+  from?: string
+  to?: string
+  actorId?: string
+  action?: string
+  page?: number
+  size?: number
+}
+
+// Agenda exceptions, availability calendar and occupancy (HU-007, HU-008, HU-011, HU-019)
+export type AgendaExceptionType = 'CLOSED' | 'SPECIAL_HOURS'
+export interface AgendaException {
+  id: string
+  agendaId: string
+  date: string
+  type: AgendaExceptionType
+  /** "HH:mm:ss"; only for SPECIAL_HOURS */
+  specialStart: string | null
+  specialEnd: string | null
+  reason: string | null
+}
+export interface DayAvailability {
+  date: string
+  /** Instants (UTC) */
+  slots: { startsAt: string; endsAt: string }[]
+}
+export interface AgendaOccupancy {
+  agendaId: string
+  agendaName: string
+  from: string
+  to: string
+  totalSlots: number
+  occupiedSlots: number
+  /** 0..1 */
+  occupancyRate: number
 }

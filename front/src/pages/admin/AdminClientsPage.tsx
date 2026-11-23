@@ -3,6 +3,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { DownloadSimple } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { adminApi } from '@/api/endpoints'
+import { useAuth } from '@/auth/AuthContext'
+import { RoleModal } from '@/components/admin/RoleModal'
 import type { ClientRow } from '@/api/types'
 import { StatusBadge } from '@/components/ui/Badge'
 import { EmptyState, ErrorState, Pagination } from '@/components/ui/Blocks'
@@ -26,6 +28,8 @@ export default function AdminClientsPage() {
   const { get, update, query, hasFilters, reset } = useListParams()
   const queryClient = useQueryClient()
   const [target, setTarget] = useState<{ row: ClientRow; action: 'suspension' | 'reactivation' } | null>(null)
+  const [roleTarget, setRoleTarget] = useState<ClientRow | null>(null)
+  const { user, logout } = useAuth()
 
   const list = useQuery({
     queryKey: ['admin-clients', query],
@@ -126,7 +130,12 @@ export default function AdminClientsPage() {
                         <td className="px-4 py-3"><StatusBadge map={CLIENT_STATUS} value={row.status} /></td>
                         <td className="px-4 py-3 whitespace-nowrap">{formatDate(row.registeredAt)}</td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-end">
+                          <div className="flex justify-end gap-2">
+                            {row.status !== 'PENDING_VERIFICATION' && (
+                              <Button size="sm" variant="ghost" aria-label={`Cambiar el rol de ${row.fullName}`} onClick={() => setRoleTarget(row)}>
+                                Cambiar rol
+                              </Button>
+                            )}
                             {row.status === 'ACTIVE' && (
                               <Button size="sm" variant="secondary" aria-label={`Suspender a ${row.fullName}`} onClick={() => setTarget({ row, action: 'suspension' })}>
                                 Suspender
@@ -149,6 +158,25 @@ export default function AdminClientsPage() {
           )
         )}
       </div>
+
+      {roleTarget && (
+        <RoleModal
+          userId={roleTarget.id}
+          name={roleTarget.fullName}
+          current="CLIENT"
+          onClose={() => setRoleTarget(null)}
+          onChanged={(role) => {
+            setRoleTarget(null)
+            queryClient.invalidateQueries({ queryKey: ['admin-clients'] })
+            if (roleTarget.id === user?.id) {
+              toast.info('Cambiaste tu propio rol. Inicia sesión de nuevo.')
+              void logout()
+            } else {
+              toast.success(`Rol cambiado a ${role === 'ADMIN' ? 'administrador' : role === 'PROVIDER' ? 'proveedor' : 'cliente'}. Sus sesiones anteriores se cerraron.`)
+            }
+          }}
+        />
+      )}
 
       {target && (
         <ReasonModal

@@ -50,16 +50,24 @@ export const resetSchema = z
 const minutes = (label: string) =>
   z.coerce.number({ message: `${label}: ingresa un número` }).int('Debe ser entero').min(0, 'No puede ser negativo')
 
-export const policySchema = z
-  .object({
-    bookingNoticeMinutesMin: minutes('Anticipación mínima'),
-    bookingNoticeMinutesMax: minutes('Anticipación máxima'),
-    freeCancellationWindowMinutes: minutes('Cancelación gratuita'),
-  })
-  .refine((v) => v.bookingNoticeMinutesMin <= v.bookingNoticeMinutesMax, {
-    path: ['bookingNoticeMinutesMax'],
-    message: 'Debe ser mayor o igual a la mínima',
-  })
+const policyFields = {
+  bookingNoticeMinutesMin: minutes('Anticipación mínima'),
+  bookingNoticeMinutesMax: minutes('Anticipación máxima'),
+  freeCancellationWindowMinutes: minutes('Cancelación gratuita'),
+}
+const noticeOrder = {
+  check: (v: { bookingNoticeMinutesMin: number; bookingNoticeMinutesMax: number }) =>
+    v.bookingNoticeMinutesMin <= v.bookingNoticeMinutesMax,
+  params: { path: ['bookingNoticeMinutesMax'], message: 'Debe ser mayor o igual a la mínima' },
+}
+
+/** Rules sent with the provider registration (RegisterProviderRequest). */
+export const policySchema = z.object(policyFields).refine(noticeOrder.check, noticeOrder.params)
+
+/** Rules a provider edits later (OperationPolicyRequest), which also choose manual confirmation. */
+export const policyEditSchema = z
+  .object({ ...policyFields, manualConfirmation: z.boolean() })
+  .refine(noticeOrder.check, noticeOrder.params)
 
 export const providerSchema = z.object({
   email,
@@ -107,8 +115,21 @@ export const maintenanceSchema = z
     message: 'El fin debe ser posterior al inicio',
   })
 
+/** An empty input means "not sent": the backend applies its default (ServiceRequests). */
+const blankAsUndefined = (value: unknown) => (value === '' || value === null ? undefined : value)
+
 const optionalMinutes = (max: number) =>
-  z.coerce.number({ message: 'Ingresa un número' }).int().min(0, 'No puede ser negativo').max(max, `Máximo ${max}`)
+  z.preprocess(
+    blankAsUndefined,
+    z.coerce.number({ message: 'Ingresa un número' }).int().min(0, 'No puede ser negativo').max(max, `Máximo ${max}`).optional(),
+  )
+
+/** @Digits(integer = 10, fraction = 2) in ServiceRequests. */
+const price = z.coerce
+  .number({ message: 'Ingresa un número' })
+  .min(0, 'No puede ser negativo')
+  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'Máximo 2 decimales')
+  .refine((v) => Math.trunc(v).toString().length <= 10, 'Máximo 10 dígitos enteros')
 
 export const serviceSchema = z.object({
   name: z.string().trim().min(1, 'Ingresa un nombre').max(120, 'Máximo 120 caracteres'),
@@ -116,7 +137,25 @@ export const serviceSchema = z.object({
   durationMinutes: z.coerce.number({ message: 'Ingresa un número' }).int().min(1, 'Mínimo 1').max(1440, 'Máximo 1440'),
   preparationMinutes: optionalMinutes(1440),
   cleanupMinutes: optionalMinutes(1440),
-  price: z.coerce.number({ message: 'Ingresa un número' }).min(0, 'No puede ser negativo'),
-  customerCapacity: z.coerce.number({ message: 'Ingresa un número' }).int().min(1, 'Mínimo 1').max(500, 'Máximo 500'),
+  price,
+  customerCapacity: z.preprocess(
+    blankAsUndefined,
+    z.coerce.number({ message: 'Ingresa un número' }).int().min(1, 'Mínimo 1').max(500, 'Máximo 500').optional(),
+  ),
 })
 export type ServiceForm = z.input<typeof serviceSchema>
+
+/** HU-015: OrganizationReminderController.LeadTimes, up to 10 values of 1..10080 minutes. */
+export const MAX_LEAD_MINUTES = 10080
+
+/** HU-015: BookingReminderSettingsController.PreferencesRequest. */
+export const preferencesSchema = z.object({
+  remindersEnabled: z.boolean(),
+  quietFrom: z.string().regex(/^\d{2}:\d{2}/, 'Elige una hora'),
+  quietUntil: z.string().regex(/^\d{2}:\d{2}/, 'Elige una hora'),
+  timezone: z.string().trim().max(80, 'Máximo 80 caracteres'),
+})
+export type PreferencesForm = z.infer<typeof preferencesSchema>
+
+/** Reason a provider gives when cancelling a booking (ProviderCancellationRequest, max 300). */
+export const CANCEL_REASON_MAX = 300

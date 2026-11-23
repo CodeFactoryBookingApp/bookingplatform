@@ -12,6 +12,8 @@ interface Props {
   description?: string
   confirmLabel: string
   danger?: boolean
+  /** Backend limit of the reason; 500 for admin status changes, 300 for booking cancellations. */
+  maxLength?: number
   /** Runs the action; `confirm` is true on the second try after the backend asked for confirmation. */
   onSubmit: (reason: string, confirm: boolean) => Promise<void>
   onClose: () => void
@@ -21,7 +23,7 @@ interface Props {
  * Every admin status change demands a reason (HU-003). A 409 CONFIRMATION_REQUIRED, which the
  * backend answers when a suspension affects future bookings, turns into an explicit second step.
  */
-export function ReasonModal({ open, title, description, confirmLabel, danger, onSubmit, onClose }: Props) {
+export function ReasonModal({ open, title, description, confirmLabel, danger, maxLength = 500, onSubmit, onClose }: Props) {
   const [reason, setReason] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -65,8 +67,8 @@ export function ReasonModal({ open, title, description, confirmLabel, danger, on
           label="Motivo"
           required
           autoFocus
-          maxLength={500}
-          hint="Queda guardado junto con el cambio. Máximo 500 caracteres."
+          maxLength={maxLength}
+          hint={`Queda guardado junto con el cambio. Máximo ${maxLength} caracteres.`}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           disabled={affected !== null}

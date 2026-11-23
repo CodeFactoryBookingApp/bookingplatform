@@ -9,6 +9,7 @@ export default function AdminLayout() {
         items={[
           { to: '/admin/proveedores', label: 'Proveedores' },
           { to: '/admin/clientes', label: 'Clientes' },
+          { to: '/admin/auditoria', label: 'Auditoría' },
         ]}
       />
       <Outlet />
