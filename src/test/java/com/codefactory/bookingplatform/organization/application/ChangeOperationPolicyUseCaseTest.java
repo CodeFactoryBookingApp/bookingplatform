@@ -125,4 +125,26 @@ class ChangeOperationPolicyUseCaseTest {
         assertEquals(ErrorCode.VALIDATION_ERROR,
                 assertThrows(BusinessException.class, () -> new OperationPolicy(120, 20160, 720, false, -1)).errorCode());
     }
+
+    @Test
+    void defaultClosureStatusAndAutoCloseDelayCanBeConfiguredAndArePreservedWhenOmitted() {
+        // Arrange
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
+        UUID id = organization.getId();
+
+        // Act
+        useCase.change(id, USER, 120, 20160, 720, true, 2, OperationPolicy.DefaultClosureStatus.NO_SHOW, 12);
+        Organization preserved = useCase.change(id, USER, 120, 20160, 720, null, null, null, null);
+
+        // Assert
+        assertEquals(new OperationPolicy(120, 20160, 720, true, 2,
+                OperationPolicy.DefaultClosureStatus.NO_SHOW, 12), preserved.getPolicy());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class,
+                        () -> new OperationPolicy(120, 20160, 720, false, 1, null, 24)).errorCode());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class,
+                        () -> new OperationPolicy(120, 20160, 720, false, 1,
+                                OperationPolicy.DefaultClosureStatus.COMPLETED, 0)).errorCode());
+    }
 }

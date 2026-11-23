@@ -17,14 +17,27 @@ public record OperationPolicy(int bookingNoticeMinutesMin,
                               int bookingNoticeMinutesMax,
                               int freeCancellationWindowMinutes,
                               boolean manualConfirmation,
-                              int maxReschedules) {
+                              int maxReschedules,
+                              DefaultClosureStatus defaultClosureStatus,
+                              int autoCloseDelayHours) {
+
+    public enum DefaultClosureStatus {
+        COMPLETED,
+        NO_SHOW
+    }
 
     public OperationPolicy(int min, int max, int freeCancellationWindowMinutes) {
-        this(min, max, freeCancellationWindowMinutes, false, 1);
+        this(min, max, freeCancellationWindowMinutes, false, 1, DefaultClosureStatus.COMPLETED, 24);
     }
 
     public OperationPolicy(int min, int max, int freeCancellationWindowMinutes, boolean manualConfirmation) {
-        this(min, max, freeCancellationWindowMinutes, manualConfirmation, 1);
+        this(min, max, freeCancellationWindowMinutes, manualConfirmation, 1, DefaultClosureStatus.COMPLETED, 24);
+    }
+
+    public OperationPolicy(int min, int max, int freeCancellationWindowMinutes, boolean manualConfirmation,
+                           int maxReschedules) {
+        this(min, max, freeCancellationWindowMinutes, manualConfirmation, maxReschedules,
+                DefaultClosureStatus.COMPLETED, 24);
     }
 
     public OperationPolicy {
@@ -40,6 +53,12 @@ public record OperationPolicy(int bookingNoticeMinutesMin,
         }
         if (maxReschedules < 0) {
             errors.put("maxReschedules", "must not be negative");
+        }
+        if (defaultClosureStatus == null) {
+            errors.put("defaultClosureStatus", "is required");
+        }
+        if (autoCloseDelayHours <= 0) {
+            errors.put("autoCloseDelayHours", "must be positive");
         }
         if (bookingNoticeMinutesMin > bookingNoticeMinutesMax) {
             errors.put("bookingNoticeMinutesMin", "must not be greater than bookingNoticeMinutesMax");

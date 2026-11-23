@@ -212,6 +212,58 @@ public class BookingReservationAdapter implements BookingReservations {
         }
     }
 
+    @Override
+    public Optional<AttendanceTarget> lockForAttendance(UUID organization, UUID booking) {
+        return jdbc.sql("""
+                select b.id, b.code, b.client_id, b.organization_id, b.status, b.starts_at, b.ends_at,
+                       (select c.changed_at from booking_status_changes c
+                         where c.booking_id = b.id and c.to_status in ('COMPLETED', 'NO_SHOW')
+                         order by c.changed_at desc limit 1) as closed_at
+                  from bookings b
+                 where b.organization_id = ? and b.id = ? for update of b
+                """).params(organization, booking).query(BookingReservationAdapter::attendanceTarget).optional();
+    }
+
+    @Override
+    public AttendanceReceipt closeAttendance(AttendanceTarget target, BookingStatus status, UUID actor,
+                                             Instant closedAt, String observation) {
+        jdbc.sql("""
+                update bookings set status = ?
+                 where id = ? and status in ('RESERVED', 'CONFIRMED', 'COMPLETED', 'NO_SHOW')
+                """).params(status.name(), target.id()).update();
+        jdbc.sql("""
+                insert into booking_status_changes (booking_id, from_status, to_status, reason, changed_by, changed_at)
+                values (?, ?, ?, ?, ?, ?)
+                """).params(target.id(), target.status().name(), status.name(), observation, actor,
+                closedAt.atOffset(ZoneOffset.UTC)).update();
+        int noShows = jdbc.sql("""
+                select count(*) from bookings where organization_id = ? and client_id = ? and status = 'NO_SHOW'
+                """).params(target.organizationId(), target.clientId()).query(Integer.class).single();
+        return new AttendanceReceipt(target.id(), target.code(), status, actor, closedAt, observation, noShows);
+    }
+
+    @Override
+    public int autoCloseOverdue(Instant now) {
+        return jdbc.sql("""
+                with due as (
+                    select b.id, b.status as from_status, p.default_closure_status as to_status
+                      from bookings b join organization_policies p on p.id = b.policy_id
+                     where b.status in ('RESERVED', 'CONFIRMED')
+                       and b.ends_at + (p.auto_close_delay_hours * interval '1 hour') <= ?
+                     for update of b skip locked
+                ), closed as (
+                    update bookings b
+                       set status = due.to_status
+                      from due
+                     where b.id = due.id
+                    returning b.id, due.from_status, due.to_status
+                )
+                insert into booking_status_changes (booking_id, from_status, to_status, reason, changed_by, changed_at)
+                select id, from_status, to_status, 'Cierre automático por vencimiento de plazo', null, ?
+                  from closed
+                """).params(now.atOffset(ZoneOffset.UTC), now.atOffset(ZoneOffset.UTC)).update();
+    }
+
     private static RuntimeException translateIntegrityViolation(DataIntegrityViolationException ex) {
         if (ex.getMostSpecificCause() instanceof SQLException sql) {
             return switch (sql.getSQLState()) {
@@ -250,6 +302,14 @@ public class BookingReservationAdapter implements BookingReservations {
                 row.getInt("free_cancellation_window_minutes"), row.getInt("max_reschedules"),
                 row.getInt("reschedule_count"), row.getBoolean("late_reschedule"),
                 Arrays.asList((UUID[]) row.getArray("resource_ids").getArray()));
+    }
+
+    private static AttendanceTarget attendanceTarget(ResultSet row, int index) throws SQLException {
+        var closedAt = row.getTimestamp("closed_at");
+        return new AttendanceTarget(row.getObject("id", UUID.class), row.getString("code"),
+                row.getObject("client_id", UUID.class), row.getObject("organization_id", UUID.class),
+                BookingStatus.valueOf(row.getString("status")), row.getTimestamp("starts_at").toInstant(),
+                row.getTimestamp("ends_at").toInstant(), closedAt == null ? null : closedAt.toInstant());
     }
 
     private static Receipt receipt(ResultSet row, int index) throws SQLException {

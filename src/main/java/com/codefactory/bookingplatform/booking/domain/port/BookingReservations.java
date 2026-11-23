@@ -46,6 +46,22 @@ public interface BookingReservations {
     }
     record RescheduleReceipt(UUID id, String code, BookingStatus status, UUID locationId, Instant startsAt,
                              Instant endsAt, int rescheduleCount, boolean lateReschedule) {}
+    record AttendanceTarget(UUID id, String code, UUID clientId, UUID organizationId, BookingStatus status,
+                            Instant startsAt, Instant endsAt, Instant closedAt) {
+        public boolean hasStarted(Instant now) {
+            return !now.isBefore(startsAt);
+        }
+
+        public boolean closed() {
+            return status == BookingStatus.COMPLETED || status == BookingStatus.NO_SHOW;
+        }
+
+        public boolean correctionWindowExpired(Instant now) {
+            return closed() && closedAt != null && now.isAfter(closedAt.plusSeconds(48 * 3600L));
+        }
+    }
+    record AttendanceReceipt(UUID id, String code, BookingStatus status, UUID closedBy, Instant closedAt,
+                             String observation, int clientNoShowCount) {}
 
     Optional<BookingOffering> offering(UUID service, UUID location);
     List<Slot> slots(BookingOffering offering, LocalDate day, Instant now);
@@ -62,4 +78,8 @@ public interface BookingReservations {
                                UUID actor);
     Optional<RescheduleTarget> lockForReschedule(UUID client, UUID booking);
     RescheduleReceipt reschedule(RescheduleTarget target, UUID targetLocation, Slot slot, boolean lateReschedule);
+    Optional<AttendanceTarget> lockForAttendance(UUID organization, UUID booking);
+    AttendanceReceipt closeAttendance(AttendanceTarget target, BookingStatus status, UUID actor, Instant closedAt,
+                                      String observation);
+    int autoCloseOverdue(Instant now);
 }

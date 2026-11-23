@@ -63,6 +63,7 @@ public class OrganizationController {
         return OrganizationResponse.from(changeOperationPolicyUseCase.change(organizationId,
                 AuthenticatedUser.from(authentication).id(), request.bookingNoticeMinutesMin(),
                 request.bookingNoticeMinutesMax(), request.freeCancellationWindowMinutes(),
-                request.manualConfirmation(), request.maxReschedules()));
+                request.manualConfirmation(), request.maxReschedules(),
+                request.defaultClosureStatus(), request.autoCloseDelayHours()));
     }
 }

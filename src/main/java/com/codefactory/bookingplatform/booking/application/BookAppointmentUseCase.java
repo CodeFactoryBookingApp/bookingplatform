@@ -1,7 +1,10 @@
 package com.codefactory.bookingplatform.booking.application;
 
 import com.codefactory.bookingplatform.booking.domain.model.BookingOffering;
+import com.codefactory.bookingplatform.booking.domain.model.BookingStatus;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.AttendanceReceipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.AttendanceTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
@@ -164,6 +167,44 @@ public class BookAppointmentUseCase {
         boolean late = target.lateRescheduleAt(now);
         audit.identify(client, "CLIENT");
         return bookings.reschedule(target, destinationLocation, slot, late);
+    }
+
+    @Transactional
+    public AttendanceReceipt recordAttendance(UUID organization, UUID booking, UUID actor, BookingStatus status,
+                                              String observation) {
+        access.requireRole(organization, actor, MemberRole.OWNER, MemberRole.MANAGER, MemberRole.STAFF);
+        if (status != BookingStatus.COMPLETED && status != BookingStatus.NO_SHOW) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "Attendance closure status must be COMPLETED or NO_SHOW",
+                    Map.of("status", "must be COMPLETED or NO_SHOW"));
+        }
+        AttendanceTarget target = bookings.lockForAttendance(organization, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (target.status() == BookingStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "A cancelled booking cannot be marked as completed or no-show");
+        }
+        Instant now = clock.instant();
+        if (!target.hasStarted(now)) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "Attendance cannot be recorded before the booking start time");
+        }
+        if (target.closed()) {
+            if (target.correctionWindowExpired(now)) {
+                throw new BusinessException(ErrorCode.CLOSURE_CORRECTION_WINDOW_EXPIRED);
+            }
+            if (target.status() == status) {
+                throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                        "Booking is already closed with status " + status);
+            }
+        }
+        String note = observation == null || observation.isBlank() ? null : observation.trim();
+        return bookings.closeAttendance(target, status, actor, now, note);
+    }
+
+    @Transactional
+    public int autoCloseUnmarked() {
+        return bookings.autoCloseOverdue(clock.instant());
     }
 
     private static void requireCancellable(CancellationTarget target, Instant now) {

@@ -3,6 +3,7 @@ package com.codefactory.bookingplatform.organization.api.dto;
 import com.codefactory.bookingplatform.organization.domain.model.IdentificationType;
 import com.codefactory.bookingplatform.organization.domain.model.Location;
 import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy;
+import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy.DefaultClosureStatus;
 import com.codefactory.bookingplatform.organization.domain.model.Organization;
 import com.codefactory.bookingplatform.organization.domain.model.OrganizationStatus;
 
@@ -24,7 +25,8 @@ public record OrganizationResponse(UUID id, String name, UUID categoryId, Identi
     }
 
     public record PolicyResponse(int version, int bookingNoticeMinutesMin, int bookingNoticeMinutesMax,
-                                 int freeCancellationWindowMinutes, boolean manualConfirmation, int maxReschedules) {
+                                 int freeCancellationWindowMinutes, boolean manualConfirmation, int maxReschedules,
+                                 DefaultClosureStatus defaultClosureStatus, int autoCloseDelayHours) {
     }
 
     public static OrganizationResponse from(Organization organization) {
@@ -36,6 +38,7 @@ public record OrganizationResponse(UUID id, String name, UUID categoryId, Identi
                 organization.getLocations().stream().map(LocationResponse::from).toList(),
                 new PolicyResponse(organization.getPolicyVersion(), policy.bookingNoticeMinutesMin(),
                         policy.bookingNoticeMinutesMax(), policy.freeCancellationWindowMinutes(),
-                        policy.manualConfirmation(), policy.maxReschedules()));
+                        policy.manualConfirmation(), policy.maxReschedules(),
+                        policy.defaultClosureStatus(), policy.autoCloseDelayHours()));
     }
 }

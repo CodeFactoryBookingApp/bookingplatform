@@ -3,6 +3,8 @@ package com.codefactory.bookingplatform.booking.api;
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase;
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.Preview;
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.TimeSlot;
+import com.codefactory.bookingplatform.booking.domain.model.BookingStatus;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.AttendanceReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleReceipt;
@@ -32,6 +34,7 @@ public class BookingReservationController {
     }
     public record ProviderCancellationRequest(@NotBlank @Size(max = 300) String reason) {}
     public record ClientRescheduleRequest(@NotNull Instant startsAt, UUID locationId, UUID resourceId, UUID serviceId) {}
+    public record AttendanceRequest(@NotNull BookingStatus status, @Size(max = 300) String observation) {}
 
     private final BookAppointmentUseCase bookings;
 
@@ -89,5 +92,13 @@ public class BookingReservationController {
                                                 @Valid @RequestBody ProviderCancellationRequest request,
                                                 JwtAuthenticationToken token) {
         return bookings.cancelByProvider(organizationId, bookingId, AuthenticatedUser.from(token).id(), request.reason());
+    }
+
+    @PostMapping("/organizations/{organizationId}/bookings/{bookingId}/attendance")
+    public AttendanceReceipt recordAttendance(@PathVariable UUID organizationId, @PathVariable UUID bookingId,
+                                              @Valid @RequestBody AttendanceRequest request,
+                                              JwtAuthenticationToken token) {
+        return bookings.recordAttendance(organizationId, bookingId, AuthenticatedUser.from(token).id(),
+                request.status(), request.observation());
     }
 }
