@@ -23,6 +23,9 @@ arrancar, en orden de versión:
 | `V11__consulta_y_demanda_de_reservas.sql` | Código único en reservas y copia histórica de la moneda (HU-018 y HU-020) |
 | `V12__avisos_y_recordatorios_de_reserva.sql` | Cola de avisos, preferencias y anticipación por proveedor (HU-015) |
 | `V13__auditoria_de_operaciones.sql` | Auditoría de usuarios, proveedores, servicios, agendas, recursos y reservas (HU-023) |
+| `V14__creacion_de_reservas.sql` | Confirmación manual en la política del proveedor y un cliente sin dos reservas activas a la misma hora (HU-012) |
+| `V15__cancelacion_de_reservas.sql` | Marca de cancelación tardía y una reserva cancelada no se puede reactivar (HU-013) |
+| `V16__excepciones_de_agenda.sql` | `agenda_exceptions`: festivos, cierres y horarios especiales de una agenda en una fecha, con RLS (HU-007) |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
@@ -98,7 +101,7 @@ El workflow `.github/workflows/database.yml` corre en cada pull request que
 toque esta carpeta, las migraciones o el mapeo JPA. Comprueba que:
 
 - V1 y V2 ejecuten dos veces seguidas, como sobre una base anterior a Flyway, y después las demás migraciones en orden;
-- se creen las veintiocho tablas de las migraciones V1 a V13;
+- se creen las veintinueve tablas de las migraciones V1 a V16;
 - los datos de prueba carguen;
 - las catorce consultas devuelvan filas;
 - las veinticuatro pruebas de integridad sean rechazadas;
