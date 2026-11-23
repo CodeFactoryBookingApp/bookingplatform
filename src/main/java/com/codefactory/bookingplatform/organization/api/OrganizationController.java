@@ -62,6 +62,7 @@ public class OrganizationController {
                                              JwtAuthenticationToken authentication) {
         return OrganizationResponse.from(changeOperationPolicyUseCase.change(organizationId,
                 AuthenticatedUser.from(authentication).id(), request.bookingNoticeMinutesMin(),
-                request.bookingNoticeMinutesMax(), request.freeCancellationWindowMinutes(), request.manualConfirmation()));
+                request.bookingNoticeMinutesMax(), request.freeCancellationWindowMinutes(),
+                request.manualConfirmation(), request.maxReschedules()));
     }
 }

@@ -24,7 +24,7 @@ public record OrganizationResponse(UUID id, String name, UUID categoryId, Identi
     }
 
     public record PolicyResponse(int version, int bookingNoticeMinutesMin, int bookingNoticeMinutesMax,
-                                 int freeCancellationWindowMinutes, boolean manualConfirmation) {
+                                 int freeCancellationWindowMinutes, boolean manualConfirmation, int maxReschedules) {
     }
 
     public static OrganizationResponse from(Organization organization) {
@@ -35,6 +35,7 @@ public record OrganizationResponse(UUID id, String name, UUID categoryId, Identi
                 organization.getStatus(), organization.getApprovedAt(),
                 organization.getLocations().stream().map(LocationResponse::from).toList(),
                 new PolicyResponse(organization.getPolicyVersion(), policy.bookingNoticeMinutesMin(),
-                        policy.bookingNoticeMinutesMax(), policy.freeCancellationWindowMinutes(), policy.manualConfirmation()));
+                        policy.bookingNoticeMinutesMax(), policy.freeCancellationWindowMinutes(),
+                        policy.manualConfirmation(), policy.maxReschedules()));
     }
 }

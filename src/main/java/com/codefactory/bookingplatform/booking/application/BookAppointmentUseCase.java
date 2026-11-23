@@ -5,6 +5,8 @@ import com.codefactory.bookingplatform.booking.domain.port.BookingReservations;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleReceipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Slot;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
@@ -125,6 +127,45 @@ public class BookAppointmentUseCase {
                 "A cancelled booking cannot be reactivated; create a new booking instead");
     }
 
+    @Transactional
+    public RescheduleReceipt rescheduleByClient(UUID client, UUID booking, Instant startsAt, UUID locationId,
+                                                UUID resourceId, UUID requestedServiceId) {
+        RescheduleTarget target = bookings.lockForReschedule(client, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (requestedServiceId != null && !requestedServiceId.equals(target.serviceId())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "The service cannot be changed when rescheduling; only date, time, location or resource can change",
+                    Map.of("serviceId", "cannot be changed when rescheduling"));
+        }
+        Instant now = clock.instant();
+        if (!target.reschedulable(now)) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "Booking cannot be rescheduled in its current state or after it has started");
+        }
+        if (target.limitReached()) {
+            throw new BusinessException(ErrorCode.RESCHEDULE_LIMIT_REACHED,
+                    "Maximum reschedule limit reached; cancel this booking and create a new one",
+                    Map.of("maxReschedules", Integer.toString(target.maxReschedules()),
+                            "rescheduleCount", Integer.toString(target.rescheduleCount()),
+                            "suggestedAction", "CANCEL_AND_CREATE_NEW"));
+        }
+        UUID destinationLocation = locationId == null ? target.locationId() : locationId;
+        bookings.lockAllocation(target.serviceId(), destinationLocation, client);
+        var offer = bookings.offering(target.serviceId(), destinationLocation)
+                .orElseThrow(() -> new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "The service is not offered at the requested location",
+                        Map.of("locationId", "service is not offered at this location")));
+        Slot slot = selectForReschedule(offer, startsAt, now, target.id(), resourceId);
+        if (target.unchanged(destinationLocation, slot)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                    "Select a different date, time, location or resource to reschedule",
+                    Map.of("startsAt", "must change date, time, location or resource"));
+        }
+        boolean late = target.lateRescheduleAt(now);
+        audit.identify(client, "CLIENT");
+        return bookings.reschedule(target, destinationLocation, slot, late);
+    }
+
     private static void requireCancellable(CancellationTarget target, Instant now) {
         if (!target.cancellable(now)) {
             throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
@@ -146,6 +187,16 @@ public class BookAppointmentUseCase {
     private Slot select(BookingOffering offer, Instant start, Instant now) {
         return bookings.slots(offer, start.atZone(offer.zone()).toLocalDate(), now).stream()
                 .filter(slot -> slot.start().equals(start)).findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_UNAVAILABLE));
+    }
+
+    private Slot selectForReschedule(BookingOffering offer, Instant start, Instant now, UUID bookingId,
+                                     UUID preferredResource) {
+        return bookings.slotsForReschedule(offer, start.atZone(offer.zone()).toLocalDate(), now, bookingId, preferredResource)
+                .stream()
+                .filter(slot -> slot.start().equals(start))
+                .filter(slot -> preferredResource == null || slot.resources().contains(preferredResource))
+                .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorCode.SLOT_UNAVAILABLE));
     }
 

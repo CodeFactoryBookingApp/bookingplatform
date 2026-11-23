@@ -29,10 +29,12 @@ with candidates as (
       left join lateral (
           select b.session_id, sum(b.attendees) as occupied from bookings b
            where b.location_id = :location and b.service_id = :service
+             and (cast(:ignoreBooking as uuid) is null or b.id <> cast(:ignoreBooking as uuid))
              and b.starts_at = c.start and b.ends_at = c.finish and b.status in ('RESERVED','CONFIRMED')
              -- A pinned agenda can share only a session already using that resource.
              and (c.pinned is null or exists (
                  select 1 from booking_resources held where held.session_id = b.session_id
+                   and (cast(:ignoreBooking as uuid) is null or held.booking_id <> cast(:ignoreBooking as uuid))
                    and held.resource_id = c.pinned and held.status in ('RESERVED','CONFIRMED')))
            group by b.session_id order by b.session_id limit 1
       ) s on true
@@ -41,13 +43,16 @@ with candidates as (
 ), eligible_resources as (
     select s.agenda, s.start, r.id, r.resource_type_id, req.quantity_required, r.id = s.pinned as pinned,
            row_number() over (partition by s.agenda, s.start, r.resource_type_id
-                              order by (r.id = s.pinned) desc nulls last, r.capacity desc, r.id) as priority
+                              order by (r.id = s.pinned) desc nulls last,
+                                       (cast(:preferredResource as uuid) is not null and r.id = cast(:preferredResource as uuid)) desc,
+                                       r.capacity desc, r.id) as priority
       from sessions s
       join resources r on r.location_id = :location and r.status = 'ACTIVE' and r.capacity > s.occupied
       left join required req on req.resource_type_id = r.resource_type_id
      where (req.resource_type_id is not null or r.id = s.pinned)
        and (s.session_id is null or exists (
             select 1 from booking_resources held where held.session_id = s.session_id and held.resource_id = r.id
+              and (cast(:ignoreBooking as uuid) is null or held.booking_id <> cast(:ignoreBooking as uuid))
               and held.status in ('RESERVED','CONFIRMED')))
        and not exists (
             select 1 from resource_maintenances m where m.resource_id = r.id
@@ -57,19 +62,26 @@ with candidates as (
             select 1 from booking_resources held join bookings b on b.id = held.booking_id
               join services other on other.id = b.service_id
              where held.resource_id = r.id and held.status in ('RESERVED','CONFIRMED')
+               and (cast(:ignoreBooking as uuid) is null or held.booking_id <> cast(:ignoreBooking as uuid))
                and held.session_id is distinct from s.session_id
                and held.starts_at - other.preparation_minutes * interval '1 minute' < s.finish + :cleanup * interval '1 minute'
                and held.ends_at + other.cleanup_minutes * interval '1 minute' > s.start - :prep * interval '1 minute')
 ), allocations as (
     select agenda, start, array_agg(id order by id) as ids
       from eligible_resources where priority <= quantity_required or pinned group by agenda, start
+), ranked_candidates as (
+    select s.start, s.finish, s.session_id, coalesce(a.ids, array[]::uuid[]) as ids,
+           row_number() over (partition by s.start order by s.agenda) as slot_rank
+      from sessions s left join allocations a using (agenda, start)
+     where s.occupied < :capacity
+       and (s.pinned is null or s.pinned = any(a.ids))
+       and not exists (
+           select 1 from required req where req.quantity_required > (
+               select count(*) from eligible_resources r where r.agenda = s.agenda and r.start = s.start
+                 and r.resource_type_id = req.resource_type_id))
 )
-select distinct on (s.start) s.start, s.finish, s.session_id, coalesce(a.ids, array[]::uuid[]) as ids
-  from sessions s left join allocations a using (agenda, start)
- where s.occupied < :capacity
-   and (s.pinned is null or s.pinned = any(a.ids))
-   and not exists (
-       select 1 from required req where req.quantity_required > (
-           select count(*) from eligible_resources r where r.agenda = s.agenda and r.start = s.start
-             and r.resource_type_id = req.resource_type_id))
- order by s.start, s.agenda
+select start, finish, session_id, ids
+  from ranked_candidates
+ where cast(:ignoreBooking as uuid) is not null or slot_rank = 1
+ order by start, slot_rank
+

@@ -35,11 +35,18 @@ public class ChangeOperationPolicyUseCase {
     @Transactional
     public Organization change(UUID organizationId, UUID userId, int minNotice, int maxNotice,
                                int cancellationWindow, Boolean manualConfirmation) {
+        return change(organizationId, userId, minNotice, maxNotice, cancellationWindow, manualConfirmation, null);
+    }
+
+    @Transactional
+    public Organization change(UUID organizationId, UUID userId, int minNotice, int maxNotice,
+                               int cancellationWindow, Boolean manualConfirmation, Integer maxReschedules) {
         access.requireRole(organizationId, userId, MemberRole.OWNER, MemberRole.MANAGER);
         Organization organization = organizations.findById(organizationId)
                 .orElseThrow(OrganizationAccess::notFound);
         boolean manual = manualConfirmation == null ? organization.getPolicy().manualConfirmation() : manualConfirmation;
-        int version = organization.changePolicy(new OperationPolicy(minNotice, maxNotice, cancellationWindow, manual));
+        int reschedules = maxReschedules == null ? organization.getPolicy().maxReschedules() : maxReschedules;
+        int version = organization.changePolicy(new OperationPolicy(minNotice, maxNotice, cancellationWindow, manual, reschedules));
         organizations.savePolicy(organization, clock.instant());
         log.info("Provider {} operating rules moved to version {}", organizationId, version);
         return organization;

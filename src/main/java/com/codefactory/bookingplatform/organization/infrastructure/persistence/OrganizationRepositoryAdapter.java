@@ -176,6 +176,7 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
         entity.setBookingNoticeMinutesMax(policy.bookingNoticeMinutesMax());
         entity.setFreeCancellationWindowMinutes(policy.freeCancellationWindowMinutes());
         entity.setManualConfirmation(policy.manualConfirmation());
+        entity.setMaxReschedules(policy.maxReschedules());
         entity.setEffectiveFrom(at);
         return entity;
     }
@@ -192,7 +193,8 @@ public class OrganizationRepositoryAdapter implements OrganizationRepository {
                 entity.getIdentificationType(), entity.getIdentificationNumber(), entity.getContactEmail(),
                 entity.getContactPhone(), entity.getTimezone(), branches, entity.getStatus(), entity.getApprovedAt(),
                 new OperationPolicy(current.getBookingNoticeMinutesMin(), current.getBookingNoticeMinutesMax(),
-                        current.getFreeCancellationWindowMinutes(), current.isManualConfirmation()),
+                        current.getFreeCancellationWindowMinutes(), current.isManualConfirmation(),
+                        current.getMaxReschedules()),
                 current.getVersion());
     }
 }

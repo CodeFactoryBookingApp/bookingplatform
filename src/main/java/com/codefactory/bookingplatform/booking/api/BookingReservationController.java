@@ -5,6 +5,7 @@ import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCas
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.TimeSlot;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleReceipt;
 import com.codefactory.bookingplatform.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -30,6 +31,7 @@ public class BookingReservationController {
         }
     }
     public record ProviderCancellationRequest(@NotBlank @Size(max = 300) String reason) {}
+    public record ClientRescheduleRequest(@NotNull Instant startsAt, UUID locationId, UUID resourceId, UUID serviceId) {}
 
     private final BookAppointmentUseCase bookings;
 
@@ -67,6 +69,14 @@ public class BookingReservationController {
     @PostMapping("/bookings/{bookingId}/reactivate")
     public void reactivateByClient(@PathVariable UUID bookingId, JwtAuthenticationToken token) {
         bookings.reactivateByClient(AuthenticatedUser.from(token).id(), bookingId);
+    }
+
+    @PostMapping("/bookings/{bookingId}/reschedule")
+    public RescheduleReceipt rescheduleByClient(@PathVariable UUID bookingId,
+                                                @Valid @RequestBody ClientRescheduleRequest request,
+                                                JwtAuthenticationToken token) {
+        return bookings.rescheduleByClient(AuthenticatedUser.from(token).id(), bookingId, request.startsAt(),
+                request.locationId(), request.resourceId(), request.serviceId());
     }
 
     @PostMapping("/organizations/{organizationId}/bookings/{bookingId}/confirm")

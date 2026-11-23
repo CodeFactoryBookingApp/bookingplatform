@@ -30,6 +30,8 @@ public enum ErrorCode {
     SLOT_UNAVAILABLE(HttpStatus.CONFLICT, "The slot is no longer available"),
     BOOKING_TERMS_CHANGED(HttpStatus.CONFLICT, "Review the updated booking terms"),
     CLIENT_BOOKING_OVERLAP(HttpStatus.CONFLICT, "You already have a booking at this time"),
+    RESCHEDULE_LIMIT_REACHED(HttpStatus.CONFLICT,
+            "Maximum reschedule limit reached; cancel this booking and create a new one"),
     HAS_FUTURE_BOOKINGS(HttpStatus.CONFLICT, "There are future bookings that must be resolved first"),
     HAS_BOOKINGS(HttpStatus.CONFLICT, "It has bookings, so it can only be deactivated"),
     INSUFFICIENT_RESOURCES(HttpStatus.CONFLICT, "Not enough resources to provide the service"),

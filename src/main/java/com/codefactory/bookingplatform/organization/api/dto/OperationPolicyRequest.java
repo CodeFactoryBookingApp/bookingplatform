@@ -19,5 +19,8 @@ public record OperationPolicyRequest(
         @PositiveOrZero(message = "freeCancellationWindowMinutes must not be negative")
         Integer freeCancellationWindowMinutes,
 
-        Boolean manualConfirmation) {
+        Boolean manualConfirmation,
+
+        @PositiveOrZero(message = "maxReschedules must not be negative")
+        Integer maxReschedules) {
 }

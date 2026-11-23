@@ -55,12 +55,20 @@ public class BookingReservationAdapter implements BookingReservations {
 
     @Override
     public List<Slot> slots(BookingOffering offer, LocalDate day, Instant now) {
+        return slotsForReschedule(offer, day, now, null, null);
+    }
+
+    @Override
+    public List<Slot> slotsForReschedule(BookingOffering offer, LocalDate day, Instant now, UUID ignoredBooking,
+                                         UUID preferredResource) {
         return jdbc.sql(availableSlots).param("day", day).param("zone", offer.zone().getId())
                 .param("service", offer.serviceId()).param("location", offer.locationId())
                 .param("duration", offer.duration()).param("prep", offer.preparation()).param("cleanup", offer.cleanup())
                 .param("capacity", offer.capacity())
                 .param("earliest", now.plus(offer.minNotice(), ChronoUnit.MINUTES).atOffset(ZoneOffset.UTC))
                 .param("latest", now.plus(offer.maxNotice(), ChronoUnit.MINUTES).atOffset(ZoneOffset.UTC))
+                .param("ignoreBooking", ignoredBooking)
+                .param("preferredResource", preferredResource)
                 .query((r, i) -> new Slot(r.getTimestamp("start").toInstant(), r.getTimestamp("finish").toInstant(),
                         r.getObject("session_id", UUID.class), Arrays.asList((UUID[]) r.getArray("ids").getArray()))).list();
     }
@@ -104,14 +112,7 @@ public class BookingReservationAdapter implements BookingReservations {
             history(id, null, status, client);
             return receipt;
         } catch (DataIntegrityViolationException ex) {
-            if (ex.getMostSpecificCause() instanceof SQLException sql) {
-                switch (sql.getSQLState()) {
-                    case "23P12" -> throw new BusinessException(ErrorCode.CLIENT_BOOKING_OVERLAP);
-                    case "23P01" -> throw new BusinessException(ErrorCode.SLOT_UNAVAILABLE);
-                    default -> throw ex;
-                }
-            }
-            throw ex;
+            throw translateIntegrityViolation(ex);
         }
     }
 
@@ -165,6 +166,63 @@ public class BookingReservationAdapter implements BookingReservations {
         return receipt;
     }
 
+    @Override
+    public Optional<RescheduleTarget> lockForReschedule(UUID client, UUID booking) {
+        return jdbc.sql("""
+                select b.id, b.code, b.client_id, b.organization_id, b.service_id, b.location_id, b.session_id,
+                       b.status, b.starts_at, b.ends_at, p.free_cancellation_window_minutes, p.max_reschedules,
+                       b.reschedule_count, b.late_reschedule,
+                       coalesce((select array_agg(br.resource_id order by br.resource_id)
+                                   from booking_resources br where br.booking_id = b.id), array[]::uuid[]) as resource_ids
+                  from bookings b join organization_policies p on p.id = b.policy_id
+                 where b.client_id = ? and b.id = ? for update of b
+                """).params(client, booking).query(BookingReservationAdapter::rescheduleTarget).optional();
+    }
+
+    @Override
+    public RescheduleReceipt reschedule(RescheduleTarget target, UUID targetLocation, Slot slot, boolean lateReschedule) {
+        UUID session = slot.sessionId() == null ? target.id() : slot.sessionId();
+        boolean markLate = target.lateReschedule() || lateReschedule;
+        try {
+            jdbc.sql("delete from booking_resources where booking_id = ?").param(target.id()).update();
+            var receipt = jdbc.sql("""
+                    update bookings
+                       set location_id = ?, session_id = ?, starts_at = ?, ends_at = ?,
+                           reschedule_count = reschedule_count + 1, late_reschedule = ?
+                     where id = ? and status in ('RESERVED', 'CONFIRMED')
+                     returning id, code, status, location_id, starts_at, ends_at, reschedule_count, late_reschedule
+                    """).params(targetLocation, session, slot.start().atOffset(ZoneOffset.UTC),
+                            slot.end().atOffset(ZoneOffset.UTC), markLate, target.id())
+                    .query((r, i) -> new RescheduleReceipt(r.getObject("id", UUID.class), r.getString("code"),
+                            BookingStatus.valueOf(r.getString("status")), r.getObject("location_id", UUID.class),
+                            r.getTimestamp("starts_at").toInstant(), r.getTimestamp("ends_at").toInstant(),
+                            r.getInt("reschedule_count"), r.getBoolean("late_reschedule"))).optional()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION));
+            for (UUID resource : slot.resources()) {
+                jdbc.sql("""
+                        insert into booking_resources (booking_id,resource_id,location_id,session_id,starts_at,ends_at,status)
+                        select id, ?, location_id, session_id, starts_at, ends_at, status from bookings where id = ?
+                        """).params(resource, target.id()).update();
+            }
+            history(target.id(), target.status(), target.status(), target.clientId(),
+                    lateReschedule ? "Reprogramación tardía del cliente" : "Reprogramación del cliente");
+            return receipt;
+        } catch (DataIntegrityViolationException ex) {
+            throw translateIntegrityViolation(ex);
+        }
+    }
+
+    private static RuntimeException translateIntegrityViolation(DataIntegrityViolationException ex) {
+        if (ex.getMostSpecificCause() instanceof SQLException sql) {
+            return switch (sql.getSQLState()) {
+                case "23P12" -> new BusinessException(ErrorCode.CLIENT_BOOKING_OVERLAP);
+                case "23P01" -> new BusinessException(ErrorCode.SLOT_UNAVAILABLE);
+                default -> ex;
+            };
+        }
+        return ex;
+    }
+
     private void history(UUID booking, BookingStatus from, BookingStatus to, UUID actor) {
         history(booking, from, to, actor, null);
     }
@@ -181,6 +239,17 @@ public class BookingReservationAdapter implements BookingReservations {
         return new CancellationTarget(row.getObject("id", UUID.class), row.getObject("client_id", UUID.class),
                 row.getObject("organization_id", UUID.class), BookingStatus.valueOf(row.getString("status")),
                 row.getTimestamp("starts_at").toInstant(), row.getInt("free_cancellation_window_minutes"));
+    }
+
+    private static RescheduleTarget rescheduleTarget(ResultSet row, int index) throws SQLException {
+        return new RescheduleTarget(row.getObject("id", UUID.class), row.getString("code"),
+                row.getObject("client_id", UUID.class), row.getObject("organization_id", UUID.class),
+                row.getObject("service_id", UUID.class), row.getObject("location_id", UUID.class),
+                row.getObject("session_id", UUID.class), BookingStatus.valueOf(row.getString("status")),
+                row.getTimestamp("starts_at").toInstant(), row.getTimestamp("ends_at").toInstant(),
+                row.getInt("free_cancellation_window_minutes"), row.getInt("max_reschedules"),
+                row.getInt("reschedule_count"), row.getBoolean("late_reschedule"),
+                Arrays.asList((UUID[]) row.getArray("resource_ids").getArray()));
     }
 
     private static Receipt receipt(ResultSet row, int index) throws SQLException {

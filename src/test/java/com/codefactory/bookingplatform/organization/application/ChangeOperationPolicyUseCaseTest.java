@@ -109,4 +109,20 @@ class ChangeOperationPolicyUseCaseTest {
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
         verify(organizations, never()).savePolicy(any(), any());
     }
+
+    @Test
+    void maxReschedulesCanBeConfiguredAndIsPreservedWhenOmitted() {
+        // Arrange
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
+        UUID id = organization.getId();
+
+        // Act
+        useCase.change(id, USER, 120, 20160, 720, true, 3);
+        Organization preserved = useCase.change(id, USER, 120, 20160, 720, null, null);
+
+        // Assert
+        assertEquals(new OperationPolicy(120, 20160, 720, true, 3), preserved.getPolicy());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class, () -> new OperationPolicy(120, 20160, 720, false, -1)).errorCode());
+    }
 }

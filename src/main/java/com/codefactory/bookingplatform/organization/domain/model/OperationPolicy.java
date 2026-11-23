@@ -15,10 +15,16 @@ import java.util.Map;
  */
 public record OperationPolicy(int bookingNoticeMinutesMin,
                               int bookingNoticeMinutesMax,
-                              int freeCancellationWindowMinutes, boolean manualConfirmation) {
+                              int freeCancellationWindowMinutes,
+                              boolean manualConfirmation,
+                              int maxReschedules) {
 
     public OperationPolicy(int min, int max, int freeCancellationWindowMinutes) {
-        this(min, max, freeCancellationWindowMinutes, false);
+        this(min, max, freeCancellationWindowMinutes, false, 1);
+    }
+
+    public OperationPolicy(int min, int max, int freeCancellationWindowMinutes, boolean manualConfirmation) {
+        this(min, max, freeCancellationWindowMinutes, manualConfirmation, 1);
     }
 
     public OperationPolicy {
@@ -31,6 +37,9 @@ public record OperationPolicy(int bookingNoticeMinutesMin,
         }
         if (freeCancellationWindowMinutes < 0) {
             errors.put("freeCancellationWindowMinutes", "must not be negative");
+        }
+        if (maxReschedules < 0) {
+            errors.put("maxReschedules", "must not be negative");
         }
         if (bookingNoticeMinutesMin > bookingNoticeMinutesMax) {
             errors.put("bookingNoticeMinutesMin", "must not be greater than bookingNoticeMinutesMax");

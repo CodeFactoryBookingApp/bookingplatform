@@ -41,6 +41,9 @@ public class OperationPolicyEntity {
     @Column(name = "manual_confirmation", nullable = false, updatable = false)
     private boolean manualConfirmation;
 
+    @Column(name = "max_reschedules", nullable = false, updatable = false)
+    private int maxReschedules;
+
     @Column(name = "effective_from", nullable = false, updatable = false)
     private Instant effectiveFrom;
 
