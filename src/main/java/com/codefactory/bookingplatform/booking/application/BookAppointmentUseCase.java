@@ -2,6 +2,8 @@ package com.codefactory.bookingplatform.booking.application;
 
 import com.codefactory.bookingplatform.booking.domain.model.BookingOffering;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Slot;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -81,6 +84,52 @@ public class BookAppointmentUseCase {
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         requireVerified(client);
         return bookings.confirm(booking, actor);
+    }
+
+    @Transactional
+    public CancellationReceipt cancelByClient(UUID client, UUID booking, boolean confirmed, String reason) {
+        CancellationTarget target = bookings.lockForClientCancellation(client, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        Instant now = clock.instant();
+        requireCancellable(target, now);
+        boolean late = target.lateCancellation(now);
+        if (!confirmed) {
+            throw new BusinessException(ErrorCode.CONFIRMATION_REQUIRED,
+                    late ? "Cancelling outside the free window incurs a late cancellation penalty; confirm to proceed"
+                            : "Confirm the cancellation to release the slot without penalty",
+                    Map.of("penaltyApplies", Boolean.toString(late), "lateCancellation", Boolean.toString(late),
+                            "freeCancellationWindowMinutes", Integer.toString(target.freeCancellationWindowMinutes())));
+        }
+        String note = reason == null || reason.isBlank()
+                ? (late ? "Cancelación tardía del cliente" : "Cancelación del cliente")
+                : reason.trim();
+        audit.identify(client, "CLIENT");
+        return bookings.cancel(target, now, late, note, client);
+    }
+
+    @Transactional
+    public CancellationReceipt cancelByProvider(UUID organization, UUID booking, UUID actor, String reason) {
+        access.requireRole(organization, actor, MemberRole.OWNER, MemberRole.MANAGER);
+        CancellationTarget target = bookings.lockForProviderCancellation(organization, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        Instant now = clock.instant();
+        requireCancellable(target, now);
+        return bookings.cancel(target, now, false, reason.trim(), actor);
+    }
+
+    @Transactional
+    public void reactivateByClient(UUID client, UUID booking) {
+        bookings.lockForClientCancellation(client, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+        throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                "A cancelled booking cannot be reactivated; create a new booking instead");
+    }
+
+    private static void requireCancellable(CancellationTarget target, Instant now) {
+        if (!target.cancellable(now)) {
+            throw new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION,
+                    "Booking cannot be cancelled in its current state or after it has started");
+        }
     }
 
     private void requireVerified(UUID client) {

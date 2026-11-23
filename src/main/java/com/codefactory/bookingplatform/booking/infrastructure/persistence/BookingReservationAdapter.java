@@ -127,13 +127,60 @@ public class BookingReservationAdapter implements BookingReservations {
                 update bookings set status = 'CONFIRMED' where id = ? and status = 'RESERVED' returning id,code,status
                 """).param(booking).query(BookingReservationAdapter::receipt).optional()
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION));
-        history(booking, BookingStatus.RESERVED, BookingStatus.CONFIRMED, actor);
+        history(booking, BookingStatus.RESERVED, BookingStatus.CONFIRMED, actor, null);
+        return receipt;
+    }
+
+    @Override
+    public Optional<CancellationTarget> lockForClientCancellation(UUID client, UUID booking) {
+        return jdbc.sql("""
+                select b.id, b.client_id, b.organization_id, b.status, b.starts_at, p.free_cancellation_window_minutes
+                  from bookings b join organization_policies p on p.id = b.policy_id
+                 where b.client_id = ? and b.id = ? for update of b
+                """).params(client, booking).query(BookingReservationAdapter::cancellationTarget).optional();
+    }
+
+    @Override
+    public Optional<CancellationTarget> lockForProviderCancellation(UUID organization, UUID booking) {
+        return jdbc.sql("""
+                select b.id, b.client_id, b.organization_id, b.status, b.starts_at, p.free_cancellation_window_minutes
+                  from bookings b join organization_policies p on p.id = b.policy_id
+                 where b.organization_id = ? and b.id = ? for update of b
+                """).params(organization, booking).query(BookingReservationAdapter::cancellationTarget).optional();
+    }
+
+    @Override
+    public CancellationReceipt cancel(CancellationTarget target, Instant cancelledAt, boolean lateCancellation,
+                                      String reason, UUID actor) {
+        var receipt = jdbc.sql("""
+                update bookings set status = 'CANCELLED', cancelled_at = ?, late_cancellation = ?
+                 where id = ? and status in ('RESERVED', 'CONFIRMED')
+                 returning id, code, status, late_cancellation
+                """).params(cancelledAt.atOffset(ZoneOffset.UTC), lateCancellation, target.id())
+                .query((r, i) -> new CancellationReceipt(r.getObject("id", UUID.class), r.getString("code"),
+                        BookingStatus.valueOf(r.getString("status")), r.getBoolean("late_cancellation"))).optional()
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_STATUS_TRANSITION));
+        jdbc.sql("delete from booking_resources where booking_id = ?").param(target.id()).update();
+        history(target.id(), target.status(), BookingStatus.CANCELLED, actor, reason);
         return receipt;
     }
 
     private void history(UUID booking, BookingStatus from, BookingStatus to, UUID actor) {
-        jdbc.sql("insert into booking_status_changes (booking_id,from_status,to_status,changed_by) values (?,?,?,?)")
-                .param(booking).param(from == null ? null : from.name()).param(to.name()).param(actor).update();
+        history(booking, from, to, actor, null);
+    }
+
+    private void history(UUID booking, BookingStatus from, BookingStatus to, UUID actor, String reason) {
+        jdbc.sql("""
+                insert into booking_status_changes (booking_id,from_status,to_status,reason,changed_by)
+                values (?,?,?,?,?)
+                """).param(booking).param(from == null ? null : from.name()).param(to.name()).param(reason).param(actor)
+                .update();
+    }
+
+    private static CancellationTarget cancellationTarget(ResultSet row, int index) throws SQLException {
+        return new CancellationTarget(row.getObject("id", UUID.class), row.getObject("client_id", UUID.class),
+                row.getObject("organization_id", UUID.class), BookingStatus.valueOf(row.getString("status")),
+                row.getTimestamp("starts_at").toInstant(), row.getInt("free_cancellation_window_minutes"));
     }
 
     private static Receipt receipt(ResultSet row, int index) throws SQLException {

@@ -82,7 +82,7 @@ public class SecurityConfig {
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                         // Platform roles (ADR-0008). Scope inside an organization, and the
                         // role a user holds there, are checked by the use cases.
-                        .requestMatchers("/api/v1/booking/**", "/api/v1/bookings").hasRole("CLIENT")
+                        .requestMatchers("/api/v1/booking/**", "/api/v1/bookings", "/api/v1/bookings/**").hasRole("CLIENT")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/organizations/**").hasAnyRole("PROVIDER", "ADMIN")
                         .anyRequest().authenticated())
