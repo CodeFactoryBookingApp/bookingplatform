@@ -37,6 +37,29 @@ public class AgendaBookingsAdapter implements AgendaBookings {
              order by b.starts_at
             """;
 
+    private static final String LOCATION_AGENDA_RANGE = """
+            select b.id, b.starts_at, b.ends_at
+              from bookings b
+             where b.location_id = ?
+               and b.status in ('RESERVED', 'CONFIRMED')
+               and b.starts_at < ?
+               and b.ends_at > ?
+               and b.service_id in (select service_id from agenda_services where agenda_id = ?)
+             order by b.starts_at
+            """;
+
+    private static final String RESOURCE_AGENDA_RANGE = """
+            select b.id, b.starts_at, b.ends_at
+              from bookings b
+             where b.location_id = ?
+               and b.status in ('RESERVED', 'CONFIRMED')
+               and b.starts_at < ?
+               and b.ends_at > ?
+               and b.service_id in (select service_id from agenda_services where agenda_id = ?)
+               and exists (select 1 from booking_resources br where br.booking_id = b.id and br.resource_id = ?)
+             order by b.starts_at
+            """;
+
     private static final RowMapper<BookedSlot> SLOT = (row, n) -> new BookedSlot(
             row.getObject("id", UUID.class),
             row.getTimestamp("starts_at").toInstant(),
@@ -55,5 +78,15 @@ public class AgendaBookingsAdapter implements AgendaBookings {
                 ? jdbc.query(LOCATION_AGENDA, SLOT, agenda.getLocationId(), after, agenda.getId())
                 : jdbc.query(RESOURCE_AGENDA, SLOT, agenda.getLocationId(), after, agenda.getId(),
                 agenda.getResourceId());
+    }
+
+    @Override
+    public List<BookedSlot> between(Agenda agenda, Instant from, Instant to) {
+        Timestamp upperBound = Timestamp.from(to);
+        Timestamp lowerBound = Timestamp.from(from);
+        return agenda.getResourceId() == null
+                ? jdbc.query(LOCATION_AGENDA_RANGE, SLOT, agenda.getLocationId(), upperBound, lowerBound, agenda.getId())
+                : jdbc.query(RESOURCE_AGENDA_RANGE, SLOT, agenda.getLocationId(), upperBound, lowerBound,
+                agenda.getId(), agenda.getResourceId());
     }
 }
