@@ -1,0 +1,15 @@
+{
+  "name": "bookingplatform-api-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas de API automatizadas del Sprint 3 (Postman/Newman) para bookingplatform",
+  "scripts": {
+    "test:api": "bash run.sh 3",
+    "test:api:once": "newman run bookingplatform-sprint3.postman_collection.json -e local.postman_environment.json -n 1 --timeout-request 10000 -r cli,htmlextra --reporter-htmlextra-export reports/api-report.html",
+    "test:api:ci": "newman run bookingplatform-sprint3.postman_collection.json -e local.postman_environment.json -n 1 --timeout-request 10000 -r cli,junit,htmlextra --reporter-junit-export reports/junit.xml --reporter-htmlextra-export reports/api-report.html"
+  },
+  "devDependencies": {
+    "newman": "6.2.3",
+    "newman-reporter-htmlextra": "1.23.1"
+  }
+}
