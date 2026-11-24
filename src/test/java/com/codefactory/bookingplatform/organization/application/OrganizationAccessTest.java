@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -31,12 +33,14 @@ class OrganizationAccessTest {
     private static final UUID USER = UUID.randomUUID();
 
     private OrganizationRepository repository;
+    private AuditActor audit;
     private OrganizationAccess access;
 
     @BeforeEach
     void setUp() {
         repository = mock(OrganizationRepository.class);
-        access = new OrganizationAccess(repository, mock(AuditActor.class));
+        audit = mock(AuditActor.class);
+        access = new OrganizationAccess(repository, audit);
     }
 
     @Test
@@ -138,5 +142,31 @@ class OrganizationAccessTest {
 
         // Assert
         assertEquals(List.of(true, false), owns);
+    }
+
+    @Test
+    @DisplayName("HU-023: a member who passes the role check is identified to the audit trail with that role")
+    void allowedMemberIsTheAuditActor() {
+        // Arrange
+        when(repository.findMemberRole(ORGANIZATION, USER)).thenReturn(Optional.of(MemberRole.MANAGER));
+
+        // Act
+        access.requireRole(ORGANIZATION, USER, MemberRole.OWNER, MemberRole.MANAGER);
+
+        // Assert
+        verify(audit).identify(USER, "MANAGER");
+    }
+
+    @Test
+    @DisplayName("HU-023: a member refused by the role check is not identified to the audit trail")
+    void refusedMemberIsNotTheAuditActor() {
+        // Arrange
+        when(repository.findMemberRole(ORGANIZATION, USER)).thenReturn(Optional.of(MemberRole.STAFF));
+
+        // Act
+        assertThrows(BusinessException.class, () -> access.requireRole(ORGANIZATION, USER, MemberRole.OWNER));
+
+        // Assert
+        verifyNoInteractions(audit);
     }
 }

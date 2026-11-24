@@ -63,6 +63,7 @@ class RegisterProviderUseCaseTest {
     private OrganizationRepository organizations;
     private ReferenceDataRepository referenceData;
     private UserProvisioning userProvisioning;
+    private AuditActor audit;
     private RegisterProviderUseCase useCase;
 
     @BeforeEach
@@ -70,8 +71,9 @@ class RegisterProviderUseCaseTest {
         organizations = mock(OrganizationRepository.class);
         referenceData = mock(ReferenceDataRepository.class);
         userProvisioning = mock(UserProvisioning.class);
+        audit = mock(AuditActor.class);
         useCase = new RegisterProviderUseCase(organizations, referenceData, userProvisioning,
-                Clock.fixed(NOW, ZoneOffset.UTC), mock(AuditActor.class));
+                Clock.fixed(NOW, ZoneOffset.UTC), audit);
         when(referenceData.categoryExists(CATEGORY)).thenReturn(true);
         when(referenceData.cityExists(CITY)).thenReturn(true);
         when(userProvisioning.provisionProviderUser(anyString(), anyString())).thenReturn(OWNER);
@@ -179,6 +181,31 @@ class RegisterProviderUseCaseTest {
             assertEquals(1, organization.getPolicyVersion());
             assertEquals("America/Lima", organization.getLocations().get(0).timezone());
             assertEquals(CITY, organization.getLocations().get(0).cityId());
+        }
+
+        @Test
+        @DisplayName("HU-014/HU-016: a new provider starts with automatic confirmation, one reschedule and closing as COMPLETED after 24 h (the defaults of V14, V17 and V18)")
+        void newProviderStartsWithTheDefaultRules() {
+            // Act
+            useCase.register(command());
+
+            // Assert
+            OperationPolicy policy = registeredOrganization().getPolicy();
+            assertEquals(List.of(false, 1, OperationPolicy.DefaultClosureStatus.COMPLETED, 24),
+                    List.of(policy.manualConfirmation(), policy.maxReschedules(), policy.defaultClosureStatus(),
+                            policy.autoCloseDelayHours()));
+        }
+
+        @Test
+        @DisplayName("HU-023: the new owner is identified to the audit trail as PROVIDER before the provider is stored")
+        void ownerIsTheAuditActorOfTheRegistration() {
+            // Act
+            useCase.register(command());
+
+            // Assert
+            InOrder order = inOrder(audit, organizations);
+            order.verify(audit).identify(OWNER, "PROVIDER");
+            order.verify(organizations).register(any(Organization.class), eq(OWNER), eq(NOW));
         }
     }
 
