@@ -6,6 +6,9 @@ import com.codefactory.bookingplatform.notification.domain.port.SentEmailReposit
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
@@ -16,17 +19,16 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * ADR-0007, reading the in-app inbox: whose emails a user gets is decided by the email claim of
- * their own token, never by anything the request could choose, and the order the inbox returns
- * (newest first) reaches the response untouched. The real {@link EmailInbox} is used; only the
+ * ADR-0007, reading the in-app inbox: whose emails a user gets is decided by their own token (the
+ * account id of the subject plus its email claim), never by anything the request could choose, and
+ * the order the inbox returns (newest first) reaches the response untouched. The real {@link EmailInbox} is used; only the
  * store is a double (its case-insensitive, newest-first query runs against PostgreSQL in
  * ProviderOnboardingIT).
  *
- * <p>Technique: equivalence partitioning on the token (with email / without email).
+ * <p>Technique: equivalence partitioning on the token (with email / without email / blank email).
  */
 class NotificationControllerTest {
 
@@ -39,8 +41,10 @@ class NotificationControllerTest {
         controller = new NotificationController(new EmailInbox(emails));
     }
 
+    private static final UUID ACCOUNT = UUID.randomUUID();
+
     private static JwtAuthenticationToken tokenOf(String email) {
-        Jwt.Builder jwt = Jwt.withTokenValue("token").header("alg", "none").subject(UUID.randomUUID().toString());
+        Jwt.Builder jwt = Jwt.withTokenValue("token").header("alg", "none").subject(ACCOUNT.toString());
         if (email != null) {
             jwt.claim("email", email);
         }
@@ -55,27 +59,28 @@ class NotificationControllerTest {
                 Instant.parse("2026-10-26T15:00:00Z"));
         SentEmail oldest = new SentEmail(UUID.randomUUID(), "ana@example.com", "Bienvenida", "Hola",
                 Instant.parse("2026-10-20T15:00:00Z"));
-        when(emails.findByRecipient("ana@example.com")).thenReturn(List.of(newest, oldest));
+        when(emails.findByRecipient(ACCOUNT, "ana@example.com")).thenReturn(List.of(newest, oldest));
 
         // Act
         List<NotificationController.EmailResponse> found = controller.myEmails(tokenOf("ana@example.com"));
 
         // Assert
-        verify(emails).findByRecipient("ana@example.com");
+        verify(emails).findByRecipient(ACCOUNT, "ana@example.com");
         assertEquals(List.of(
                 new NotificationController.EmailResponse(newest.id(), "Aprobado", "Tu proveedor fue aprobado",
                         newest.sentAt()),
                 new NotificationController.EmailResponse(oldest.id(), "Bienvenida", "Hola", oldest.sentAt())), found);
     }
 
-    @Test
-    @DisplayName("ADR-0007: a token without an email claim sees an empty inbox, and nobody's emails are read")
-    void tokenWithoutEmailSeesNothing() {
+    @ParameterizedTest(name = "email claim = [{0}]")
+    @NullSource
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("ADR-0007 / HU-015: a token without a usable email still reads the notices of its own account, and no address")
+    void tokenWithoutEmailReadsOnlyItsAccount(String email) {
         // Act
-        List<NotificationController.EmailResponse> found = controller.myEmails(tokenOf(null));
+        controller.myEmails(tokenOf(email));
 
         // Assert
-        assertEquals(List.of(), found);
-        verifyNoInteractions(emails);
+        verify(emails).findByRecipient(ACCOUNT, null);
     }
 }

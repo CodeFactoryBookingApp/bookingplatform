@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.scheduling.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.catalog.application.CatalogLookup;
 import com.codefactory.bookingplatform.organization.application.OrganizationAccess;
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
@@ -73,7 +74,7 @@ class AgendaAuthorizationTest {
         agendas = mock(AgendaRepository.class);
         bookings = mock(AgendaBookings.class);
         catalog = mock(CatalogLookup.class);
-        OrganizationAccess access = new OrganizationAccess(organizations);
+        OrganizationAccess access = new OrganizationAccess(organizations, mock(AuditActor.class));
         create = new CreateAgendaUseCase(agendas, access, catalog);
         manage = new ManageAgendaUseCase(agendas, bookings, access,
                 Clock.fixed(Instant.parse("2026-10-25T15:00:00Z"), ZoneOffset.UTC));
