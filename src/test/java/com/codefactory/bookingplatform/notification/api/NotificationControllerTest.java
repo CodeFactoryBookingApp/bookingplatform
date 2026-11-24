@@ -8,7 +8,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
@@ -28,7 +27,8 @@ import static org.mockito.Mockito.when;
  * store is a double (its case-insensitive, newest-first query runs against PostgreSQL in
  * ProviderOnboardingIT).
  *
- * <p>Technique: equivalence partitioning on the token (with email / without email / blank email).
+ * <p>Technique: equivalence partitioning on the token (with email / without email claim). How a blank
+ * email is normalised is a rule of {@link EmailInbox}, verified in NotificationModuleTest.
  */
 class NotificationControllerTest {
 
@@ -74,8 +74,7 @@ class NotificationControllerTest {
 
     @ParameterizedTest(name = "email claim = [{0}]")
     @NullSource
-    @ValueSource(strings = {"", "   "})
-    @DisplayName("ADR-0007 / HU-015: a token without a usable email still reads the notices of its own account, and no address")
+    @DisplayName("ADR-0007 / HU-015: a token without an email claim still reads the notices of its own account, and no address (blank claims: NotificationModuleTest)")
     void tokenWithoutEmailReadsOnlyItsAccount(String email) {
         // Act
         controller.myEmails(tokenOf(email));
