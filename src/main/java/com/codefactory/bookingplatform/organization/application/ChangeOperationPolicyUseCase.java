@@ -2,6 +2,7 @@ package com.codefactory.bookingplatform.organization.application;
 
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
 import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy;
+import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy.DefaultClosureStatus;
 import com.codefactory.bookingplatform.organization.domain.model.Organization;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
 import org.slf4j.Logger;
@@ -33,11 +34,31 @@ public class ChangeOperationPolicyUseCase {
     }
 
     @Transactional
-    public Organization change(UUID organizationId, UUID userId, OperationPolicy newPolicy) {
+    public Organization change(UUID organizationId, UUID userId, int minNotice, int maxNotice,
+                               int cancellationWindow, Boolean manualConfirmation) {
+        return change(organizationId, userId, minNotice, maxNotice, cancellationWindow, manualConfirmation, null, null, null);
+    }
+
+    @Transactional
+    public Organization change(UUID organizationId, UUID userId, int minNotice, int maxNotice,
+                               int cancellationWindow, Boolean manualConfirmation, Integer maxReschedules) {
+        return change(organizationId, userId, minNotice, maxNotice, cancellationWindow, manualConfirmation, maxReschedules, null, null);
+    }
+
+    @Transactional
+    public Organization change(UUID organizationId, UUID userId, int minNotice, int maxNotice,
+                               int cancellationWindow, Boolean manualConfirmation, Integer maxReschedules,
+                               DefaultClosureStatus defaultClosureStatus, Integer autoCloseDelayHours) {
         access.requireRole(organizationId, userId, MemberRole.OWNER, MemberRole.MANAGER);
         Organization organization = organizations.findById(organizationId)
                 .orElseThrow(OrganizationAccess::notFound);
-        int version = organization.changePolicy(newPolicy);
+        OperationPolicy current = organization.getPolicy();
+        boolean manual = manualConfirmation == null ? current.manualConfirmation() : manualConfirmation;
+        int reschedules = maxReschedules == null ? current.maxReschedules() : maxReschedules;
+        DefaultClosureStatus closure = defaultClosureStatus == null ? current.defaultClosureStatus() : defaultClosureStatus;
+        int delayHours = autoCloseDelayHours == null ? current.autoCloseDelayHours() : autoCloseDelayHours;
+        int version = organization.changePolicy(new OperationPolicy(minNotice, maxNotice, cancellationWindow, manual,
+                reschedules, closure, delayHours));
         organizations.savePolicy(organization, clock.instant());
         log.info("Provider {} operating rules moved to version {}", organizationId, version);
         return organization;

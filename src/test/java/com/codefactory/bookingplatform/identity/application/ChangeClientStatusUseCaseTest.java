@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.identity.application;
 
+import com.codefactory.bookingplatform.auth.application.PlatformAccountProtection;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.model.ClientFilter;
 import com.codefactory.bookingplatform.identity.domain.model.ClientStatus;
@@ -41,7 +42,7 @@ class ChangeClientStatusUseCaseTest {
     void setUp() {
         clients = mock(ClientRepository.class);
         statusChanges = mock(ClientStatusChanges.class);
-        useCase = new ChangeClientStatusUseCase(clients, statusChanges);
+        useCase = new ChangeClientStatusUseCase(clients, statusChanges, mock(PlatformAccountProtection.class));
     }
 
     private Client stored(ClientStatus status) {

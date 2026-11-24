@@ -4,6 +4,14 @@ services:
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile
+    # Solo redespliega cuando cambia el backend; los cambios en front/ (Vercel) no lo disparan.
+    buildFilter:
+      paths:
+        - src/**
+        - pom.xml
+        - Dockerfile
+        - .dockerignore
+        - render.yaml
     healthCheckPath: /actuator/health/readiness
     envVars:
       - key: SPRING_PROFILES_ACTIVE

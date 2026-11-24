@@ -6,6 +6,10 @@ spring:
           time_zone: UTC
 
 app:
+  booking-notices:
+    scheduler-enabled: false
+  booking-attendance:
+    scheduler-enabled: false
   supabase:
     url: http://localhost:54321
     secret-key: test-secret-key

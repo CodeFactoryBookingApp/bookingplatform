@@ -149,6 +149,10 @@ class ServiceManagementIT extends JwtIntegrationTestBase {
                 Integer.class, id));
         assertEquals(1, jdbc.queryForObject(
                 "select quantity_required from service_resource_requirements where service_id = ?::uuid", Integer.class, id));
+        assertEquals(1, jdbc.queryForObject("""
+                select count(*) from audit_events
+                 where action = 'SERVICE_CREATED' and actor_id = ? and actor_role = 'OWNER' and resource_id = ?::uuid
+                """, Integer.class, provider.ownerId(), id));
     }
 
     @Test

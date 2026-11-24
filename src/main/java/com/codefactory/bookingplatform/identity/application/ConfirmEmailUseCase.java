@@ -4,6 +4,7 @@ import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
 import com.codefactory.bookingplatform.identity.domain.port.ClientRepository;
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -26,10 +27,12 @@ public class ConfirmEmailUseCase {
 
     private final ClientRepository clientRepository;
     private final UserProvisioning userProvisioning;
+    private final AuditActor audit;
 
-    public ConfirmEmailUseCase(ClientRepository clientRepository, UserProvisioning userProvisioning) {
+    public ConfirmEmailUseCase(ClientRepository clientRepository, UserProvisioning userProvisioning, AuditActor audit) {
         this.clientRepository = clientRepository;
         this.userProvisioning = userProvisioning;
+        this.audit = audit;
     }
 
     @Transactional
@@ -42,6 +45,7 @@ public class ConfirmEmailUseCase {
         }
         Client client = profile.get();
         client.verifyEmail();
+        audit.identify(client.getId(), "CLIENT");
         clientRepository.save(client);
         log.info("Client {} confirmed email and moved to {}", client.getId(), client.getStatus());
         return new RegistrationOutcome(client.getId(), client.getEmail(), client.getStatus());

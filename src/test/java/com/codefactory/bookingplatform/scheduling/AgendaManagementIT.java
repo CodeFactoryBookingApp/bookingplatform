@@ -122,6 +122,15 @@ class AgendaManagementIT extends JwtIntegrationTestBase {
         assertEquals("30", field(response, "$.slotMinutes"));
         assertEquals(List.of("MONDAY", "TUESDAY"), JsonPath.read(response.getContentAsString(), "$.blocks[*].dayOfWeek"));
         assertEquals(List.of(service.toString()), JsonPath.read(response.getContentAsString(), "$.serviceIds"));
+        String agendaId = field(response, "$.id");
+        assertEquals(1, jdbc.queryForObject("""
+                select count(*) from audit_events
+                 where action = 'AGENDA_CREATED' and actor_id = ? and actor_role = 'OWNER' and resource_id = ?::uuid
+                """, Integer.class, provider.ownerId(), agendaId));
+        assertEquals(2, jdbc.queryForObject("""
+                select count(*) from audit_events
+                 where action = 'AGENDA_BLOCK_CREATED' and organization_id = ? and related_resource_id = ?::uuid
+                """, Integer.class, provider.organizationId(), agendaId));
     }
 
     @Test

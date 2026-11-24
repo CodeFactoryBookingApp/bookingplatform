@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.organization.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
@@ -35,7 +36,7 @@ class OrganizationAccessTest {
     @BeforeEach
     void setUp() {
         repository = mock(OrganizationRepository.class);
-        access = new OrganizationAccess(repository);
+        access = new OrganizationAccess(repository, mock(AuditActor.class));
     }
 
     @Test

@@ -4,7 +4,6 @@ import com.codefactory.bookingplatform.organization.api.dto.OperationPolicyReque
 import com.codefactory.bookingplatform.organization.api.dto.OrganizationResponse;
 import com.codefactory.bookingplatform.organization.application.ChangeOperationPolicyUseCase;
 import com.codefactory.bookingplatform.organization.application.FindOrganizationsUseCase;
-import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy;
 import com.codefactory.bookingplatform.shared.security.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,9 +60,10 @@ public class OrganizationController {
     public OrganizationResponse changePolicy(@PathVariable UUID organizationId,
                                              @Valid @RequestBody OperationPolicyRequest request,
                                              JwtAuthenticationToken authentication) {
-        OperationPolicy policy = new OperationPolicy(request.bookingNoticeMinutesMin(),
-                request.bookingNoticeMinutesMax(), request.freeCancellationWindowMinutes());
         return OrganizationResponse.from(changeOperationPolicyUseCase.change(organizationId,
-                AuthenticatedUser.from(authentication).id(), policy));
+                AuthenticatedUser.from(authentication).id(), request.bookingNoticeMinutesMin(),
+                request.bookingNoticeMinutesMax(), request.freeCancellationWindowMinutes(),
+                request.manualConfirmation(), request.maxReschedules(),
+                request.defaultClosureStatus(), request.autoCloseDelayHours()));
     }
 }

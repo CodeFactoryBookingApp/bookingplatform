@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.identity.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.auth.domain.model.ConfirmedUser;
 import com.codefactory.bookingplatform.identity.domain.model.Client;
@@ -60,7 +61,7 @@ class ConfirmEmailUseCaseTest {
     void setUp() {
         clientRepository = mock(ClientRepository.class);
         userProvisioning = mock(UserProvisioning.class);
-        useCase = new ConfirmEmailUseCase(clientRepository, userProvisioning);
+        useCase = new ConfirmEmailUseCase(clientRepository, userProvisioning, mock(AuditActor.class));
     }
 
     private Client clientInStatus(ClientStatus status) {

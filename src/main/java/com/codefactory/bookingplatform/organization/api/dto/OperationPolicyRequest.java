@@ -1,7 +1,9 @@
 package com.codefactory.bookingplatform.organization.api.dto;
 
+import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy.DefaultClosureStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 
 @Schema(description = "New operating rules of a provider (HU-002); they apply to bookings made from now on")
@@ -17,5 +19,15 @@ public record OperationPolicyRequest(
 
         @NotNull(message = "freeCancellationWindowMinutes is required")
         @PositiveOrZero(message = "freeCancellationWindowMinutes must not be negative")
-        Integer freeCancellationWindowMinutes) {
+        Integer freeCancellationWindowMinutes,
+
+        Boolean manualConfirmation,
+
+        @PositiveOrZero(message = "maxReschedules must not be negative")
+        Integer maxReschedules,
+
+        DefaultClosureStatus defaultClosureStatus,
+
+        @Positive(message = "autoCloseDelayHours must be positive")
+        Integer autoCloseDelayHours) {
 }

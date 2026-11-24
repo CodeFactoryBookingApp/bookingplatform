@@ -7,6 +7,7 @@ import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy
 import com.codefactory.bookingplatform.organization.domain.model.Organization;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
 import com.codefactory.bookingplatform.organization.domain.port.ReferenceDataRepository;
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.shared.error.BusinessException;
 import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.slf4j.Logger;
@@ -39,13 +40,15 @@ public class RegisterProviderUseCase {
     private final ReferenceDataRepository referenceData;
     private final UserProvisioning userProvisioning;
     private final Clock clock;
+    private final AuditActor audit;
 
     public RegisterProviderUseCase(OrganizationRepository organizations, ReferenceDataRepository referenceData,
-                                   UserProvisioning userProvisioning, Clock clock) {
+                                   UserProvisioning userProvisioning, Clock clock, AuditActor audit) {
         this.organizations = organizations;
         this.referenceData = referenceData;
         this.userProvisioning = userProvisioning;
         this.clock = clock;
+        this.audit = audit;
     }
 
     @Transactional
@@ -60,6 +63,7 @@ public class RegisterProviderUseCase {
 
         UUID ownerId = userProvisioning.provisionProviderUser(email, command.password());
         try {
+            audit.identify(ownerId, "PROVIDER");
             organizations.register(organization, ownerId, clock.instant());
             // The identity provider sends nothing on account creation; the owner has to verify
             // the email before signing in, exactly like a client.

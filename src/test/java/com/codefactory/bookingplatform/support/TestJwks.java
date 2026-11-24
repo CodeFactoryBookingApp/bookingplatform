@@ -67,6 +67,15 @@ public final class TestJwks {
                 Instant.now().plus(Duration.ofMinutes(15))));
     }
 
+    public String accessToken(UUID userId, String role, UUID revision, Instant authenticatedAt) {
+        JWTClaimsSet base = claims(userId, "user@example.com", role, issuer, Instant.now(),
+                Instant.now().plus(Duration.ofMinutes(15)));
+        return sign(publishedKey, new JWTClaimsSet.Builder(base)
+                .claim("app_metadata", Map.of("role", role, "booking_role_revision", revision.toString()))
+                .claim("amr", java.util.List.of(Map.of("method", "password", "timestamp", authenticatedAt.getEpochSecond())))
+                .build());
+    }
+
     /** Valid signature and issuer, but already expired: must fail {@code JwtTimestampValidator}. */
     public String expiredAccessToken(UUID userId, String email, String role) {
         Instant issuedAt = Instant.now().minus(Duration.ofHours(2));

@@ -1,15 +1,18 @@
 package com.codefactory.bookingplatform.catalog.application;
 
+import com.codefactory.bookingplatform.catalog.domain.model.Resource;
 import com.codefactory.bookingplatform.catalog.domain.port.ResourceRepository;
 import com.codefactory.bookingplatform.catalog.domain.port.ServiceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Facade of the catalog for the other modules: questions about services and resources that the
- * scheduling module asks before building an agenda on them (HU-006).
+ * scheduling module asks before building an agenda on them (HU-006), or before computing
+ * availability (HU-008/HU-011/HU-019).
  */
 @Service
 public class CatalogLookup {
@@ -36,5 +39,11 @@ public class CatalogLookup {
         return services.findById(organizationId, serviceId)
                 .filter(service -> service.getLocationIds().contains(locationId))
                 .isPresent();
+    }
+
+    /** The resource, with its maintenance windows, for the availability engine (HU-008/HU-011/HU-019). */
+    @Transactional(readOnly = true)
+    public Optional<Resource> resource(UUID organizationId, UUID resourceId) {
+        return resources.findById(organizationId, resourceId);
     }
 }

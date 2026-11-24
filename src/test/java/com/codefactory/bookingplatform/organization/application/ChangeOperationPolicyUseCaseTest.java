@@ -1,5 +1,6 @@
 package com.codefactory.bookingplatform.organization.application;
 
+import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.organization.domain.model.IdentificationType;
 import com.codefactory.bookingplatform.organization.domain.model.Location;
 import com.codefactory.bookingplatform.organization.domain.model.MemberRole;
@@ -46,7 +47,7 @@ class ChangeOperationPolicyUseCaseTest {
     @BeforeEach
     void setUp() {
         organizations = mock(OrganizationRepository.class);
-        useCase = new ChangeOperationPolicyUseCase(organizations, new OrganizationAccess(organizations),
+        useCase = new ChangeOperationPolicyUseCase(organizations, new OrganizationAccess(organizations, mock(AuditActor.class)),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         organization = new Organization(UUID.randomUUID(), UUID.randomUUID(), "Barbería", IdentificationType.NIT,
                 "900123456-1", "contacto@barberia.com", "6041112233", "America/Bogota",
@@ -62,7 +63,7 @@ class ChangeOperationPolicyUseCaseTest {
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
 
         // Act
-        Organization changed = useCase.change(organization.getId(), USER, NEW_POLICY);
+        Organization changed = useCase.change(organization.getId(), USER, 120, 20160, 720, false);
 
         // Assert
         assertEquals(3, changed.getPolicyVersion());
@@ -77,7 +78,7 @@ class ChangeOperationPolicyUseCaseTest {
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.MANAGER));
 
         // Act
-        Organization changed = useCase.change(organization.getId(), USER, NEW_POLICY);
+        Organization changed = useCase.change(organization.getId(), USER, 120, 20160, 720, false);
 
         // Assert
         assertEquals(3, changed.getPolicyVersion());
@@ -97,11 +98,25 @@ class ChangeOperationPolicyUseCaseTest {
         when(organizations.findMemberRole(id, USER)).thenReturn(Optional.of(MemberRole.OWNER));
 
         // Act
-        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, NEW_POLICY));
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, 120, 20160, 720, false));
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
         verify(organizations, never()).savePolicy(any(), any());
+    }
+
+    @Test
+    @DisplayName("HU-002: omitting the confirmation mode keeps the provider's current choice")
+    void omittedConfirmationModePreservesProviderApproval() {
+        // Arrange
+        organization.changePolicy(new OperationPolicy(60, 43200, 1440, true));
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
+
+        // Act
+        Organization changed = useCase.change(organization.getId(), USER, 120, 20160, 720, null);
+
+        // Assert
+        assertEquals(new OperationPolicy(120, 20160, 720, true), changed.getPolicy());
     }
 
     @Test
@@ -112,7 +127,7 @@ class ChangeOperationPolicyUseCaseTest {
         UUID id = organization.getId();
 
         // Act
-        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, NEW_POLICY));
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, 120, 20160, 720, false));
 
         // Assert
         assertEquals(ErrorCode.ACCESS_DENIED, ex.errorCode());
@@ -127,10 +142,48 @@ class ChangeOperationPolicyUseCaseTest {
         UUID id = organization.getId();
 
         // Act
-        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, NEW_POLICY));
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, 120, 20160, 720, false));
 
         // Assert
         assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
         verify(organizations, never()).savePolicy(any(), any());
+    }
+
+    @Test
+    void maxReschedulesCanBeConfiguredAndIsPreservedWhenOmitted() {
+        // Arrange
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
+        UUID id = organization.getId();
+
+        // Act
+        useCase.change(id, USER, 120, 20160, 720, true, 3);
+        Organization preserved = useCase.change(id, USER, 120, 20160, 720, null, null);
+
+        // Assert
+        assertEquals(new OperationPolicy(120, 20160, 720, true, 3), preserved.getPolicy());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class, () -> new OperationPolicy(120, 20160, 720, false, -1)).errorCode());
+    }
+
+    @Test
+    void defaultClosureStatusAndAutoCloseDelayCanBeConfiguredAndArePreservedWhenOmitted() {
+        // Arrange
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
+        UUID id = organization.getId();
+
+        // Act
+        useCase.change(id, USER, 120, 20160, 720, true, 2, OperationPolicy.DefaultClosureStatus.NO_SHOW, 12);
+        Organization preserved = useCase.change(id, USER, 120, 20160, 720, null, null, null, null);
+
+        // Assert
+        assertEquals(new OperationPolicy(120, 20160, 720, true, 2,
+                OperationPolicy.DefaultClosureStatus.NO_SHOW, 12), preserved.getPolicy());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class,
+                        () -> new OperationPolicy(120, 20160, 720, false, 1, null, 24)).errorCode());
+        assertEquals(ErrorCode.VALIDATION_ERROR,
+                assertThrows(BusinessException.class,
+                        () -> new OperationPolicy(120, 20160, 720, false, 1,
+                                OperationPolicy.DefaultClosureStatus.COMPLETED, 0)).errorCode());
     }
 }

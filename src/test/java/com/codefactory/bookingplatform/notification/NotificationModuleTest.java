@@ -88,7 +88,7 @@ class NotificationModuleTest {
         EmailSender sender = mock(EmailSender.class);
 
         // Act
-        new EmailNotifications(sender).send("ana@example.com", "Asunto", "Cuerpo");
+        new EmailNotifications(sender, mock(SentEmailRepository.class)).send("ana@example.com", "Asunto", "Cuerpo");
 
         // Assert
         verify(sender).send(MESSAGE);
@@ -115,17 +115,18 @@ class NotificationModuleTest {
     @ParameterizedTest(name = "[{index}] \"{0}\"")
     @NullAndEmptySource
     @ValueSource(strings = "  ")
-    @DisplayName("A user whose token carries no email has an empty inbox, and the store is not even asked")
-    void noEmailMeansEmptyInbox(String email) {
+    @DisplayName("A missing email omits legacy emails but still looks up account notices")
+    void missingEmailStillUsesTheAccountId(String email) {
         // Arrange
         SentEmailRepository emails = mock(SentEmailRepository.class);
+        UUID userId = UUID.randomUUID();
 
         // Act
-        List<SentEmail> found = new EmailInbox(emails).addressedTo(email);
+        List<SentEmail> found = new EmailInbox(emails).addressedTo(userId, email);
 
         // Assert
         assertEquals(List.of(), found);
-        verifyNoInteractions(emails);
+        verify(emails).findByRecipient(userId, null);
     }
 
     @Test
@@ -133,11 +134,12 @@ class NotificationModuleTest {
     void inboxIsLookedUpByTheTrimmedAddress() {
         // Arrange
         SentEmailRepository emails = mock(SentEmailRepository.class);
+        UUID userId = UUID.randomUUID();
         SentEmail email = new SentEmail(UUID.randomUUID(), "ana@example.com", "Asunto", "Cuerpo", Instant.now());
-        when(emails.findByRecipient("ana@example.com")).thenReturn(List.of(email));
+        when(emails.findByRecipient(userId, "ana@example.com")).thenReturn(List.of(email));
 
         // Act
-        List<SentEmail> found = new EmailInbox(emails).addressedTo(" ana@example.com ");
+        List<SentEmail> found = new EmailInbox(emails).addressedTo(userId, " ana@example.com ");
 
         // Assert
         assertEquals(List.of(email), found);
