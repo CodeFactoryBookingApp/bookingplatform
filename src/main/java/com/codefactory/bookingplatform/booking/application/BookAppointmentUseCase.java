@@ -7,6 +7,8 @@ import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.A
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.AttendanceTarget;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationTarget;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.ClientBookingDetail;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.ClientBookingRecord;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleTarget;
@@ -21,11 +23,13 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,8 +38,32 @@ import java.util.UUID;
 public class BookAppointmentUseCase {
     public record TimeSlot(OffsetDateTime startsAt, OffsetDateTime endsAt) {}
     public record Preview(String service, String organization, String location, TimeSlot slot,
-                          java.math.BigDecimal price, String currency, int policyVersion,
+                          BigDecimal price, String currency, int policyVersion,
                           int freeCancellationWindowMinutes, boolean manualConfirmation, String termsVersion) {}
+    public record BookingActions(boolean canCancel, String cancelDisabledReason,
+                                 boolean canReschedule, String rescheduleDisabledReason,
+                                 boolean canRebook, boolean canDownloadReceipt, String receiptPath) {}
+    public record ClientBookingItem(UUID id, String code, UUID organizationId, String organizationName,
+                                    UUID serviceId, String serviceName, UUID locationId, String locationName,
+                                    String locationAddress, Instant startsAt, Instant endsAt,
+                                    int attendees, BigDecimal totalPrice, String currency, BookingStatus status,
+                                    int freeCancellationWindowMinutes, int maxReschedules, int rescheduleCount,
+                                    boolean lateCancellation, boolean lateReschedule, List<String> resources,
+                                    BookingActions actions) {}
+    public record ClientBookingsView(List<ClientBookingItem> upcoming, List<ClientBookingItem> history,
+                                     boolean empty, String emptyMessage, String catalogPath) {}
+    public record RebookView(UUID sourceBookingId, UUID organizationId, String organizationName,
+                             UUID serviceId, String serviceName, UUID locationId, String locationName,
+                             LocalDate date, List<TimeSlot> availableSlots) {}
+
+    private static final String CATALOG_PATH = "/api/v1/catalog/services";
+    private static final String EMPTY_MESSAGE = "Aún no tienes reservas";
+    private static final String WINDOW_EXPIRED_CANCEL =
+            "Fuera de la ventana de cancelación sin penalidad";
+    private static final String WINDOW_EXPIRED_RESCHEDULE =
+            "Fuera de la ventana de reprogramación sin penalidad";
+    private static final String LIMIT_REACHED_RESCHEDULE =
+            "Alcanzaste el número máximo de reprogramaciones permitido";
 
     private final BookingReservations bookings;
     private final ClientRepository clients;
@@ -65,6 +93,47 @@ public class BookAppointmentUseCase {
         return new Preview(offer.service(), offer.organization(), offer.location(), time(offer, slot), offer.price(),
                 offer.currency(), offer.policyVersion(), offer.freeCancellationWindowMinutes(),
                 offer.manualConfirmation(), offer.termsVersion(start));
+    }
+
+    @Transactional(readOnly = true)
+    public ClientBookingsView clientBookings(UUID client) {
+        Instant now = clock.instant();
+        List<ClientBookingRecord> records = bookings.findClientBookings(client);
+        List<ClientBookingItem> upcoming = records.stream()
+                .filter(record -> record.upcoming(now))
+                .sorted(Comparator.comparing(ClientBookingRecord::startsAt).thenComparing(ClientBookingRecord::id))
+                .map(record -> toClientItem(record, now, true))
+                .toList();
+        List<ClientBookingItem> history = records.stream()
+                .filter(record -> !record.upcoming(now))
+                .sorted(Comparator.comparing(ClientBookingRecord::startsAt).reversed()
+                        .thenComparing(ClientBookingRecord::id))
+                .map(record -> toClientItem(record, now, false))
+                .toList();
+        boolean empty = records.isEmpty();
+        return new ClientBookingsView(upcoming, history, empty, empty ? EMPTY_MESSAGE : null, CATALOG_PATH);
+    }
+
+    @Transactional(readOnly = true)
+    public ClientBookingDetail clientBookingDetail(UUID client, UUID booking) {
+        return bookings.findClientBookingDetail(client, booking)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+    }
+
+    @Transactional(readOnly = true)
+    public RebookView rebook(UUID client, UUID booking, LocalDate requestedDate) {
+        ClientBookingDetail detail = clientBookingDetail(client, booking);
+        var offer = offer(detail.serviceId(), detail.locationId());
+        Instant now = clock.instant();
+        LocalDate date = requestedDate != null
+                ? requestedDate
+                : now.plus(offer.minNotice(), ChronoUnit.MINUTES).atZone(offer.zone()).toLocalDate();
+        List<TimeSlot> slots = bookings.slots(offer, date, now).stream()
+                .map(slot -> time(offer, slot))
+                .toList();
+        return new RebookView(detail.id(), detail.organizationId(), detail.organizationName(),
+                detail.serviceId(), detail.serviceName(), detail.locationId(), detail.locationName(),
+                date, slots);
     }
 
     @Transactional
@@ -205,6 +274,30 @@ public class BookAppointmentUseCase {
     @Transactional
     public int autoCloseUnmarked() {
         return bookings.autoCloseOverdue(clock.instant());
+    }
+
+    private static ClientBookingItem toClientItem(ClientBookingRecord record, Instant now, boolean upcoming) {
+        boolean withinWindow = record.withinFreeWindow(now);
+        boolean limitReached = record.rescheduleCount() >= record.maxReschedules();
+        boolean canCancel = upcoming && withinWindow;
+        String cancelReason = !upcoming ? "La reserva ya no está activa o ya inició"
+                : (withinWindow ? null : WINDOW_EXPIRED_CANCEL);
+        boolean canReschedule = upcoming && withinWindow && !limitReached;
+        String rescheduleReason = !upcoming ? "La reserva ya no está activa o ya inició"
+                : (!withinWindow ? WINDOW_EXPIRED_RESCHEDULE
+                : (limitReached ? LIMIT_REACHED_RESCHEDULE : null));
+        BookingActions actions = new BookingActions(
+                canCancel, cancelReason,
+                canReschedule, rescheduleReason,
+                !upcoming,
+                true,
+                "/api/v1/bookings/" + record.id() + "/receipt");
+        return new ClientBookingItem(record.id(), record.code(), record.organizationId(), record.organizationName(),
+                record.serviceId(), record.serviceName(), record.locationId(), record.locationName(),
+                record.locationAddress(), record.startsAt(), record.endsAt(), record.attendees(),
+                record.totalPrice(), record.currency(), record.status(), record.freeCancellationWindowMinutes(),
+                record.maxReschedules(), record.rescheduleCount(), record.lateCancellation(), record.lateReschedule(),
+                record.resources(), actions);
     }
 
     private static void requireCancellable(CancellationTarget target, Instant now) {

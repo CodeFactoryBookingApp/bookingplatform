@@ -3,8 +3,10 @@ package com.codefactory.bookingplatform.booking.domain.port;
 import com.codefactory.bookingplatform.booking.domain.model.BookingOffering;
 import com.codefactory.bookingplatform.booking.domain.model.BookingStatus;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -62,6 +64,28 @@ public interface BookingReservations {
     }
     record AttendanceReceipt(UUID id, String code, BookingStatus status, UUID closedBy, Instant closedAt,
                              String observation, int clientNoShowCount) {}
+    record StatusChange(BookingStatus fromStatus, BookingStatus toStatus, String reason, Instant changedAt) {}
+    record ClientBookingRecord(UUID id, String code, UUID organizationId, String organizationName,
+                               UUID serviceId, String serviceName, UUID locationId, String locationName,
+                               String locationAddress, ZoneId zone, Instant startsAt, Instant endsAt,
+                               int attendees, BigDecimal totalPrice, String currency, BookingStatus status,
+                               int freeCancellationWindowMinutes, int maxReschedules, int rescheduleCount,
+                               boolean lateCancellation, boolean lateReschedule, List<String> resources) {
+        public boolean upcoming(Instant now) {
+            return (status == BookingStatus.RESERVED || status == BookingStatus.CONFIRMED) && startsAt.isAfter(now);
+        }
+
+        public boolean withinFreeWindow(Instant now) {
+            return !now.plusSeconds(freeCancellationWindowMinutes * 60L).isAfter(startsAt);
+        }
+    }
+    record ClientBookingDetail(UUID id, String code, String clientName, String clientEmail,
+                               UUID organizationId, String organizationName, UUID serviceId, String serviceName,
+                               UUID locationId, String locationName, String locationAddress, ZoneId zone,
+                               Instant startsAt, Instant endsAt, int attendees, BigDecimal totalPrice,
+                               String currency, BookingStatus status, int freeCancellationWindowMinutes,
+                               int maxReschedules, int rescheduleCount, boolean lateCancellation,
+                               boolean lateReschedule, List<String> resources, List<StatusChange> statusHistory) {}
 
     Optional<BookingOffering> offering(UUID service, UUID location);
     List<Slot> slots(BookingOffering offering, LocalDate day, Instant now);
@@ -82,4 +106,6 @@ public interface BookingReservations {
     AttendanceReceipt closeAttendance(AttendanceTarget target, BookingStatus status, UUID actor, Instant closedAt,
                                       String observation);
     int autoCloseOverdue(Instant now);
+    List<ClientBookingRecord> findClientBookings(UUID client);
+    Optional<ClientBookingDetail> findClientBookingDetail(UUID client, UUID booking);
 }

@@ -1,11 +1,14 @@
 package com.codefactory.bookingplatform.booking.api;
 
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase;
+import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.ClientBookingsView;
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.Preview;
+import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.RebookView;
 import com.codefactory.bookingplatform.booking.application.BookAppointmentUseCase.TimeSlot;
 import com.codefactory.bookingplatform.booking.domain.model.BookingStatus;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.AttendanceReceipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.CancellationReceipt;
+import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.ClientBookingDetail;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.Receipt;
 import com.codefactory.bookingplatform.booking.domain.port.BookingReservations.RescheduleReceipt;
 import com.codefactory.bookingplatform.shared.security.AuthenticatedUser;
@@ -13,7 +16,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,6 +57,32 @@ public class BookingReservationController {
     @GetMapping("/booking/preview")
     public Preview preview(@RequestParam UUID serviceId, @RequestParam UUID locationId, @RequestParam Instant startsAt) {
         return bookings.preview(serviceId, locationId, startsAt);
+    }
+
+    @GetMapping("/bookings")
+    public ClientBookingsView clientBookings(JwtAuthenticationToken token) {
+        return bookings.clientBookings(AuthenticatedUser.from(token).id());
+    }
+
+    @GetMapping("/bookings/{bookingId}")
+    public ClientBookingDetail clientBookingDetail(@PathVariable UUID bookingId, JwtAuthenticationToken token) {
+        return bookings.clientBookingDetail(AuthenticatedUser.from(token).id(), bookingId);
+    }
+
+    @GetMapping("/bookings/{bookingId}/rebook")
+    public RebookView rebook(@PathVariable UUID bookingId,
+                             @RequestParam(required = false) LocalDate date,
+                             JwtAuthenticationToken token) {
+        return bookings.rebook(AuthenticatedUser.from(token).id(), bookingId, date);
+    }
+
+    @GetMapping(value = "/bookings/{bookingId}/receipt", produces = BookingReceiptPdf.MEDIA_TYPE)
+    public ResponseEntity<byte[]> receipt(@PathVariable UUID bookingId, JwtAuthenticationToken token) {
+        ClientBookingDetail detail = bookings.clientBookingDetail(AuthenticatedUser.from(token).id(), bookingId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"comprobante-" + detail.code() + ".pdf\"")
+                .body(BookingReceiptPdf.render(detail));
     }
 
     @PostMapping("/bookings")

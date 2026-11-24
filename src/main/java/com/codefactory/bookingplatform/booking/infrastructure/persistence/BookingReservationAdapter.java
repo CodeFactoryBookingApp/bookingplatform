@@ -264,6 +264,77 @@ public class BookingReservationAdapter implements BookingReservations {
                 """).params(now.atOffset(ZoneOffset.UTC), now.atOffset(ZoneOffset.UTC)).update();
     }
 
+    @Override
+    public List<ClientBookingRecord> findClientBookings(UUID client) {
+        return jdbc.sql("""
+                select b.id, b.code, b.organization_id, o.name as organization_name,
+                       b.service_id, s.name as service_name, b.location_id, l.name as location_name,
+                       l.address as location_address, coalesce(l.timezone, o.timezone) as timezone,
+                       b.starts_at, b.ends_at, b.attendees, b.total_price, c.code as currency,
+                       b.status, p.free_cancellation_window_minutes, p.max_reschedules,
+                       b.reschedule_count, b.late_cancellation, b.late_reschedule,
+                       coalesce((select array_agg(r.name order by r.name)
+                                   from booking_resources br join resources r on r.id = br.resource_id
+                                  where br.booking_id = b.id), array[]::varchar[]) as resource_names
+                  from bookings b
+                  join organizations o on o.id = b.organization_id
+                  join services s on s.id = b.service_id
+                  join locations l on l.id = b.location_id
+                  join currencies c on c.id = b.currency_id
+                  join organization_policies p on p.id = b.policy_id
+                 where b.client_id = ?
+                 order by b.starts_at desc, b.id
+                """).param(client).query(BookingReservationAdapter::clientBookingRecord).list();
+    }
+
+    @Override
+    public Optional<ClientBookingDetail> findClientBookingDetail(UUID client, UUID booking) {
+        return jdbc.sql("""
+                select b.id, b.code, cl.full_name as client_name, cl.email as client_email,
+                       b.organization_id, o.name as organization_name,
+                       b.service_id, s.name as service_name, b.location_id, l.name as location_name,
+                       l.address as location_address, coalesce(l.timezone, o.timezone) as timezone,
+                       b.starts_at, b.ends_at, b.attendees, b.total_price, c.code as currency,
+                       b.status, p.free_cancellation_window_minutes, p.max_reschedules,
+                       b.reschedule_count, b.late_cancellation, b.late_reschedule,
+                       coalesce((select array_agg(r.name order by r.name)
+                                   from booking_resources br join resources r on r.id = br.resource_id
+                                  where br.booking_id = b.id), array[]::varchar[]) as resource_names
+                  from bookings b
+                  join clients cl on cl.id = b.client_id
+                  join organizations o on o.id = b.organization_id
+                  join services s on s.id = b.service_id
+                  join locations l on l.id = b.location_id
+                  join currencies c on c.id = b.currency_id
+                  join organization_policies p on p.id = b.policy_id
+                 where b.client_id = ? and b.id = ?
+                """).params(client, booking).query((row, idx) -> {
+            List<StatusChange> history = jdbc.sql("""
+                    select from_status, to_status, reason, changed_at
+                      from booking_status_changes
+                     where booking_id = ?
+                     order by changed_at asc, id asc
+                    """).param(booking).query((h, i) -> {
+                String from = h.getString("from_status");
+                return new StatusChange(from == null ? null : BookingStatus.valueOf(from),
+                        BookingStatus.valueOf(h.getString("to_status")), h.getString("reason"),
+                        h.getTimestamp("changed_at").toInstant());
+            }).list();
+            return new ClientBookingDetail(row.getObject("id", UUID.class), row.getString("code"),
+                    row.getString("client_name"), row.getString("client_email"),
+                    row.getObject("organization_id", UUID.class), row.getString("organization_name"),
+                    row.getObject("service_id", UUID.class), row.getString("service_name"),
+                    row.getObject("location_id", UUID.class), row.getString("location_name"),
+                    row.getString("location_address"), ZoneId.of(row.getString("timezone")),
+                    row.getTimestamp("starts_at").toInstant(), row.getTimestamp("ends_at").toInstant(),
+                    row.getInt("attendees"), row.getBigDecimal("total_price"), row.getString("currency"),
+                    BookingStatus.valueOf(row.getString("status")), row.getInt("free_cancellation_window_minutes"),
+                    row.getInt("max_reschedules"), row.getInt("reschedule_count"),
+                    row.getBoolean("late_cancellation"), row.getBoolean("late_reschedule"),
+                    Arrays.asList((String[]) row.getArray("resource_names").getArray()), history);
+        }).optional();
+    }
+
     private static RuntimeException translateIntegrityViolation(DataIntegrityViolationException ex) {
         if (ex.getMostSpecificCause() instanceof SQLException sql) {
             return switch (sql.getSQLState()) {
@@ -310,6 +381,20 @@ public class BookingReservationAdapter implements BookingReservations {
                 row.getObject("client_id", UUID.class), row.getObject("organization_id", UUID.class),
                 BookingStatus.valueOf(row.getString("status")), row.getTimestamp("starts_at").toInstant(),
                 row.getTimestamp("ends_at").toInstant(), closedAt == null ? null : closedAt.toInstant());
+    }
+
+    private static ClientBookingRecord clientBookingRecord(ResultSet row, int index) throws SQLException {
+        return new ClientBookingRecord(row.getObject("id", UUID.class), row.getString("code"),
+                row.getObject("organization_id", UUID.class), row.getString("organization_name"),
+                row.getObject("service_id", UUID.class), row.getString("service_name"),
+                row.getObject("location_id", UUID.class), row.getString("location_name"),
+                row.getString("location_address"), ZoneId.of(row.getString("timezone")),
+                row.getTimestamp("starts_at").toInstant(), row.getTimestamp("ends_at").toInstant(),
+                row.getInt("attendees"), row.getBigDecimal("total_price"), row.getString("currency"),
+                BookingStatus.valueOf(row.getString("status")), row.getInt("free_cancellation_window_minutes"),
+                row.getInt("max_reschedules"), row.getInt("reschedule_count"),
+                row.getBoolean("late_cancellation"), row.getBoolean("late_reschedule"),
+                Arrays.asList((String[]) row.getArray("resource_names").getArray()));
     }
 
     private static Receipt receipt(ResultSet row, int index) throws SQLException {

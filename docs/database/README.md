@@ -26,6 +26,8 @@ arrancar, en orden de versión:
 | `V14__creacion_de_reservas.sql` | Confirmación manual en la política del proveedor y un cliente sin dos reservas activas a la misma hora (HU-012) |
 | `V15__cancelacion_de_reservas.sql` | Marca de cancelación tardía y una reserva cancelada no se puede reactivar (HU-013) |
 | `V16__excepciones_de_agenda.sql` | `agenda_exceptions`: festivos, cierres y horarios especiales de una agenda en una fecha, con RLS (HU-007) |
+| `V17__reprogramacion_de_reservas.sql` | Límite de reprogramaciones por proveedor, contador y marca de reprogramación tardía en reservas, y servicio inmutable al reprogramar (HU-014) |
+| `V18__asistencia_y_no_show.sql` | Estado de cierre por defecto y plazo de cierre automático en la política del proveedor (HU-016) |
 | `afterMigrate__rls_historial_flyway.sql` | Callback, no migración: corre al final de cada `migrate` y habilita RLS en `flyway_schema_history`, que Flyway tiene bloqueada mientras migra |
 
 Una migración aplicada no se modifica nunca: Flyway guarda su checksum y no
