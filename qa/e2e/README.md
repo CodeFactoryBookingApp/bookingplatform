@@ -99,7 +99,7 @@ Las pruebas corren con un worker porque comparten una agenda de un solo recurso.
 | E2E-11 | HU-022 | CP22-01 | La administradora cambia el rol de una clienta a proveedora | Positivo |
 | E2E-12 | HU-015 | | La clienta recibe en su bandeja el aviso de la reserva creada | Positivo |
 
-E2E-07 (DEF-E2E-01) y E2E-08 (DEF-E2E-02) describen el comportamiento esperado de HU-014 y HU-017, que el backend ya ofrece
+E2E-07 (BUG-070) y E2E-08 (BUG-071) describen el comportamiento esperado de HU-014 y HU-017, que el backend ya ofrece
 pero el front no expone; están marcados `@defecto @fixme` para que no rompan la ejecución. Al
 corregir el front se quita `@fixme` y deben pasar.
 

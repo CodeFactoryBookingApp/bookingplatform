@@ -26,7 +26,7 @@ Característica: Reservas de la clienta
     Cuando confirma la cancelación
     Entonces ve el aviso "Reserva cancelada." y la reserva queda "Cancelada"
 
-  # Defecto DEF-E2E-01: el backend ya reprograma (POST /bookings/{id}/reschedule, CP14-01) pero
+  # Defecto BUG-070: el backend ya reprograma (POST /bookings/{id}/reschedule, CP14-01) pero
   # "Mis reservas" no ofrece la acción. Quitar @fixme cuando el front la tenga.
   @E2E-07 @HU-014 @CP14-01 @positivo @defecto @fixme
   Escenario: La clienta reprograma una reserva confirmada a otra franja libre
@@ -34,7 +34,7 @@ Característica: Reservas de la clienta
     Cuando abre "Mis reservas" y elige reprogramar esa reserva
     Entonces puede elegir una nueva franja para la misma reserva
 
-  # Defecto DEF-E2E-02: el backend ya lista el historial (GET /bookings) y genera el PDF
+  # Defecto BUG-071: el backend ya lista el historial (GET /bookings) y genera el PDF
   # (GET /bookings/{id}/receipt), pero "Mis reservas" solo lee el localStorage del navegador.
   @E2E-08 @HU-017 @CP17-01 @CP17-04 @positivo @defecto @fixme
   Escenario: La clienta ve en su historial una reserva hecha desde otro dispositivo y descarga el comprobante PDF
