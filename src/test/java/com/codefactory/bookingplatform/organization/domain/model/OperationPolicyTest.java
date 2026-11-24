@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -21,6 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * HU-002 operating rules. Boundary values around "minimum notice not greater than maximum" and
  * around zero, which is a valid value for every field.
+ *
+ * <p>Sprint 3 rules (HU-014 maximum reschedules, HU-016 closing of unattended bookings): boundary
+ * values on each (0 and -1 reschedules; 1 and 0 hours before closing) and the required closing
+ * status, matching the checks of V17 and V18.
  */
 class OperationPolicyTest {
 
@@ -98,5 +103,34 @@ class OperationPolicyTest {
 
         // Assert
         assertDoesNotThrow(act);
+    }
+
+    @ParameterizedTest(name = "[{index}] {0} reschedules, closing as {1} after {2} h")
+    @CsvSource({
+            "0, NO_SHOW, 1",
+            "5, COMPLETED, 168"
+    })
+    @DisplayName("HU-014/HU-016: no reschedule at all and a single hour before closing are valid rules (lower boundaries)")
+    void lowestRescheduleAndClosingValuesAreAccepted(int reschedules, OperationPolicy.DefaultClosureStatus closure,
+                                                     int hours) {
+        // Act
+        OperationPolicy policy = new OperationPolicy(60, 43200, 1440, false, reschedules, closure, hours);
+
+        // Assert
+        assertEquals(List.of(reschedules, closure, hours),
+                List.of(policy.maxReschedules(), policy.defaultClosureStatus(), policy.autoCloseDelayHours()));
+    }
+
+    @Test
+    @DisplayName("HU-014/HU-016: negative reschedules, a missing closing status and zero hours are all reported, each on its field")
+    void invalidRescheduleAndClosingValuesAreAllReported() {
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> new OperationPolicy(60, 43200, 1440, false, -1, null, 0));
+
+        // Assert
+        assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+        assertEquals(Map.of("maxReschedules", "must not be negative", "defaultClosureStatus", "is required",
+                "autoCloseDelayHours", "must be positive"), ex.details());
     }
 }

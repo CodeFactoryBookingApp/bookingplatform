@@ -60,13 +60,15 @@ class RegisterClientUseCaseTest {
 
     private ClientRepository clientRepository;
     private UserProvisioning userProvisioning;
+    private AuditActor audit;
     private RegisterClientUseCase useCase;
 
     @BeforeEach
     void setUp() {
         clientRepository = mock(ClientRepository.class);
         userProvisioning = mock(UserProvisioning.class);
-        useCase = new RegisterClientUseCase(clientRepository, userProvisioning, CLOCK, mock(AuditActor.class));
+        audit = mock(AuditActor.class);
+        useCase = new RegisterClientUseCase(clientRepository, userProvisioning, CLOCK, audit);
     }
 
     private RegisterClientCommand command() {
@@ -352,5 +354,20 @@ class RegisterClientUseCaseTest {
             verify(userProvisioning, never()).deprovisionUser(any(UUID.class));
             verify(clientRepository, never()).save(any(Client.class));
         }
+    }
+
+    @Test
+    @DisplayName("HU-023: the new client is identified to the audit trail as CLIENT, with the provisioned id, before the profile is stored")
+    void newClientIsTheAuditActor() {
+        // Arrange
+        provisioningSucceeds();
+
+        // Act
+        useCase.register(command());
+
+        // Assert
+        InOrder order = inOrder(audit, clientRepository);
+        order.verify(audit).identify(PROVISIONED_ID, "CLIENT");
+        order.verify(clientRepository).save(any(Client.class));
     }
 }

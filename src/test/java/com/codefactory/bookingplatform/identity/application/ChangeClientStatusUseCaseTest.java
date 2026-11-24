@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,13 +37,15 @@ class ChangeClientStatusUseCaseTest {
 
     private ClientRepository clients;
     private ClientStatusChanges statusChanges;
+    private PlatformAccountProtection accountProtection;
     private ChangeClientStatusUseCase useCase;
 
     @BeforeEach
     void setUp() {
         clients = mock(ClientRepository.class);
         statusChanges = mock(ClientStatusChanges.class);
-        useCase = new ChangeClientStatusUseCase(clients, statusChanges, mock(PlatformAccountProtection.class));
+        accountProtection = mock(PlatformAccountProtection.class);
+        useCase = new ChangeClientStatusUseCase(clients, statusChanges, accountProtection);
     }
 
     private Client stored(ClientStatus status) {
@@ -154,5 +157,24 @@ class ChangeClientStatusUseCaseTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> new ClientFilter(null, null,
                 LocalDate.of(2026, 10, 25), LocalDate.of(2026, 10, 24), null, false, 0, 20));
         assertEquals("must not be before the start of the range", ex.details().get("registeredTo"));
+    }
+
+    @Test
+    @DisplayName("HU-003: a platform administrator cannot be suspended as a client: the refusal of the account protection propagates and nothing is stored or recorded")
+    void protectedAccountIsNotSuspended() {
+        // Arrange
+        Client client = stored(ClientStatus.ACTIVE);
+        UUID id = client.getId();
+        doThrow(new BusinessException(ErrorCode.ADMINISTRATOR_ACCOUNT_PROTECTED))
+                .when(accountProtection).requireClientSuspensionAllowed(id);
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.suspend(id, "Uso indebido", ADMIN));
+
+        // Assert
+        assertEquals(ErrorCode.ADMINISTRATOR_ACCOUNT_PROTECTED, ex.errorCode());
+        assertEquals(ClientStatus.ACTIVE, client.getStatus());
+        verify(clients, never()).save(any());
+        verify(statusChanges, never()).record(any(), any(), any(), any(), any());
     }
 }
