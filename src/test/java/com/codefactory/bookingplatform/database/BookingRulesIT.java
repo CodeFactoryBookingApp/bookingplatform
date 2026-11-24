@@ -89,6 +89,14 @@ class BookingRulesIT {
                 + attendees + ", 1000, '" + status + "') returning id";
     }
 
+    private static World withNewClient(World world) {
+        String id = UUID.randomUUID().toString();
+        sql("insert into clients select '" + id + "', full_name, '" + id.substring(0, 20) + "', birth_date, '"
+                + id + "@example.com', phone, city, notification_channel, status, created_at, updated_at"
+                + " from clients where id = '" + world.clientId() + "'");
+        return new World(id, world.organizationId(), world.locationId(), world.policyId(), world.serviceId());
+    }
+
     private static String book(World world, String status) {
         return queryString(bookingInsert(world, UUID.randomUUID().toString(), 1, status));
     }
@@ -195,12 +203,12 @@ class BookingRulesIT {
 
         try (Connection first = connect(); Connection second = connect()) {
             first.setAutoCommit(false);
-            execute(first, bookingInsert(world, sessionId, 1, "RESERVED"));
+            execute(first, bookingInsert(withNewClient(world), sessionId, 1, "RESERVED"));
 
             // Act: the second booking starts while the first one is still open
             CompletableFuture<Void> secondBooking = CompletableFuture.runAsync(() -> {
                 try {
-                    execute(second, bookingInsert(world, sessionId, 1, "RESERVED"));
+                    execute(second, bookingInsert(withNewClient(world), sessionId, 1, "RESERVED"));
                 } catch (SQLException ex) {
                     throw new IllegalStateException(ex);
                 }

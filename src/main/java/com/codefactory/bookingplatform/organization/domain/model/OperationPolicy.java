@@ -15,7 +15,11 @@ import java.util.Map;
  */
 public record OperationPolicy(int bookingNoticeMinutesMin,
                               int bookingNoticeMinutesMax,
-                              int freeCancellationWindowMinutes) {
+                              int freeCancellationWindowMinutes, boolean manualConfirmation) {
+
+    public OperationPolicy(int min, int max, int freeCancellationWindowMinutes) {
+        this(min, max, freeCancellationWindowMinutes, false);
+    }
 
     public OperationPolicy {
         Map<String, String> errors = new LinkedHashMap<>();

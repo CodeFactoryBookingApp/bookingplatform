@@ -17,4 +17,7 @@ public interface AgendaBookings {
      * its services and, for a resource agenda, using that resource.
      */
     List<BookedSlot> future(Agenda agenda, Instant now);
+
+    /** The same bookings, but overlapping [from, to) instead of "still pending" (HU-008/HU-011/HU-019). */
+    List<BookedSlot> between(Agenda agenda, Instant from, Instant to);
 }

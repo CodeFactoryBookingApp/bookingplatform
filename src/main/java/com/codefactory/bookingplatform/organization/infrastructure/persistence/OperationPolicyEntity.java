@@ -38,6 +38,9 @@ public class OperationPolicyEntity {
     @Column(name = "free_cancellation_window_minutes", nullable = false, updatable = false)
     private int freeCancellationWindowMinutes;
 
+    @Column(name = "manual_confirmation", nullable = false, updatable = false)
+    private boolean manualConfirmation;
+
     @Column(name = "effective_from", nullable = false, updatable = false)
     private Instant effectiveFrom;
 

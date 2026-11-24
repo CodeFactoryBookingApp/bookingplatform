@@ -17,5 +17,7 @@ public record OperationPolicyRequest(
 
         @NotNull(message = "freeCancellationWindowMinutes is required")
         @PositiveOrZero(message = "freeCancellationWindowMinutes must not be negative")
-        Integer freeCancellationWindowMinutes) {
+        Integer freeCancellationWindowMinutes,
+
+        Boolean manualConfirmation) {
 }
