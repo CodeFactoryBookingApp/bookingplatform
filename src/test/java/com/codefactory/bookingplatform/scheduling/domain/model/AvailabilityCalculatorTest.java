@@ -53,10 +53,13 @@ class AvailabilityCalculatorTest {
     }
 
     @Test
-    @DisplayName("HU-008: a date before the agenda's validity offers nothing")
+    @DisplayName("HU-008: a date before the agenda's validity offers nothing, even on a weekday that has a block")
     void dateOutsideValidityOffersNothing() {
+        // Arrange
+        LocalDate mondayBeforeValidity = MONDAY.minusWeeks(1);
+
         // Act
-        List<AvailableSlot> slots = AvailabilityCalculator.possibleSlots(agenda(), VALID_FROM.minusDays(7), BOGOTA, null,
+        List<AvailableSlot> slots = AvailabilityCalculator.possibleSlots(agenda(), mondayBeforeValidity, BOGOTA, null,
                 List.of());
 
         // Assert

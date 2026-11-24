@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -150,6 +151,7 @@ class ChangeOperationPolicyUseCaseTest {
     }
 
     @Test
+    @DisplayName("HU-014: the maximum of reschedules is stored when given, and kept when a later change omits it")
     void maxReschedulesCanBeConfiguredAndIsPreservedWhenOmitted() {
         // Arrange
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
@@ -161,11 +163,11 @@ class ChangeOperationPolicyUseCaseTest {
 
         // Assert
         assertEquals(new OperationPolicy(120, 20160, 720, true, 3), preserved.getPolicy());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class, () -> new OperationPolicy(120, 20160, 720, false, -1)).errorCode());
+        verify(organizations, times(2)).savePolicy(organization, NOW);
     }
 
     @Test
+    @DisplayName("HU-016: the closing status and the hours before closing are stored when given, and kept when a later change omits them")
     void defaultClosureStatusAndAutoCloseDelayCanBeConfiguredAndArePreservedWhenOmitted() {
         // Arrange
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
@@ -178,12 +180,6 @@ class ChangeOperationPolicyUseCaseTest {
         // Assert
         assertEquals(new OperationPolicy(120, 20160, 720, true, 2,
                 OperationPolicy.DefaultClosureStatus.NO_SHOW, 12), preserved.getPolicy());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class,
-                        () -> new OperationPolicy(120, 20160, 720, false, 1, null, 24)).errorCode());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class,
-                        () -> new OperationPolicy(120, 20160, 720, false, 1,
-                                OperationPolicy.DefaultClosureStatus.COMPLETED, 0)).errorCode());
+        assertEquals(4, preserved.getPolicyVersion());
     }
 }

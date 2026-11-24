@@ -354,6 +354,7 @@ class AgendaAvailabilityIT extends JwtIntegrationTestBase {
 
         // Assert
         assertEquals(400, response.getStatus());
+        assertEquals("VALIDATION_ERROR", text(response, "$.errorCode"));
     }
 
     // ---- HU-019: occupancy --------------------------------------------------------------------
@@ -385,6 +386,7 @@ class AgendaAvailabilityIT extends JwtIntegrationTestBase {
 
         // Assert
         assertEquals(400, response.getStatus());
+        assertEquals("VALIDATION_ERROR", text(response, "$.errorCode"));
     }
 
     @Test
