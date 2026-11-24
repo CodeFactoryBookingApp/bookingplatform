@@ -32,7 +32,4 @@ public interface ResourceRepository {
 
     /** ACTIVE resources of a type in a location; maintenance periods do not count here (HU-004 activation). */
     long countActive(UUID locationId, UUID resourceTypeId);
-
-    /** ACTIVE resources of a type in a location, with their maintenance windows loaded (HU-010). */
-    List<Resource> findActive(UUID organizationId, UUID locationId, UUID resourceTypeId);
 }

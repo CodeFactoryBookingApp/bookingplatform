@@ -14,7 +14,4 @@ public interface ResourceJpaRepository extends JpaRepository<ResourceEntity, UUI
     Optional<ResourceEntity> findByIdAndOrganizationId(UUID id, UUID organizationId);
 
     long countByLocationIdAndResourceTypeIdAndStatus(UUID locationId, UUID resourceTypeId, ResourceStatus status);
-
-    List<ResourceEntity> findByLocationIdAndResourceTypeIdAndStatusOrderByName(UUID locationId, UUID resourceTypeId,
-                                                                               ResourceStatus status);
 }
