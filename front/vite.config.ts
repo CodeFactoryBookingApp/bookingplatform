@@ -7,7 +7,7 @@ import path from 'node:path'
 // In dev Vite proxies it; in production vercel.json rewrites it. No key ever lives in the front.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const target = env.VITE_API_TARGET || 'https://bookingplatform-81wi.onrender.com'
+  const target = env.VITE_API_TARGET || 'https://bookingplatform-xh0x.onrender.com'
   return {
     plugins: [react(), tailwindcss()],
     resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },

@@ -8,3 +8,5 @@ target/
 docs/
 *.md
 docker-compose*.yml
+# El front se despliega en Vercel; no entra en la imagen del backend
+front/
