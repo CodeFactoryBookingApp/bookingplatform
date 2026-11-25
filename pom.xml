@@ -25,6 +25,9 @@
 		<jacoco.version>0.8.13</jacoco.version>
 		<pitest.version>1.19.1</pitest.version>
 		<pitest.junit5.version>1.2.2</pitest.junit5.version>
+		<rest-assured.version>5.5.6</rest-assured.version>
+		<!-- Spring Boot manages Groovy 5, but REST Assured 5.5 is built for Groovy 4 and fails at runtime with 5. -->
+		<groovy.version>4.0.22</groovy.version>
 		<sonar.organization>codefactorybookingapp</sonar.organization>
 		<sonar.projectKey>CodeFactoryBookingApp_bookingplatform</sonar.projectKey>
 		<sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -160,6 +163,13 @@
 			<groupId>com.tngtech.archunit</groupId>
 			<artifactId>archunit-junit5</artifactId>
 			<version>${archunit.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- HTTP client of the API end-to-end suite (profile e2e, docs/qa/e2e.md). -->
+		<dependency>
+			<groupId>io.rest-assured</groupId>
+			<artifactId>rest-assured</artifactId>
+			<version>${rest-assured.version}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -413,5 +423,59 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!--
+		  API end-to-end suite: `./mvnw -Pe2e verify` against the stack that
+		  scripts/e2e/stack.sh starts (real Supabase Auth, Mailpit, backend on
+		  :8080). Only the *E2E classes run; the unit tests, the ITs and the
+		  coverage floor belong to the regular build, which never runs them.
+
+		  `verify` packages the project before the integration tests, and the
+		  stack runs the backend from target/bookingplatform-*.jar: rewriting
+		  that jar under the running JVM breaks its class loading. So the
+		  profile neither repackages nor writes the jar into target/.
+		-->
+		<profile>
+			<id>e2e</id>
+			<properties>
+				<jacoco.skip>true</jacoco.skip>
+			</properties>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-surefire-plugin</artifactId>
+						<configuration>
+							<skip>true</skip>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-jar-plugin</artifactId>
+						<configuration>
+							<outputDirectory>${project.build.directory}/e2e-jar</outputDirectory>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.springframework.boot</groupId>
+						<artifactId>spring-boot-maven-plugin</artifactId>
+						<configuration>
+							<skip>true</skip>
+						</configuration>
+					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-failsafe-plugin</artifactId>
+						<configuration>
+							<includes>
+								<include>**/*E2E.java</include>
+							</includes>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
 
 </project>
