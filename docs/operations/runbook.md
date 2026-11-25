@@ -92,6 +92,9 @@ las conexiones (instancias, dashboard, corridas locales).
 
 ## 5. Flujo E2E manual (colección en `docs/api/sprint1.http`)
 
+Las suites automatizadas (API y UI) corren este flujo y los demás contra un
+stack local: ver `docs/qa/e2e.md`.
+
 1. `POST /api/v1/registrations` → **201** `PENDING_VERIFICATION` (el correo
    se dispara en la misma transacción; si GoTrue lo rechaza, el registro
    se revierte con compensación).

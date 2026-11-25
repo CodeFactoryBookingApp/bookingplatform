@@ -20,6 +20,19 @@ cp .env.example .env     # y pon VITE_API_TARGET=http://localhost:8080
 
 Render (plan gratis) duerme el servicio; la primera petición puede tardar ~2 minutos y la app lo avisa.
 
+## Pruebas end-to-end
+
+`e2e/` tiene la suite de Playwright. Corre contra el stack local (`scripts/e2e/stack.sh up` desde la raíz) y
+Playwright arranca Vite con `VITE_API_TARGET` apuntando al backend local:
+
+```bash
+eval "$(../scripts/e2e/stack.sh env)"
+npx playwright install chromium   # una sola vez
+npm run e2e
+```
+
+Detalle, CI y el defecto conocido del restablecimiento de contraseña: `docs/qa/e2e.md`.
+
 ## Por qué hay un proxy
 
 `SecurityConfig` llama a `.cors(withDefaults())`, pero no define ningún `CorsConfigurationSource`, así que en la

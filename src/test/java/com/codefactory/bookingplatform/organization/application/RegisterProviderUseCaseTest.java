@@ -4,6 +4,7 @@ import com.codefactory.bookingplatform.shared.audit.AuditActor;
 import com.codefactory.bookingplatform.auth.application.UserProvisioning;
 import com.codefactory.bookingplatform.organization.domain.model.DuplicateOrganizationException;
 import com.codefactory.bookingplatform.organization.domain.model.IdentificationType;
+import com.codefactory.bookingplatform.organization.domain.model.OperationPolicy;
 import com.codefactory.bookingplatform.organization.domain.model.Organization;
 import com.codefactory.bookingplatform.organization.domain.model.OrganizationStatus;
 import com.codefactory.bookingplatform.organization.domain.port.OrganizationRepository;
@@ -22,6 +23,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +63,7 @@ class RegisterProviderUseCaseTest {
     private OrganizationRepository organizations;
     private ReferenceDataRepository referenceData;
     private UserProvisioning userProvisioning;
+    private AuditActor audit;
     private RegisterProviderUseCase useCase;
 
     @BeforeEach
@@ -68,8 +71,9 @@ class RegisterProviderUseCaseTest {
         organizations = mock(OrganizationRepository.class);
         referenceData = mock(ReferenceDataRepository.class);
         userProvisioning = mock(UserProvisioning.class);
+        audit = mock(AuditActor.class);
         useCase = new RegisterProviderUseCase(organizations, referenceData, userProvisioning,
-                Clock.fixed(NOW, ZoneOffset.UTC), mock(AuditActor.class));
+                Clock.fixed(NOW, ZoneOffset.UTC), audit);
         when(referenceData.categoryExists(CATEGORY)).thenReturn(true);
         when(referenceData.cityExists(CITY)).thenReturn(true);
         when(userProvisioning.provisionProviderUser(anyString(), anyString())).thenReturn(OWNER);
@@ -116,13 +120,19 @@ class RegisterProviderUseCaseTest {
         @Test
         @DisplayName("Text fields are trimmed and the identification is upper-cased before storing")
         void normalisesTheInput() {
+            // Arrange
+            RegisterProviderCommand command = new RegisterProviderCommand(" Barberia@Example.com ", "Str0ng!Pass",
+                    " Barbería El Poblado ", CATEGORY, IdentificationType.PASAPORTE, " ab123456 ", null, " 6041112233 ",
+                    null, List.of(new RegisterProviderCommand.LocationData(" Sede Poblado ", " Cra 43A # 5-15 ", CITY, null)),
+                    60, 43200, 1440);
+
             // Act
-            useCase.register(command());
+            useCase.register(command);
 
             // Assert
             Organization organization = registeredOrganization();
             assertEquals("Barbería El Poblado", organization.getName());
-            assertEquals("900123456-1", organization.getIdentificationNumber());
+            assertEquals("AB123456", organization.getIdentificationNumber());
             assertEquals("6041112233", organization.getContactPhone());
             assertEquals("Sede Poblado", organization.getLocations().get(0).name());
             assertEquals("Cra 43A # 5-15", organization.getLocations().get(0).address());
@@ -142,15 +152,60 @@ class RegisterProviderUseCaseTest {
         }
 
         @Test
-        @DisplayName("Given contact email and time zone are kept; the email is lower-cased")
+        @DisplayName("Given contact email and time zone are kept, trimmed; the email is lower-cased")
         void givenOptionalFieldsAreKept() {
             // Act
-            useCase.register(command("Citas@Barberia.com", "America/Lima", 60, 43200));
+            useCase.register(command(" Citas@Barberia.com ", " America/Lima ", 60, 43200));
 
             // Assert
             Organization organization = registeredOrganization();
             assertEquals("citas@barberia.com", organization.getContactEmail());
             assertEquals("America/Lima", organization.getTimezone());
+        }
+
+        @Test
+        @DisplayName("HU-002: the operating rules of the request become version 1, and a location's own zone is kept, trimmed")
+        void rulesAndLocationZoneAreKept() {
+            // Arrange
+            RegisterProviderCommand command = new RegisterProviderCommand("barberia@example.com", "Str0ng!Pass",
+                    "Barbería", CATEGORY, IdentificationType.NIT, "900123456-1", null, "6041112233", null,
+                    List.of(new RegisterProviderCommand.LocationData("Sede", "Calle 1", CITY, " America/Lima ")),
+                    30, 10080, 720);
+
+            // Act
+            useCase.register(command);
+
+            // Assert
+            Organization organization = registeredOrganization();
+            assertEquals(new OperationPolicy(30, 10080, 720), organization.getPolicy());
+            assertEquals(1, organization.getPolicyVersion());
+            assertEquals("America/Lima", organization.getLocations().get(0).timezone());
+            assertEquals(CITY, organization.getLocations().get(0).cityId());
+        }
+
+        @Test
+        @DisplayName("HU-014/HU-016: a new provider starts with automatic confirmation, one reschedule and closing as COMPLETED after 24 h (the defaults of V14, V17 and V18)")
+        void newProviderStartsWithTheDefaultRules() {
+            // Act
+            useCase.register(command());
+
+            // Assert
+            OperationPolicy policy = registeredOrganization().getPolicy();
+            assertEquals(List.of(false, 1, OperationPolicy.DefaultClosureStatus.COMPLETED, 24),
+                    List.of(policy.manualConfirmation(), policy.maxReschedules(), policy.defaultClosureStatus(),
+                            policy.autoCloseDelayHours()));
+        }
+
+        @Test
+        @DisplayName("HU-023: the new owner is identified to the audit trail as PROVIDER before the provider is stored")
+        void ownerIsTheAuditActorOfTheRegistration() {
+            // Act
+            useCase.register(command());
+
+            // Assert
+            InOrder order = inOrder(audit, organizations);
+            order.verify(audit).identify(OWNER, "PROVIDER");
+            order.verify(organizations).register(any(Organization.class), eq(OWNER), eq(NOW));
         }
     }
 
@@ -169,6 +224,23 @@ class RegisterProviderUseCaseTest {
 
             // Assert
             assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+            verifyNoInteractions(userProvisioning);
+        }
+
+        @Test
+        @DisplayName("HU-002: a request without locations at all is a 400 on locations (not a 500) and no account is created")
+        void missingLocationsAreRejected() {
+            // Arrange
+            RegisterProviderCommand command = new RegisterProviderCommand("barberia@example.com", "Str0ng!Pass",
+                    "Barbería", CATEGORY, IdentificationType.NIT, "900123456-1", null, "6041112233", null, null,
+                    60, 43200, 1440);
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class, () -> useCase.register(command));
+
+            // Assert
+            assertEquals(ErrorCode.VALIDATION_ERROR, ex.errorCode());
+            assertEquals(Map.of("locations", "at least one location is required"), ex.details());
             verifyNoInteractions(userProvisioning);
         }
 

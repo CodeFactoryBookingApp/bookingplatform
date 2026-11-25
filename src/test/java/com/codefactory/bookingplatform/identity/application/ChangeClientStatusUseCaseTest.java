@@ -12,6 +12,9 @@ import com.codefactory.bookingplatform.shared.error.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -21,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,13 +37,15 @@ class ChangeClientStatusUseCaseTest {
 
     private ClientRepository clients;
     private ClientStatusChanges statusChanges;
+    private PlatformAccountProtection accountProtection;
     private ChangeClientStatusUseCase useCase;
 
     @BeforeEach
     void setUp() {
         clients = mock(ClientRepository.class);
         statusChanges = mock(ClientStatusChanges.class);
-        useCase = new ChangeClientStatusUseCase(clients, statusChanges, mock(PlatformAccountProtection.class));
+        accountProtection = mock(PlatformAccountProtection.class);
+        useCase = new ChangeClientStatusUseCase(clients, statusChanges, accountProtection);
     }
 
     private Client stored(ClientStatus status) {
@@ -76,6 +82,38 @@ class ChangeClientStatusUseCaseTest {
 
         // Assert
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals("The client is already SUSPENDED", ex.getMessage());
+        verify(clients, never()).save(any());
+        verify(statusChanges, never()).record(any(), any(), any(), any(), any());
+    }
+
+    /**
+     * State transition testing of the administrative acts. The aggregate refuses these cells; the
+     * use case must leave the client as it was and record no change. The error code is not asserted:
+     * the aggregate answers VALIDATION_ERROR (400) where the use case answers 409 for "already
+     * suspended", an inconsistency reported as a defect instead of being fixed in a test.
+     */
+    @ParameterizedTest(name = "[{index}] {0} + {1}")
+    @CsvSource({
+            "PENDING_VERIFICATION, suspend",
+            "PENDING_VERIFICATION, reactivate",
+            "ACTIVE,               reactivate"
+    })
+    @DisplayName("HU-003: a client pending verification is not suspended, and only a suspended one is reactivated; nothing is recorded")
+    void refusedTransitionsRecordNothing(ClientStatus status, String act) {
+        // Arrange
+        Client client = stored(status);
+        UUID id = client.getId();
+        Executable transition = "suspend".equals(act)
+                ? () -> useCase.suspend(id, "Motivo", ADMIN)
+                : () -> useCase.reactivate(id, "Motivo", ADMIN);
+
+        // Act
+        assertThrows(BusinessException.class, transition);
+
+        // Assert
+        assertEquals(status, client.getStatus());
+        verify(clients, never()).save(any());
         verify(statusChanges, never()).record(any(), any(), any(), any(), any());
     }
 
@@ -119,5 +157,24 @@ class ChangeClientStatusUseCaseTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> new ClientFilter(null, null,
                 LocalDate.of(2026, 10, 25), LocalDate.of(2026, 10, 24), null, false, 0, 20));
         assertEquals("must not be before the start of the range", ex.details().get("registeredTo"));
+    }
+
+    @Test
+    @DisplayName("HU-003: a platform administrator cannot be suspended as a client: the refusal of the account protection propagates and nothing is stored or recorded")
+    void protectedAccountIsNotSuspended() {
+        // Arrange
+        Client client = stored(ClientStatus.ACTIVE);
+        UUID id = client.getId();
+        doThrow(new BusinessException(ErrorCode.ADMINISTRATOR_ACCOUNT_PROTECTED))
+                .when(accountProtection).requireClientSuspensionAllowed(id);
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.suspend(id, "Uso indebido", ADMIN));
+
+        // Assert
+        assertEquals(ErrorCode.ADMINISTRATOR_ACCOUNT_PROTECTED, ex.errorCode());
+        assertEquals(ClientStatus.ACTIVE, client.getStatus());
+        verify(clients, never()).save(any());
+        verify(statusChanges, never()).record(any(), any(), any(), any(), any());
     }
 }

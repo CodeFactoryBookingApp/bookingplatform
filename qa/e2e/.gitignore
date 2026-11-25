@@ -1,0 +1,8 @@
+node_modules/
+.features-gen/
+.env-run/
+reports/*
+!reports/.gitkeep
+support/.data/
+support/stub/stub_key.pem
+support/stub/__pycache__/

@@ -35,6 +35,7 @@ contraseña). MFA de administradores diferido a Sprint 2.
 | Diagrama ER editable | `docs/database/diagrama-er.drawio` |
 | Runbook operativo (producción, E2E, troubleshooting) | `docs/operations/runbook.md` |
 | Colección REST de Sprint 1 | `docs/api/sprint1.http` |
+| Pruebas end-to-end (API y UI) y su stack local | `docs/qa/e2e.md` |
 
 ## Estructura del código
 

@@ -55,13 +55,15 @@ class ConfirmEmailUseCaseTest {
 
     private ClientRepository clientRepository;
     private UserProvisioning userProvisioning;
+    private AuditActor audit;
     private ConfirmEmailUseCase useCase;
 
     @BeforeEach
     void setUp() {
         clientRepository = mock(ClientRepository.class);
         userProvisioning = mock(UserProvisioning.class);
-        useCase = new ConfirmEmailUseCase(clientRepository, userProvisioning, mock(AuditActor.class));
+        audit = mock(AuditActor.class);
+        useCase = new ConfirmEmailUseCase(clientRepository, userProvisioning, audit);
     }
 
     private Client clientInStatus(ClientStatus status) {
@@ -206,5 +208,20 @@ class ConfirmEmailUseCaseTest {
         // Assert
         RuntimeException thrown = assertThrows(RuntimeException.class, act);
         assertSame(boom, thrown);
+    }
+
+    @Test
+    @DisplayName("HU-023: the confirming client is identified to the audit trail as CLIENT before the activation is stored")
+    void confirmingClientIsTheAuditActor() {
+        // Arrange
+        tokenResolvesTo(clientInStatus(ClientStatus.PENDING_VERIFICATION));
+
+        // Act
+        useCase.confirm(TOKEN);
+
+        // Assert
+        InOrder order = inOrder(audit, clientRepository);
+        order.verify(audit).identify(CLIENT_ID, "CLIENT");
+        order.verify(clientRepository).save(any(Client.class));
     }
 }

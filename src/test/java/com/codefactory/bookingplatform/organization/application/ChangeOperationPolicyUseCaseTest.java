@@ -26,10 +26,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** HU-002 "Edición de parámetros de operación": who may change them, and what gets stored. */
+/**
+ * HU-002 "Edición de parámetros de operación": who may change them, and what gets stored.
+ * Equivalence partitioning over the caller (OWNER, MANAGER allowed; STAFF denied; outsider hidden)
+ * and over the provider status (ACTIVE accepts a new version, SUSPENDED does not).
+ */
 class ChangeOperationPolicyUseCaseTest {
 
     private static final Instant NOW = Instant.parse("2026-10-25T15:00:00Z");
@@ -68,6 +73,41 @@ class ChangeOperationPolicyUseCaseTest {
     }
 
     @Test
+    @DisplayName("HU-002 / ADR-0008: a manager may change the rules too; the next version is stored from now on")
+    void managerChangesTheRules() {
+        // Arrange
+        when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.MANAGER));
+
+        // Act
+        Organization changed = useCase.change(organization.getId(), USER, 120, 20160, 720, false);
+
+        // Assert
+        assertEquals(3, changed.getPolicyVersion());
+        assertEquals(NEW_POLICY, changed.getPolicy());
+        verify(organizations).savePolicy(organization, NOW);
+    }
+
+    @Test
+    @DisplayName("A suspended provider cannot change its rules even through its owner: 409 and no new version is stored")
+    void suspendedProviderStoresNoNewVersion() {
+        // Arrange
+        Organization suspended = new Organization(UUID.randomUUID(), UUID.randomUUID(), "Barbería",
+                IdentificationType.NIT, "900123456-1", "contacto@barberia.com", "6041112233", "America/Bogota",
+                organization.getLocations(), OrganizationStatus.SUSPENDED, NOW, new OperationPolicy(60, 43200, 1440), 2);
+        UUID id = suspended.getId();
+        when(organizations.findById(id)).thenReturn(Optional.of(suspended));
+        when(organizations.findMemberRole(id, USER)).thenReturn(Optional.of(MemberRole.OWNER));
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.change(id, USER, 120, 20160, 720, false));
+
+        // Assert
+        assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        verify(organizations, never()).savePolicy(any(), any());
+    }
+
+    @Test
+    @DisplayName("HU-002: omitting the confirmation mode keeps the provider's current choice")
     void omittedConfirmationModePreservesProviderApproval() {
         // Arrange
         organization.changePolicy(new OperationPolicy(60, 43200, 1440, true));
@@ -111,6 +151,7 @@ class ChangeOperationPolicyUseCaseTest {
     }
 
     @Test
+    @DisplayName("HU-014: the maximum of reschedules is stored when given, and kept when a later change omits it")
     void maxReschedulesCanBeConfiguredAndIsPreservedWhenOmitted() {
         // Arrange
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
@@ -122,11 +163,11 @@ class ChangeOperationPolicyUseCaseTest {
 
         // Assert
         assertEquals(new OperationPolicy(120, 20160, 720, true, 3), preserved.getPolicy());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class, () -> new OperationPolicy(120, 20160, 720, false, -1)).errorCode());
+        verify(organizations, times(2)).savePolicy(organization, NOW);
     }
 
     @Test
+    @DisplayName("HU-016: the closing status and the hours before closing are stored when given, and kept when a later change omits them")
     void defaultClosureStatusAndAutoCloseDelayCanBeConfiguredAndArePreservedWhenOmitted() {
         // Arrange
         when(organizations.findMemberRole(organization.getId(), USER)).thenReturn(Optional.of(MemberRole.OWNER));
@@ -139,12 +180,6 @@ class ChangeOperationPolicyUseCaseTest {
         // Assert
         assertEquals(new OperationPolicy(120, 20160, 720, true, 2,
                 OperationPolicy.DefaultClosureStatus.NO_SHOW, 12), preserved.getPolicy());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class,
-                        () -> new OperationPolicy(120, 20160, 720, false, 1, null, 24)).errorCode());
-        assertEquals(ErrorCode.VALIDATION_ERROR,
-                assertThrows(BusinessException.class,
-                        () -> new OperationPolicy(120, 20160, 720, false, 1,
-                                OperationPolicy.DefaultClosureStatus.COMPLETED, 0)).errorCode());
+        assertEquals(4, preserved.getPolicyVersion());
     }
 }

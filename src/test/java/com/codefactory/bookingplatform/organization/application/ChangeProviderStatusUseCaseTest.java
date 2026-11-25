@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -92,9 +93,10 @@ class ChangeProviderStatusUseCaseTest {
             when(bookings.countFuture(organization.getId(), NOW)).thenReturn(3);
 
             // Act
-            useCase.suspend(organization.getId(), "  Quejas reiteradas ", true, ADMIN);
+            Organization suspended = useCase.suspend(organization.getId(), "  Quejas reiteradas ", true, ADMIN);
 
             // Assert
+            assertSame(organization, suspended);
             assertEquals(OrganizationStatus.SUSPENDED, organization.getStatus());
             verify(organizations).saveStatusChange(organization, OrganizationStatus.ACTIVE, "Quejas reiteradas", ADMIN, 3);
         }
@@ -137,11 +139,29 @@ class ChangeProviderStatusUseCaseTest {
         Organization organization = stored(OrganizationStatus.SUSPENDED);
 
         // Act
-        useCase.reactivate(organization.getId(), "Corregido", ADMIN);
+        Organization reactivated = useCase.reactivate(organization.getId(), "Corregido", ADMIN);
 
         // Assert
+        assertSame(organization, reactivated);
         assertEquals(OrganizationStatus.ACTIVE, organization.getStatus());
         verify(organizations).saveStatusChange(organization, OrganizationStatus.SUSPENDED, "Corregido", ADMIN, 0);
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @EnumSource(value = OrganizationStatus.class, names = {"ACTIVE", "PENDING_APPROVAL", "REJECTED"})
+    @DisplayName("HU-003: only a suspended provider can be reactivated: anything else is a 409 and no change is recorded")
+    void onlySuspendedCanBeReactivated(OrganizationStatus status) {
+        // Arrange
+        Organization organization = stored(status);
+        UUID id = organization.getId();
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.reactivate(id, "Corregido", ADMIN));
+
+        // Assert
+        assertEquals(ErrorCode.INVALID_STATUS_TRANSITION, ex.errorCode());
+        assertEquals(status, organization.getStatus());
+        verify(organizations, never()).saveStatusChange(any(), any(), any(), any(), anyInt());
     }
 
     @Test
@@ -153,10 +173,12 @@ class ChangeProviderStatusUseCaseTest {
         UUID activeId = active.getId();
 
         // Act
-        useCase.reject(pending.getId(), "RUT ilegible", ADMIN);
+        Organization rejected = useCase.reject(pending.getId(), "RUT ilegible", ADMIN);
 
         // Assert
+        assertSame(pending, rejected);
         assertEquals(OrganizationStatus.REJECTED, pending.getStatus());
+        verify(organizations).saveStatusChange(pending, OrganizationStatus.PENDING_APPROVAL, "RUT ilegible", ADMIN, 0);
         assertEquals(ErrorCode.INVALID_STATUS_TRANSITION,
                 assertThrows(BusinessException.class, () -> useCase.reject(activeId, "No", ADMIN)).errorCode());
     }

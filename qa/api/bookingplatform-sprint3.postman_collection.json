@@ -1,0 +1,2579 @@
+{
+  "info": {
+    "_postman_id": "e1bf7ac9-0b97-5815-ac79-648096d7754e",
+    "name": "bookingplatform - Pruebas de API Sprint 3",
+    "description": "Pruebas de API automatizadas del flujo de valor del Sprint 3 (HU-007, HU-008/011, HU-012 a HU-020, HU-022, HU-023). Las peticiones se encadenan por variables de entorno y deben correr en orden sobre una base nueva o con datos de otra corrida (cada corrida usa un runId propio). Los tokens los emite el simulador de Supabase Auth (qa/api/stub).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 Preparación (proveedor, servicio, agenda y cliente)",
+      "item": [
+        {
+          "name": "AT-01 Registrar proveedor (queda pendiente de aprobación)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: datos únicos por corrida, fechas en la zona del proveedor y token de administrador",
+                  "const runId = String(Date.now()).slice(-9);",
+                  "pm.environment.set(\"runId\", runId);",
+                  "const bogota = (days) => new Date(Date.now() - 5 * 3600e3 + days * 864e5).toISOString().slice(0, 10);",
+                  "pm.environment.set(\"today\", bogota(0));",
+                  "pm.environment.set(\"weekEnd\", bogota(6));",
+                  "pm.environment.set(\"bookingDate\", bogota(3));",
+                  "pm.environment.set(\"closedDate\", bogota(4));",
+                  "pm.environment.set(\"farDate\", bogota(45));",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get(\"stubUrl\") + \"/_ctl/mint\",",
+                  "    method: \"POST\",",
+                  "    header: { \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ _email: \"qa.admin@example.com\", app_metadata: { provider: \"email\", role: \"ADMIN\" } }) }",
+                  "}, function (err, res) {",
+                  "    pm.expect(err, \"simulador de Supabase Auth disponible\").to.be.null;",
+                  "    pm.environment.set(\"adminToken\", res.json().token);",
+                  "});",
+                  "pm.sendRequest(pm.environment.get(\"baseUrl\") + \"/organization-categories\", function (err, res) {",
+                  "    pm.environment.set(\"categoryId\", res.json()[0].id);",
+                  "});",
+                  "pm.sendRequest(pm.environment.get(\"baseUrl\") + \"/cities\", function (err, res) {",
+                  "    const city = res.json().find(c => c.name.startsWith(\"Medell\")) || res.json()[0];",
+                  "    pm.environment.set(\"cityId\", city.id);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"El proveedor queda PENDING_APPROVAL con su organización y su usuario dueño\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.status).to.eql(\"PENDING_APPROVAL\");",
+                  "    pm.expect(b.organizationId).to.match(/^[0-9a-f-]{36}$/);",
+                  "    pm.expect(b.ownerUserId).to.match(/^[0-9a-f-]{36}$/);",
+                  "    pm.expect(b.email).to.eql(\"qa.prov.\" + pm.environment.get(\"runId\") + \"@example.com\");",
+                  "    pm.environment.set(\"orgId\", b.organizationId);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/provider-registrations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "provider-registrations"
+              ]
+            },
+            "description": "HU-002 (precondición). Registro público del proveedor con una sede y su política inicial.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa.prov.{{runId}}@example.com\",\n  \"password\": \"{{password}}\",\n  \"name\": \"Spa QA {{runId}}\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"identificationType\": \"NIT\",\n  \"identificationNumber\": \"QA{{runId}}\",\n  \"contactPhone\": \"+573001112233\",\n  \"timezone\": \"America/Bogota\",\n  \"locations\": [\n    {\n      \"name\": \"Sede Centro\",\n      \"address\": \"Calle 10 # 20-30\",\n      \"cityId\": \"{{cityId}}\",\n      \"timezone\": \"America/Bogota\"\n    }\n  ],\n  \"bookingNoticeMinutesMin\": 60,\n  \"bookingNoticeMinutesMax\": 43200,\n  \"freeCancellationWindowMinutes\": 120\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-02 Aprobar proveedor como administrador",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (organization)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"id\", \"name\", \"status\", \"locations\", \"operationPolicy\"], \"properties\": {\"id\": {\"type\": \"string\", \"pattern\": \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\"}, \"status\": {\"enum\": [\"PENDING_APPROVAL\", \"ACTIVE\", \"SUSPENDED\", \"REJECTED\"]}, \"locations\": {\"type\": \"array\", \"minItems\": 1}, \"operationPolicy\": {\"type\": \"object\", \"required\": [\"version\", \"bookingNoticeMinutesMin\", \"bookingNoticeMinutesMax\", \"maxReschedules\"]}}});",
+                  "});",
+                  "pm.test(\"La organización pasa a ACTIVE con fecha de aprobación\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.environment.get(\"orgId\"));",
+                  "    pm.expect(b.status).to.eql(\"ACTIVE\");",
+                  "    pm.expect(b.approvedAt).to.be.a(\"string\");",
+                  "    pm.environment.set(\"locationId\", b.locations[0].id);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/organizations/{{orgId}}/approval",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "organizations",
+                "{{orgId}}",
+                "approval"
+              ]
+            },
+            "description": "HU-002 (precondición). Solo un ADMIN aprueba; deja la sede disponible para el resto del flujo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Documentación verificada por QA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-03 Ajustar política de operación (máx. 1 reprogramación)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: el dueño del proveedor obtiene su token (rol PROVIDER, sub = ownerUserId)",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get(\"stubUrl\") + \"/_ctl/mint\",",
+                  "    method: \"POST\",",
+                  "    header: { \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ _email: \"qa.prov.\" + pm.environment.get(\"runId\") + \"@example.com\" }) }",
+                  "}, function (err, res) {",
+                  "    pm.expect(err, \"simulador de Supabase Auth disponible\").to.be.null;",
+                  "    pm.environment.set(\"providerToken\", res.json().token);",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"La política nueva queda vigente: anticipación 60 min a 30 días, 1 reprogramación\", function () {",
+                  "    const p = pm.response.json().operationPolicy;",
+                  "    pm.expect(p.bookingNoticeMinutesMin).to.eql(60);",
+                  "    pm.expect(p.bookingNoticeMinutesMax).to.eql(43200);",
+                  "    pm.expect(p.freeCancellationWindowMinutes).to.eql(120);",
+                  "    pm.expect(p.maxReschedules).to.eql(1);",
+                  "    pm.expect(p.version).to.be.above(1);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/operation-policy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "operation-policy"
+              ]
+            },
+            "description": "HU-002 (precondición). Fija las reglas que luego verifican HU-012 y HU-014.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingNoticeMinutesMin\": 60,\n  \"bookingNoticeMinutesMax\": 43200,\n  \"freeCancellationWindowMinutes\": 120,\n  \"manualConfirmation\": false,\n  \"maxReschedules\": 1,\n  \"defaultClosureStatus\": \"COMPLETED\",\n  \"autoCloseDelayHours\": 24\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-04 Crear tipo de recurso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Devuelve el tipo creado con su id\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.name).to.eql(\"Camilla \" + pm.environment.get(\"runId\"));",
+                  "    pm.environment.set(\"resourceTypeId\", b.id);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/resource-types",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "resource-types"
+              ]
+            },
+            "description": "HU-009 (precondición).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Camilla {{runId}}\",\n  \"description\": \"Camilla de masaje\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-05 Registrar recurso con capacidad 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"El recurso queda AVAILABLE en la sede\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.condition).to.eql(\"AVAILABLE\");",
+                  "    pm.expect(b.locationId).to.eql(pm.environment.get(\"locationId\"));",
+                  "    pm.expect(b.capacity).to.eql(1);",
+                  "    pm.environment.set(\"resourceId\", b.id);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/resources",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "resources"
+              ]
+            },
+            "description": "HU-009 (precondición). Un único recurso: dos reservas en la misma franja deben chocar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceTypeId\": \"{{resourceTypeId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"name\": \"Camilla 1\",\n  \"capacity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-06 Crear servicio de 60 minutos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"El servicio nace INACTIVE con su requisito de recurso\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.status).to.eql(\"INACTIVE\");",
+                  "    pm.expect(b.durationMinutes).to.eql(60);",
+                  "    pm.expect(b.requirements[0].resourceTypeId).to.eql(pm.environment.get(\"resourceTypeId\"));",
+                  "    pm.environment.set(\"serviceId\", b.id);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "services"
+              ]
+            },
+            "description": "HU-004 (precondición).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"details\": {\n    \"name\": \"Masaje QA {{runId}}\",\n    \"description\": \"Masaje relajante\",\n    \"durationMinutes\": 60,\n    \"preparationMinutes\": 0,\n    \"cleanupMinutes\": 0,\n    \"price\": 80000,\n    \"customerCapacity\": 1\n  },\n  \"locationIds\": [\n    \"{{locationId}}\"\n  ],\n  \"requirements\": [\n    {\n      \"resourceTypeId\": \"{{resourceTypeId}}\",\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-07 Activar servicio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El servicio queda ACTIVE\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"ACTIVE\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/services/{{serviceId}}/activation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "services",
+                "{{serviceId}}",
+                "activation"
+              ]
+            },
+            "description": "HU-004 (precondición)."
+          }
+        },
+        {
+          "name": "AT-08 Crear agenda de la sede (08:00-18:00, franjas de 60 min)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"La agenda guarda granularidad, servicio y los 7 bloques\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.slotMinutes).to.eql(60);",
+                  "    pm.expect(b.serviceIds).to.include(pm.environment.get(\"serviceId\"));",
+                  "    pm.expect(b.blocks).to.have.lengthOf(7);",
+                  "    pm.environment.set(\"agendaId\", b.id);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/agendas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "agendas"
+              ]
+            },
+            "description": "HU-006 (precondición).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Agenda QA {{runId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"slotMinutes\": 60,\n  \"validFrom\": \"{{today}}\",\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"blocks\": [\n    {\n      \"dayOfWeek\": \"MONDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"TUESDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"WEDNESDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"THURSDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"FRIDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"SATURDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    },\n    {\n      \"dayOfWeek\": \"SUNDAY\",\n      \"startTime\": \"08:00\",\n      \"endTime\": \"18:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-09 Registrar cliente A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"La cuenta queda PENDING_VERIFICATION\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.status).to.eql(\"PENDING_VERIFICATION\");",
+                  "    pm.environment.set(\"clientAId\", b.clientId);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/registrations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "registrations"
+              ]
+            },
+            "description": "HU-001 (precondición).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Cliente QA A\",\n  \"document\": \"A{{runId}}\",\n  \"birthDate\": \"1995-04-12\",\n  \"email\": \"qa.cliente.a.{{runId}}@example.com\",\n  \"phone\": \"+573001234567\",\n  \"city\": \"Medellín\",\n  \"notificationChannel\": \"EMAIL\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-10 Verificar correo e iniciar sesión como cliente A",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: el cliente A confirma su correo con el token_hash que emite el simulador",
+                  "const emailA = \"qa.cliente.a.\" + pm.environment.get(\"runId\") + \"@example.com\";",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get(\"stubUrl\") + \"/_ctl/confirm\", method: \"POST\",",
+                  "    header: { \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ email: emailA }) }",
+                  "}, function (err, res) {",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"baseUrl\") + \"/registrations/email-verifications\", method: \"POST\",",
+                  "        header: { \"Content-Type\": \"application/json\" },",
+                  "        body: { mode: \"raw\", raw: JSON.stringify({ tokenHash: res.json().token_hash }) }",
+                  "    }, function (e2, r2) {",
+                  "        pm.expect(r2.json().status, \"cuenta verificada\").to.eql(\"ACTIVE\");",
+                  "    });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Entrega accessToken bearer\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(b.tokenType.toLowerCase()).to.eql(\"bearer\");",
+                  "    pm.environment.set(\"clientToken\", b.accessToken);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "HU-021 (precondición).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa.cliente.a.{{runId}}@example.com\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 HU-008/011 Disponibilidad",
+      "item": [
+        {
+          "name": "AT-11 Consultar franjas libres de un día (cliente)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (slots)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"array\", \"minItems\": 1, \"items\": {\"type\": \"object\", \"required\": [\"startsAt\", \"endsAt\"], \"properties\": {\"startsAt\": {\"type\": \"string\"}, \"endsAt\": {\"type\": \"string\"}}}});",
+                  "});",
+                  "pm.test(\"Ofrece las 10 franjas de 60 min de 08:00 a 18:00 en hora de Bogotá\", function () {",
+                  "    const slots = pm.response.json();",
+                  "    pm.expect(slots).to.have.lengthOf(10);",
+                  "    slots.forEach(s => {",
+                  "        pm.expect(new Date(s.endsAt) - new Date(s.startsAt)).to.eql(60 * 60 * 1000);",
+                  "        pm.expect(s.startsAt).to.include(pm.environment.get(\"bookingDate\"));",
+                  "        pm.expect(s.startsAt).to.match(/-05:00$/);",
+                  "    });",
+                  "    pm.expect(slots[0].startsAt).to.include(\"T08:00\");",
+                  "    // Se guardan como instantes UTC para el cuerpo de las reservas",
+                  "    pm.environment.set(\"slot0\", new Date(slots[0].startsAt).toISOString());",
+                  "    pm.environment.set(\"slot1\", new Date(slots[1].startsAt).toISOString());",
+                  "    pm.environment.set(\"slot2\", new Date(slots[2].startsAt).toISOString());",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/booking/availability?serviceId={{serviceId}}&locationId={{locationId}}&date={{bookingDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "booking",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "locationId",
+                  "value": "{{locationId}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{bookingDate}}"
+                }
+              ]
+            },
+            "description": "HU-011. Positivo: la disponibilidad del día respeta bloques y granularidad."
+          }
+        },
+        {
+          "name": "AT-12 Calendario de disponibilidad de la agenda (proveedor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve un día por fecha del rango y el día objetivo tiene 10 franjas\", function () {",
+                  "    const days = pm.response.json();",
+                  "    pm.expect(days).to.have.lengthOf(7);",
+                  "    const target = days.find(d => d.date === pm.environment.get(\"bookingDate\"));",
+                  "    pm.expect(target, \"día \" + pm.environment.get(\"bookingDate\")).to.exist;",
+                  "    pm.expect(target.slots).to.have.lengthOf(10);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/agendas/{{agendaId}}/availability?from={{today}}&to={{weekEnd}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "agendas",
+                "{{agendaId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{today}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{weekEnd}}"
+                }
+              ]
+            },
+            "description": "HU-008. Positivo: vista del proveedor por rango de fechas."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 HU-012 Crear reserva",
+      "item": [
+        {
+          "name": "AT-13 Vista previa de la reserva con términos vigentes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Resume servicio, precio y política, y entrega la versión de términos\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.service).to.eql(\"Masaje QA \" + pm.environment.get(\"runId\"));",
+                  "    pm.expect(Number(b.price)).to.eql(80000);",
+                  "    pm.expect(b.freeCancellationWindowMinutes).to.eql(120);",
+                  "    pm.expect(b.termsVersion).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(new Date(b.slot.startsAt).toISOString()).to.eql(pm.environment.get(\"slot0\"));",
+                  "    pm.environment.set(\"termsVersion\", b.termsVersion);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/booking/preview?serviceId={{serviceId}}&locationId={{locationId}}&startsAt={{slot0}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "booking",
+                "preview"
+              ],
+              "query": [
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "locationId",
+                  "value": "{{locationId}}"
+                },
+                {
+                  "key": "startsAt",
+                  "value": "{{slot0}}"
+                }
+              ]
+            },
+            "description": "HU-012. Paso previo a reservar: el cliente acepta una versión concreta de términos."
+          }
+        },
+        {
+          "name": "AT-14 Crear reserva en franja libre",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (receipt)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"id\", \"code\", \"status\"], \"properties\": {\"id\": {\"type\": \"string\", \"pattern\": \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\"}, \"code\": {\"type\": \"string\", \"minLength\": 4}, \"status\": {\"enum\": [\"RESERVED\", \"CONFIRMED\"]}}});",
+                  "});",
+                  "const created = pm.response.json();",
+                  "pm.environment.set(\"bookingId\", created.id);",
+                  "pm.environment.set(\"bookingCode\", created.code);",
+                  "pm.test(\"Sin confirmación manual en la política, la reserva nace CONFIRMED\", function () {",
+                  "    pm.expect(created.status).to.eql(\"CONFIRMED\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Positivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot0}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-15 Reservar franja ya ocupada (otro cliente)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: un segundo cliente se registra, verifica su correo e inicia sesión",
+                  "const base = pm.environment.get(\"baseUrl\"), stub = pm.environment.get(\"stubUrl\");",
+                  "const email = \"qa.cliente.b.\" + pm.environment.get(\"runId\") + \"@example.com\";",
+                  "const json = (url, payload, cb) => pm.sendRequest({ url, method: \"POST\",",
+                  "    header: { \"Content-Type\": \"application/json\" }, body: { mode: \"raw\", raw: JSON.stringify(payload) } }, cb);",
+                  "json(base + \"/registrations\", { fullName: \"Cliente QA B\", document: \"B\" + pm.environment.get(\"runId\"),",
+                  "    birthDate: \"1990-08-20\", email, phone: \"+573007654321\", city: \"Medellín\", notificationChannel: \"EMAIL\",",
+                  "    password: pm.environment.get(\"password\") }, function (e1, r1) {",
+                  "    pm.environment.set(\"clientBId\", r1.json().clientId);",
+                  "    json(stub + \"/_ctl/confirm\", { email }, function (e2, r2) {",
+                  "        json(base + \"/registrations/email-verifications\", { tokenHash: r2.json().token_hash }, function () {",
+                  "            json(base + \"/auth/login\", { email, password: pm.environment.get(\"password\") }, function (e4, r4) {",
+                  "                pm.environment.set(\"clientBToken\", r4.json().accessToken);",
+                  "            });",
+                  "        });",
+                  "    });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode SLOT_UNAVAILABLE\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"SLOT_UNAVAILABLE\");",
+                  "    pm.expect(body.status).to.eql(409);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Excepcional: el único recurso ya está asignado en esa franja.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot0}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-16 Reservar fuera de la anticipación máxima de la política",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: 45 días adelante a las 10:00 de Bogotá; la política admite hasta 30 días (43200 min)",
+                  "pm.environment.set(\"farStart\", pm.environment.get(\"farDate\") + \"T15:00:00Z\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Se rechaza con un 4xx\", function () {",
+                  "    pm.expect(pm.response.code).to.be.within(400, 499);",
+                  "});",
+                  "pm.test(\"Contrato de error: la franja no es reservable (SLOT_UNAVAILABLE)\", function () {",
+                  "    pm.expect(pm.response.json().errorCode).to.eql(\"SLOT_UNAVAILABLE\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Excepcional: anticipación fuera de política.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{farStart}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-17 Reservar sin token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode AUTH_REQUIRED\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"AUTH_REQUIRED\");",
+                  "    pm.expect(body.status).to.eql(401);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Excepcional: sin autenticación.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot2}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-18 Reservar con rol PROVIDER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode ACCESS_DENIED\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"ACCESS_DENIED\");",
+                  "    pm.expect(body.status).to.eql(403);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Excepcional: rol incorrecto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot2}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-19 Reservar con términos desactualizados",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode BOOKING_TERMS_CHANGED\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"BOOKING_TERMS_CHANGED\");",
+                  "    pm.expect(body.status).to.eql(409);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012. Excepcional: la versión aceptada no coincide con la vigente.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot2}}\",\n  \"termsVersion\": \"terminos-obsoletos\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 HU-014 Reprogramar reserva",
+      "item": [
+        {
+          "name": "AT-20 Reprogramar a otra franja del mismo día",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Conserva el código, mueve el inicio y cuenta 1 reprogramación\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.environment.get(\"bookingId\"));",
+                  "    pm.expect(b.code).to.eql(pm.environment.get(\"bookingCode\"));",
+                  "    pm.expect(new Date(b.startsAt).toISOString()).to.eql(pm.environment.get(\"slot1\"));",
+                  "    pm.expect(b.rescheduleCount).to.eql(1);",
+                  "    pm.expect(b.lateReschedule).to.eql(false);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/reschedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "reschedule"
+              ]
+            },
+            "description": "HU-014. Positivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startsAt\": \"{{slot1}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-21 Superar el límite de reprogramaciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode RESCHEDULE_LIMIT_REACHED\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"RESCHEDULE_LIMIT_REACHED\");",
+                  "    pm.expect(body.status).to.eql(409);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Indica el límite y sugiere cancelar y crear una nueva\", function () {",
+                  "    const d = pm.response.json().details;",
+                  "    pm.expect(d.maxReschedules).to.eql(\"1\");",
+                  "    pm.expect(d.rescheduleCount).to.eql(\"1\");",
+                  "    pm.expect(d.suggestedAction).to.eql(\"CANCEL_AND_CREATE_NEW\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/reschedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "reschedule"
+              ]
+            },
+            "description": "HU-014. Excepcional: política con máximo 1 reprogramación.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startsAt\": \"{{slot2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-22 La franja liberada por la reprogramación vuelve a ser reservable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (receipt)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"id\", \"code\", \"status\"], \"properties\": {\"id\": {\"type\": \"string\", \"pattern\": \"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\"}, \"code\": {\"type\": \"string\", \"minLength\": 4}, \"status\": {\"enum\": [\"RESERVED\", \"CONFIRMED\"]}}});",
+                  "});",
+                  "pm.environment.set(\"bookingBId\", pm.response.json().id);",
+                  "pm.test(\"El cliente B obtiene la franja que antes estaba ocupada\", function () {",
+                  "    pm.expect(pm.response.json().id).to.not.eql(pm.environment.get(\"bookingId\"));",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-012/HU-014. Positivo: reprogramar libera el recurso de la franja original.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{serviceId}}\",\n  \"locationId\": \"{{locationId}}\",\n  \"startsAt\": \"{{slot0}}\",\n  \"termsVersion\": \"{{termsVersion}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 HU-017 Historial y comprobante PDF",
+      "item": [
+        {
+          "name": "AT-23 Historial del cliente: próximas reservas y acciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (clientBookings)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"upcoming\", \"history\", \"empty\"], \"properties\": {\"upcoming\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"code\", \"status\", \"startsAt\", \"endsAt\", \"rescheduleCount\", \"maxReschedules\", \"actions\"]}}, \"history\": {\"type\": \"array\"}, \"empty\": {\"type\": \"boolean\"}}});",
+                  "});",
+                  "pm.test(\"La reserva aparece en próximas con su estado y acciones coherentes\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.empty).to.eql(false);",
+                  "    const item = b.upcoming.find(i => i.id === pm.environment.get(\"bookingId\"));",
+                  "    pm.expect(item, \"reserva en upcoming\").to.exist;",
+                  "    pm.expect(item.code).to.eql(pm.environment.get(\"bookingCode\"));",
+                  "    pm.expect(item.rescheduleCount).to.eql(1);",
+                  "    pm.expect(item.actions.canCancel).to.eql(true);",
+                  "    pm.expect(item.actions.canReschedule, \"límite alcanzado\").to.eql(false);",
+                  "    pm.expect(item.actions.receiptPath).to.eql(\"/api/v1/bookings/\" + item.id + \"/receipt\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-017. Positivo."
+          }
+        },
+        {
+          "name": "AT-24 Descargar comprobante en PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Type application/pdf y adjunto con el código de la reserva\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "    pm.expect(pm.response.headers.get(\"Content-Disposition\"))",
+                  "        .to.include(\"comprobante-\" + pm.environment.get(\"bookingCode\") + \".pdf\");",
+                  "});",
+                  "pm.test(\"El cuerpo es un PDF válido (firma %PDF y cierre %%EOF)\", function () {",
+                  "    const text = pm.response.text();",
+                  "    pm.expect(text.substring(0, 5)).to.eql(\"%PDF-\");",
+                  "    pm.expect(text).to.include(\"%%EOF\");",
+                  "    pm.expect(pm.response.responseSize).to.be.above(500);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/pdf"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/receipt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "receipt"
+              ]
+            },
+            "description": "HU-017. Positivo."
+          }
+        },
+        {
+          "name": "AT-25 Otro cliente intenta ver una reserva ajena",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode RESOURCE_NOT_FOUND\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"RESOURCE_NOT_FOUND\");",
+                  "    pm.expect(body.status).to.eql(404);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}"
+              ]
+            },
+            "description": "HU-017. Excepcional: aislamiento entre clientes (no revela si existe)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 HU-018 Búsqueda y exportación CSV",
+      "item": [
+        {
+          "name": "AT-26 Buscar reservas del proveedor por rango",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (searchPage)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"items\", \"summary\", \"page\", \"size\"], \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"code\", \"clientName\", \"serviceName\", \"startsAt\", \"status\"]}}, \"summary\": {\"type\": \"object\", \"required\": [\"total\", \"byStatus\"]}}});",
+                  "});",
+                  "pm.test(\"Encuentra las dos reservas del proveedor con su resumen\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.summary.total).to.eql(2);",
+                  "    pm.expect(b.summary.byStatus.CONFIRMED).to.eql(2);",
+                  "    const codes = b.items.map(i => i.code);",
+                  "    pm.expect(codes).to.include(pm.environment.get(\"bookingCode\"));",
+                  "    pm.expect(b.items.every(i => i.serviceName === \"Masaje QA \" + pm.environment.get(\"runId\"))).to.eql(true);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/bookings?from={{today}}T05:00:00Z&to={{weekEnd}}T05:00:00Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{today}}T05:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "{{weekEnd}}T05:00:00Z"
+                }
+              ]
+            },
+            "description": "HU-018. Positivo."
+          }
+        },
+        {
+          "name": "AT-27 Exportar la búsqueda a CSV",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Type text/csv como adjunto reservas.csv\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/csv\");",
+                  "    pm.expect(pm.response.headers.get(\"Content-Disposition\")).to.include(\"reservas.csv\");",
+                  "});",
+                  "pm.test(\"Encabezado esperado y una fila por reserva\", function () {",
+                  "    const lines = pm.response.text().trim().split(/\\r?\\n/);",
+                  "    pm.expect(lines[0].replace(/^\\uFEFF/, \"\")).to.eql(\"codigo,cliente,servicio,sede,inicio,fin,asistentes,estado,importe,moneda\");",
+                  "    pm.expect(lines).to.have.lengthOf(3);",
+                  "    pm.expect(pm.response.text()).to.include(pm.environment.get(\"bookingCode\"));",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/bookings/export?from={{today}}T05:00:00Z&to={{weekEnd}}T05:00:00Z",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "bookings",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{today}}T05:00:00Z"
+                },
+                {
+                  "key": "to",
+                  "value": "{{weekEnd}}T05:00:00Z"
+                }
+              ]
+            },
+            "description": "HU-018. Positivo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 HU-016 Asistencia y HU-007 Excepción de agenda",
+      "item": [
+        {
+          "name": "AT-28 Registrar asistencia antes de la hora de inicio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode INVALID_STATUS_TRANSITION\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"INVALID_STATUS_TRANSITION\");",
+                  "    pm.expect(body.status).to.eql(409);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/bookings/{{bookingId}}/attendance",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "bookings",
+                "{{bookingId}}",
+                "attendance"
+              ]
+            },
+            "description": "HU-016. Excepcional: no se cierra una reserva que no ha empezado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"observation\": \"Marcado anticipado\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-29 Cerrar la agenda un día (excepción)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Queda una excepción CLOSED para la fecha\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.type).to.eql(\"CLOSED\");",
+                  "    pm.expect(b.date).to.eql(pm.environment.get(\"closedDate\"));",
+                  "    pm.expect(b.agendaId).to.eql(pm.environment.get(\"agendaId\"));",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/agendas/{{agendaId}}/exceptions/closures",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "agendas",
+                "{{agendaId}}",
+                "exceptions",
+                "closures"
+              ]
+            },
+            "description": "HU-007. Positivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{closedDate}}\",\n  \"reason\": \"Mantenimiento general\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-30 El día cerrado no ofrece franjas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"La disponibilidad del día cerrado está vacía\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an(\"array\").that.is.empty;",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/booking/availability?serviceId={{serviceId}}&locationId={{locationId}}&date={{closedDate}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "booking",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "serviceId",
+                  "value": "{{serviceId}}"
+                },
+                {
+                  "key": "locationId",
+                  "value": "{{locationId}}"
+                },
+                {
+                  "key": "date",
+                  "value": "{{closedDate}}"
+                }
+              ]
+            },
+            "description": "HU-007/HU-011. Positivo: la excepción se refleja en la disponibilidad."
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 HU-013 Cancelar reserva",
+      "item": [
+        {
+          "name": "AT-31 Cancelar sin confirmar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode CONFIRMATION_REQUIRED\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.errorCode).to.eql(\"CONFIRMATION_REQUIRED\");",
+                  "    pm.expect(body.status).to.eql(409);",
+                  "    pm.expect(body).to.have.property(\"traceId\");",
+                  "    pm.expect(body).to.have.property(\"timestamp\");",
+                  "});",
+                  "pm.test(\"Informa que no hay penalidad dentro de la ventana de 120 min\", function () {",
+                  "    const d = pm.response.json().details;",
+                  "    pm.expect(d.penaltyApplies).to.eql(\"false\");",
+                  "    pm.expect(d.freeCancellationWindowMinutes).to.eql(\"120\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "cancel"
+              ]
+            },
+            "description": "HU-013. Excepcional: la cancelación exige confirmación explícita.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Viaje imprevisto\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-32 Cancelar con confirmación",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"La reserva queda CANCELLED sin penalidad\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.environment.get(\"bookingId\"));",
+                  "    pm.expect(b.status).to.eql(\"CANCELLED\");",
+                  "    pm.expect(b.lateCancellation).to.eql(false);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings",
+                "{{bookingId}}",
+                "cancel"
+              ]
+            },
+            "description": "HU-013. Positivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirm\": true,\n  \"reason\": \"Viaje imprevisto\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 HU-015 Bandeja, HU-019 Ocupación y HU-020 Demanda",
+      "item": [
+        {
+          "name": "AT-33 Bandeja de correos del cliente",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: los avisos salen por un proceso periódico (APP_BOOKING_NOTICES_POLL_MS=1000 en el ambiente)",
+                  "setTimeout(function () {}, 2500);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Hay avisos de la reserva con su código\", function () {",
+                  "    const mails = pm.response.json();",
+                  "    pm.expect(mails).to.be.an(\"array\").that.is.not.empty;",
+                  "    const code = pm.environment.get(\"bookingCode\");",
+                  "    const related = mails.filter(m => (m.subject + \" \" + m.body).includes(code));",
+                  "    pm.expect(related.length, \"correos que mencionan \" + code).to.be.at.least(1);",
+                  "    mails.forEach(m => pm.expect(m).to.have.all.keys(\"id\", \"subject\", \"body\", \"sentAt\"));",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/emails",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "emails"
+              ]
+            },
+            "description": "HU-015. Positivo."
+          }
+        },
+        {
+          "name": "AT-34 Reporte de ocupación de la semana",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (occupancy)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"agendaId\", \"agendaName\", \"from\", \"to\", \"totalSlots\", \"occupiedSlots\", \"occupancyRate\"], \"properties\": {\"totalSlots\": {\"type\": \"integer\", \"minimum\": 0}, \"occupiedSlots\": {\"type\": \"integer\", \"minimum\": 0}, \"occupancyRate\": {\"type\": \"number\", \"minimum\": 0}}}});",
+                  "});",
+                  "pm.test(\"La agenda reporta 60 franjas, 1 ocupada y una tasa coherente\", function () {",
+                  "    const row = pm.response.json().find(r => r.agendaId === pm.environment.get(\"agendaId\"));",
+                  "    pm.expect(row, \"fila de la agenda\").to.exist;",
+                  "    // 7 días x 10 franjas, menos el día cerrado por la excepción (HU-007)",
+                  "    pm.expect(row.totalSlots).to.eql(60);",
+                  "    pm.expect(row.occupiedSlots).to.eql(1);",
+                  "    const rate = row.occupancyRate > 1 ? row.occupancyRate / 100 : row.occupancyRate;",
+                  "    pm.expect(rate).to.be.closeTo(row.occupiedSlots / row.totalSlots, 0.01);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/reports/occupancy?from={{today}}&to={{weekEnd}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "reports",
+                "occupancy"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{today}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{weekEnd}}"
+                }
+              ]
+            },
+            "description": "HU-019. Positivo: solo cuenta la reserva vigente del cliente B."
+          }
+        },
+        {
+          "name": "AT-35 Reporte de demanda por servicio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (demand)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"period\", \"previousPeriod\", \"timezone\", \"services\", \"demand\"], \"properties\": {\"services\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"name\", \"current\", \"previous\", \"variation\"]}}}});",
+                  "});",
+                  "pm.test(\"El servicio registra 2 reservas creadas, 1 cancelada (50 %) e ingreso de la vigente\", function () {",
+                  "    const svc = pm.response.json().services.find(s => s.id === pm.environment.get(\"serviceId\"));",
+                  "    pm.expect(svc, \"servicio en el reporte\").to.exist;",
+                  "    pm.expect(svc.current.created).to.eql(2);",
+                  "    pm.expect(svc.current.cancelled).to.eql(1);",
+                  "    pm.expect(Number(svc.current.cancellationRatePercent)).to.be.closeTo(50, 0.01);",
+                  "    pm.expect(Number(svc.current.estimatedRevenueByCurrency.COP), \"solo la reserva vigente\").to.eql(80000);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/reports/service-demand?from={{today}}&to={{weekEnd}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "reports",
+                "service-demand"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "{{today}}"
+                },
+                {
+                  "key": "to",
+                  "value": "{{weekEnd}}"
+                }
+              ]
+            },
+            "description": "HU-020. Positivo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 HU-022 Cambio de rol y HU-023 Auditoría",
+      "item": [
+        {
+          "name": "AT-36 Cambiar el rol del cliente B a PROVIDER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Confirma el usuario y el nuevo rol\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.environment.get(\"clientBId\"));",
+                  "    pm.expect(b.role).to.eql(\"PROVIDER\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/{{clientBId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "{{clientBId}}",
+                "role"
+              ]
+            },
+            "description": "HU-022. Positivo.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"PROVIDER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "AT-37 El token emitido antes del cambio de rol queda rechazado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Contrato de error: problem+json con errorCode de autenticación\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/problem+json\");",
+                  "    pm.expect(pm.response.json().errorCode).to.be.oneOf([\"AUTH_REQUIRED\", \"AUTH_TOKEN_INVALID\"]);",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "bookings"
+              ]
+            },
+            "description": "HU-022. Excepcional: la sesión anterior no conserva el rol viejo."
+          }
+        },
+        {
+          "name": "AT-38 Tras volver a iniciar sesión, el usuario opera con el rol nuevo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Arrange: nuevo inicio de sesión (al menos 1 s después del cambio, la marca amr tiene resolución de segundos)",
+                  "setTimeout(function () {",
+                  "    pm.sendRequest({ url: pm.environment.get(\"baseUrl\") + \"/auth/login\", method: \"POST\",",
+                  "        header: { \"Content-Type\": \"application/json\" },",
+                  "        body: { mode: \"raw\", raw: JSON.stringify({ email: \"qa.cliente.b.\" + pm.environment.get(\"runId\") + \"@example.com\",",
+                  "                                                   password: pm.environment.get(\"password\") }) }",
+                  "    }, function (err, res) { pm.environment.set(\"clientBNewToken\", res.json().accessToken); });",
+                  "}, 1200);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El perfil refleja el rol PROVIDER\", function () {",
+                  "    const b = pm.response.json();",
+                  "    pm.expect(b.id).to.eql(pm.environment.get(\"clientBId\"));",
+                  "    pm.expect(b.role).to.eql(\"PROVIDER\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{clientBNewToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "HU-022. Positivo."
+          }
+        },
+        {
+          "name": "AT-39 Auditoría del proveedor: reservas creadas y reprogramadas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (auditPage)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"items\", \"total\", \"page\", \"size\"], \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"occurredAt\", \"actorRole\", \"action\", \"resourceType\", \"result\"]}}}});",
+                  "});",
+                  "pm.test(\"Registra creación, reprogramación y cancelación de la reserva con su actor\", function () {",
+                  "    const items = pm.response.json().items.filter(e => e.resourceId === pm.environment.get(\"bookingId\"));",
+                  "    const actions = items.map(e => e.action);",
+                  "    pm.expect(actions).to.include.members([\"BOOKING_CREATED\", \"BOOKING_RESCHEDULED\"]);",
+                  "    pm.expect(actions.some(a => a.includes(\"CANCELLED\")), \"acción de cancelación\").to.eql(true);",
+                  "    const created = items.find(e => e.action === \"BOOKING_CREATED\");",
+                  "    pm.expect(created.actorId).to.eql(pm.environment.get(\"clientAId\"));",
+                  "    pm.expect(created.actorRole).to.eql(\"CLIENT\");",
+                  "    pm.expect(created.result).to.eql(\"SUCCESS\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{providerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/organizations/{{orgId}}/audit-events?size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "organizations",
+                "{{orgId}}",
+                "audit-events"
+              ],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "HU-023. Positivo: trazabilidad de la reserva dentro del proveedor."
+          }
+        },
+        {
+          "name": "AT-40 Auditoría global: cambio de rol registrado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Act: Newman envía la petición definida en este ítem (método, URL, cabeceras y cuerpo)",
+                  "// Assert: código de estado, cuerpo o esquema JSON, contrato de error y tiempo de respuesta",
+                  "pm.test(\"Código de estado 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Cumple el esquema JSON (auditPage)\", function () {",
+                  "    pm.response.to.have.jsonSchema({\"type\": \"object\", \"required\": [\"items\", \"total\", \"page\", \"size\"], \"properties\": {\"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"required\": [\"id\", \"occurredAt\", \"actorRole\", \"action\", \"resourceType\", \"result\"]}}}});",
+                  "});",
+                  "pm.test(\"El cambio de rol aparece con el administrador como actor\", function () {",
+                  "    const ev = pm.response.json().items.find(e => e.resourceId === pm.environment.get(\"clientBId\"));",
+                  "    pm.expect(ev, \"evento del cliente B\").to.exist;",
+                  "    pm.expect(ev.resourceType).to.eql(\"USER\");",
+                  "    pm.expect(ev.actorRole).to.eql(\"ADMIN\");",
+                  "});",
+                  "pm.test(\"Tiempo de respuesta < \" + pm.environment.get(\"maxResponseMs\") + \" ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(Number(pm.environment.get(\"maxResponseMs\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-events?action=PLATFORM_ROLE_CHANGED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-events"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "PLATFORM_ROLE_CHANGED"
+                }
+              ]
+            },
+            "description": "HU-023. Positivo."
+          }
+        }
+      ]
+    }
+  ]
+}
