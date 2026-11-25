@@ -1,0 +1,22 @@
+{
+  "name": "bookingplatform-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pruebas funcionales automatizadas (Playwright + Gherkin con playwright-bdd) de bookingplatform",
+  "type": "module",
+  "scripts": {
+    "bddgen": "bddgen",
+    "test": "bddgen && playwright test",
+    "test:chromium": "bddgen && playwright test --project=chromium",
+    "test:firefox": "bddgen && playwright test --project=firefox",
+    "test:edge": "bddgen && playwright test --project=msedge",
+    "report": "playwright show-report reports/playwright-html",
+    "typecheck": "bddgen && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@types/node": "22.19.1",
+    "playwright-bdd": "9.2.1",
+    "typescript": "5.9.3"
+  }
+}

@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,7 +23,7 @@ class ListingParamsTest {
     private enum Column { NAME, REGISTERED }
 
     @ParameterizedTest(name = "[{index}] \"{0}\"")
-    @ValueSource(strings = {"registered", "REGISTERED", " Registered "})
+    @ValueSource(strings = {"registered", " Registered "})
     @DisplayName("The sort column is read in any case and with surrounding blanks")
     void sortIgnoresCase(String value) {
         // Act
@@ -46,7 +45,7 @@ class ListingParamsTest {
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
-    @CsvSource({"asc, false", "DESC, true", " desc , true"})
+    @CsvSource({"asc, false", "DESC, true", "' desc ', true"})
     @DisplayName("The direction is asc or desc, in any case")
     void direction(String value, boolean descending) {
         // Act
@@ -79,6 +78,41 @@ class ListingParamsTest {
         assertEquals(List.of("page", "size"), List.copyOf(errors.keySet()));
     }
 
+    /** Boundary values of the window: page -1 | 0, size 0 | 1 and 100 | 101. */
+    @ParameterizedTest(name = "[{index}] page {0}, size {1} -> {2}")
+    @CsvSource({
+            "-1,   1, page",
+            "0,    0, size",
+            "0,  101, size",
+            "0,    1, ''",
+            "0,  100, ''"
+    })
+    @DisplayName("HU-003: page from 0, size from 1 to 100, both ends included")
+    void windowBoundaries(int page, int size, String rejected) {
+        // Arrange
+        Map<String, String> errors = new LinkedHashMap<>();
+
+        // Act
+        ListingParams.checkWindow(page, size, errors);
+
+        // Assert
+        assertEquals(rejected.isEmpty() ? List.of() : List.of(rejected), List.copyOf(errors.keySet()));
+    }
+
+    @ParameterizedTest(name = "[{index}] from {0}, to {1}")
+    @CsvSource({", 2026-10-25", "2026-10-25,", ","})
+    @DisplayName("A range open at either end (only from, only to, neither) is valid, not a 500")
+    void openRangeIsValid(LocalDate from, LocalDate to) {
+        // Arrange
+        Map<String, String> errors = new LinkedHashMap<>();
+
+        // Act
+        ListingParams.checkRange(from, to, "to", errors);
+
+        // Assert
+        assertTrue(errors.isEmpty(), errors::toString);
+    }
+
     @Test
     @DisplayName("A range ending the day it starts is valid; one ending the day before is not")
     void range() {
@@ -93,6 +127,6 @@ class ListingParamsTest {
 
         // Assert
         assertTrue(sameDay.isEmpty());
-        assertFalse(inverted.isEmpty());
+        assertEquals(Map.of("to", "must not be before the start of the range"), inverted);
     }
 }

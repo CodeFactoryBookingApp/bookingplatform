@@ -247,6 +247,8 @@ class AgendaManagementIT extends JwtIntegrationTestBase {
         // Assert
         assertEquals(200, response.getStatus(), response.getContentAsString());
         assertEquals(List.of("SATURDAY"), JsonPath.read(response.getContentAsString(), "$.blocks[*].dayOfWeek"));
+        assertEquals(1, jdbc.queryForObject("select count(*) from schedules where agenda_id = ?::uuid",
+                Integer.class, agenda), "the old blocks are gone from the database");
     }
 
     @Test
@@ -278,6 +280,8 @@ class AgendaManagementIT extends JwtIntegrationTestBase {
         // Assert
         assertEquals(200, response.getStatus(), response.getContentAsString());
         assertEquals("60", field(response, "$.slotMinutes"));
+        assertEquals(60, jdbc.queryForObject("select slot_minutes from agendas where id = ?::uuid",
+                Integer.class, agenda), "the change is stored");
     }
 
     @Test

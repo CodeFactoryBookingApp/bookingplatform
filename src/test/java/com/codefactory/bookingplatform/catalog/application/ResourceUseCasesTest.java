@@ -15,6 +15,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 import java.time.Clock;
@@ -86,6 +88,19 @@ class ResourceUseCasesTest {
             verify(repository).saveType(type);
         }
 
+        /** Equivalence partitions of the description: absent, padded text (blank is covered above). */
+        @ParameterizedTest(name = "[{index}] \"{0}\" -> \"{1}\"")
+        @CsvSource(nullValues = "NULL", value = {"NULL, NULL", "'  Para cortes y barba  ', Para cortes y barba"})
+        @DisplayName("HU-009: a type description is stored trimmed; an absent one stays absent")
+        void descriptionIsTrimmed(String description, String stored) {
+            // Act
+            ResourceType type = useCase.create(ORG, USER, "Silla de barbero", description);
+
+            // Assert
+            assertEquals(stored, type.description());
+            verify(repository).saveType(type);
+        }
+
         @Test
         @DisplayName("HU-009: a type name already used by the provider is a 409 DUPLICATE_NAME")
         void duplicatedNameIsAConflict() {
@@ -126,6 +141,9 @@ class ResourceUseCasesTest {
             verify(repository).saveNew(saved.capture());
             assertEquals("Silla 1", saved.getValue().getName());
             assertEquals(ORG, saved.getValue().getOrganizationId());
+            assertEquals(TYPE, saved.getValue().getResourceTypeId());
+            assertEquals(LOCATION, saved.getValue().getLocationId());
+            assertEquals(1, saved.getValue().getCapacity());
             assertEquals(ResourceStatus.ACTIVE, resource.getStatus());
         }
 
@@ -190,12 +208,54 @@ class ResourceUseCasesTest {
             ScheduleMaintenanceUseCase useCase = new ScheduleMaintenanceUseCase(repository, access);
 
             // Act
-            useCase.schedule(ORG, USER, resource.getId(), NOW, NOW.plusSeconds(3600), " Cambio de silla ");
+            Resource updated = useCase.schedule(ORG, USER, resource.getId(), NOW, NOW.plusSeconds(3600),
+                    " Cambio de silla ");
+
+            // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
+            ArgumentCaptor<MaintenanceWindow> window = ArgumentCaptor.forClass(MaintenanceWindow.class);
+            verify(repository).addMaintenance(eq(resource.getId()), window.capture());
+            assertEquals("Cambio de silla", window.getValue().reason());
+            assertEquals(NOW, window.getValue().startsAt());
+            assertEquals(NOW.plusSeconds(3600), window.getValue().endsAt());
+            assertEquals(List.of(window.getValue()), updated.getMaintenances());
+        }
+
+        /** Equivalence partitions of the reason: absent, blank, padded text. */
+        @ParameterizedTest(name = "[{index}] \"{0}\" -> \"{1}\"")
+        @CsvSource(nullValues = "NULL", value = {"NULL, NULL", "'   ', NULL", "'  Cambio de silla  ', Cambio de silla"})
+        @DisplayName("HU-009: the maintenance reason is stored trimmed; an absent or blank one is no reason")
+        void reasonIsNormalised(String reason, String stored) {
+            // Arrange
+            Resource resource = stored(ResourceStatus.ACTIVE);
+            ScheduleMaintenanceUseCase useCase = new ScheduleMaintenanceUseCase(repository, access);
+
+            // Act
+            useCase.schedule(ORG, USER, resource.getId(), NOW, NOW.plusSeconds(3600), reason);
 
             // Assert
             ArgumentCaptor<MaintenanceWindow> window = ArgumentCaptor.forClass(MaintenanceWindow.class);
             verify(repository).addMaintenance(eq(resource.getId()), window.capture());
-            assertEquals("Cambio de silla", window.getValue().reason());
+            assertEquals(stored, window.getValue().reason());
+        }
+
+        @Test
+        @DisplayName("HU-009: a period that overlaps another of the same resource is a 409, and nothing is stored")
+        void overlappingMaintenanceStoresNothing() {
+            // Arrange
+            Resource resource = new Resource(UUID.randomUUID(), ORG, TYPE, LOCATION, "Silla 1", 1,
+                    ResourceStatus.ACTIVE, List.of(new MaintenanceWindow(UUID.randomUUID(), NOW,
+                    NOW.plusSeconds(7200), "Revisión")));
+            when(repository.findById(ORG, resource.getId())).thenReturn(Optional.of(resource));
+            ScheduleMaintenanceUseCase useCase = new ScheduleMaintenanceUseCase(repository, access);
+
+            // Act
+            BusinessException ex = assertThrows(BusinessException.class, () -> useCase.schedule(ORG, USER,
+                    resource.getId(), NOW.plusSeconds(3600), NOW.plusSeconds(10800), null));
+
+            // Assert
+            assertEquals(ErrorCode.OVERLAPPING_PERIOD, ex.errorCode());
+            verify(repository, never()).addMaintenance(any(), any());
         }
 
         @Test
@@ -246,6 +306,7 @@ class ResourceUseCasesTest {
             Resource retired = useCase.retire(ORG, USER, resource.getId());
 
             // Assert
+            verify(access).requireRole(ORG, USER, MemberRole.OWNER, MemberRole.MANAGER);
             assertEquals(ResourceStatus.RETIRED, retired.getStatus());
             verify(repository).saveStatus(resource);
         }
@@ -255,13 +316,31 @@ class ResourceUseCasesTest {
     @DisplayName("Listing requires membership only: any role of the provider may read")
     void listingRequiresMembership() {
         // Arrange
+        Resource resource = new Resource(UUID.randomUUID(), ORG, TYPE, LOCATION, "Silla 1", 1, ResourceStatus.ACTIVE,
+                List.of());
+        when(repository.findAll(ORG)).thenReturn(List.of(resource));
         ListResourcesUseCase useCase = new ListResourcesUseCase(repository, access);
 
         // Act
-        useCase.resources(ORG, USER);
+        List<Resource> listed = useCase.resources(ORG, USER);
 
         // Assert
         verify(access).requireMember(ORG, USER);
-        verify(repository).findAll(ORG);
+        assertEquals(List.of(resource), listed);
+    }
+
+    @Test
+    @DisplayName("HU-022: someone outside the provider cannot list its resource types, and they are not read")
+    void outsiderCannotListResourceTypes() {
+        // Arrange
+        doThrow(new BusinessException(ErrorCode.RESOURCE_NOT_FOUND)).when(access).requireMember(ORG, USER);
+        ListResourcesUseCase useCase = new ListResourcesUseCase(repository, access);
+
+        // Act
+        BusinessException ex = assertThrows(BusinessException.class, () -> useCase.types(ORG, USER));
+
+        // Assert
+        assertEquals(ErrorCode.RESOURCE_NOT_FOUND, ex.errorCode());
+        verify(repository, never()).findTypes(any());
     }
 }

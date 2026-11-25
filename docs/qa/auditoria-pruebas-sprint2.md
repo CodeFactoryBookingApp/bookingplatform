@@ -69,12 +69,45 @@ pruebas. Bajó 36 mutantes, y se revisó cada uno comparando contra la versión 
 Lo que queda sin cubrir es un `if` redundante en `UserProvisioningService` (repite lo que hace el
 `switch` siguiente), una rama del manejador de errores y ramas nulas del mapper que genera MapStruct.
 
+## Segunda iteración: el código de las HU del Sprint 2 (27 de octubre)
+
+El PR #5 integró HU-002, 003, 004, 005, 006 y 009 con cuatro módulos nuevos (`organization`,
+`catalog`, `scheduling`, `notification`) y sus pruebas. Se auditaron con el mismo criterio; el
+inventario está en [`auditoria-pruebas-sprint2-codigo-nuevo.csv`](auditoria-pruebas-sprint2-codigo-nuevo.csv).
+
+De 343 casos se mantienen 304, se reforzaron 32 y se quitaron 7 (dos duplicados, dos que solo
+comprobaban que Flyway funciona, y uno que fijaba BUG-027). Las pruebas nuevas eran buenas: el
+problema no era lo que sobraba sino lo que faltaba.
+
+La cobertura lo escondía. Con el código nuevo la cobertura seguía en 97,8 %, pero la mutación cayó
+de 95 % a **61 %**: buena parte de la lógica nueva solo la recorrían las pruebas de integración, y
+250 cambios al código pasaban sin que ninguna prueba unitaria los detectara. La auditoría encontró
+reglas de las HU que nadie verificaba (bloques de agenda solapados, reactivar un proveedor que no
+está suspendido, los límites de duración, cupo y precio de un servicio, la agenda por recurso, la
+autorización por rol en las agendas, la exportación CSV de todas las páginas) y se escribieron
+pruebas unitarias para ellas. Ninguna de esas pruebas acepta un comportamiento defectuoso: lo que
+resultó estar mal se reportó en Mantis.
+
+| | Al integrar el Sprint 2 | Después |
+|---|---:|---:|
+| Pruebas unitarias / de integración | 873 / 143 | 998 / 141 |
+| Cobertura de instrucciones / ramas | 97,8 % / 89,9 % | 98,5 % / 94,1 % |
+| Mutación total | 61 % | 69 % |
+| Mutación en dominio / aplicación | — | 99 % / 95 % |
+| Fuerza de las pruebas (detectados entre los alcanzados) | 90,7 % | 95,6 % |
+
+El 31 % de mutantes que queda sin detectar está casi todo en adaptadores JPA/SQL y controladores
+(`infrastructure` 39 %, `api` 35 %). Esos los verifican las pruebas de integración con Postgres,
+que PIT no ejecuta, así que cuentan como no cubiertos. No se escribieron pruebas unitarias de
+adaptadores para inflar el número.
+
 ## Umbrales del build
 
-| Umbral | Antes | Ahora | Por qué |
+| Umbral | Sprint 1 | Ahora | Por qué |
 |---|---:|---:|---|
 | Cobertura (instrucciones y ramas) | 90 % | 65 % | Es la meta de la rúbrica. La cifra real es más alta; el umbral es el piso, no un objetivo a perseguir con relleno. |
-| Mutación | 95 % | 90 % | Los supervivientes están analizados; subirlo obligaría a escribir pruebas que aseveran bugs. |
+| Fuerza de las pruebas (PIT) | — | 90 % | De lo que las pruebas unitarias alcanzan, cuánto detectan. Es el que mide si verifican. |
+| Mutación total (PIT) | 95 % | 65 % | Piso: incluye adaptadores que solo verifican los IT. |
 
 ## Cómo reproducirlo
 

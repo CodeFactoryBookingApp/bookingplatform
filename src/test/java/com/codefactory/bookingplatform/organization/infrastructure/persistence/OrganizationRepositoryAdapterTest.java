@@ -111,13 +111,23 @@ class OrganizationRepositoryAdapterTest {
         // Arrange
         when(organizations.findById(organization.getId())).thenReturn(Optional.of(new OrganizationEntity()));
 
+        UUID admin = UUID.randomUUID();
+
         // Act
-        adapter.saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", UUID.randomUUID(), 0);
+        adapter.saveStatusChange(organization, OrganizationStatus.PENDING_APPROVAL, "RUT verificado", admin, 0);
 
         // Assert
         InOrder order = inOrder(statusChanges, organizations);
-        order.verify(statusChanges).saveAndFlush(any(AccountStatusChangeEntity.class));
-        order.verify(organizations).saveAndFlush(any(OrganizationEntity.class));
+        order.verify(statusChanges).saveAndFlush(argThat(change -> change.getId() != null
+                && organization.getId().equals(change.getOrganizationId())
+                && AccountStatusChangeEntity.ORGANIZATION.equals(change.getSubjectType())
+                && "PENDING_APPROVAL".equals(change.getFromStatus())
+                && "ACTIVE".equals(change.getToStatus())
+                && "RUT verificado".equals(change.getReason())
+                && admin.equals(change.getChangedBy())
+                && change.getAffectedBookings() == 0));
+        order.verify(organizations).saveAndFlush(argThat(entity -> entity.getStatus() == OrganizationStatus.ACTIVE
+                && NOW.equals(entity.getApprovedAt())));
     }
 
     @Test
@@ -130,8 +140,12 @@ class OrganizationRepositoryAdapterTest {
         InOrder order = inOrder(policies);
         order.verify(policies).closeCurrent(organization.getId(), NOW);
         // Entities have no equals: the inserted row is matched by what matters
-        order.verify(policies).saveAndFlush(argThat(entity -> entity.getVersion() == 2
+        order.verify(policies).saveAndFlush(argThat(entity -> entity.getId() != null
+                && entity.getVersion() == 2
                 && entity.getOrganizationId().equals(organization.getId())
+                && entity.getBookingNoticeMinutesMin() == 60
+                && entity.getBookingNoticeMinutesMax() == 43200
+                && entity.getFreeCancellationWindowMinutes() == 1440
                 && NOW.equals(entity.getEffectiveFrom())
                 && entity.getReplacedAt() == null));
     }
